@@ -7,7 +7,6 @@ import { useAuth } from "./auth/useAuth";
 const Login = lazy(() => import("./page/Login"));
 const Marketplace = lazy(() => import("./page/Marketplace").then((m) => ({ default: m.Marketplace })));
 const Dashboard = lazy(() => import("./page/Dashboard").then((m) => ({ default: m.DashboardShell })));
-const Viewer = lazy(() => import("./page/Viewer"));
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -102,7 +101,6 @@ export default function App() {
           <Routes>
             <Route index element={<Navigate to="/marketplace" replace />} />
             <Route path="/marketplace" element={<Marketplace />} />
-            <Route path="/viewer" element={<Viewer />} />
             <Route path="/login" element={<Login />} />
             <Route
               path="/dashboard"
