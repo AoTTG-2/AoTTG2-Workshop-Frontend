@@ -22,7 +22,7 @@ type EditorState = {
   boots: number; cape: number; logo: number; animation: string;
   skinColor: string; hairColor: string;
 };
-type PartSpec = { id: string; path: string; kind: "skin" | "hair" | "costume" | "face" | "part" | "logo" | "plain"; texture?: string; textures?: Record<string, string>; transform?: UnityTransform };
+type PartSpec = { id: string; path: string; kind: "skin" | "hair" | "costume" | "face" | "part" | "logo" | "plain"; texture?: string; textures?: Record<string, string>; transform?: UnityTransform; textureFlipY?: boolean; visibleMeshes?: string[] };
 
 const FALLBACK_VARIANTS: Variants = {
   hairMale: Array.from({ length: 35 }, (_, i) => `HairM${i}`), hairFemale: Array.from({ length: 33 }, (_, i) => `HairF${i}`),
@@ -32,6 +32,13 @@ const FALLBACK_VARIANTS: Variants = {
   hat: ["HatNone", ...Array.from({ length: 17 }, (_, i) => `Hat${i}`)], head: ["HeadNone", ...Array.from({ length: 8 }, (_, i) => `Head${i}`)], back: ["BackNone", ...Array.from({ length: 8 }, (_, i) => `Back${i}`)],
 };
 const SKIN_BASE_TEXTURE = "/optimized/textures/human/Costumes/Textures/Skin/skin_adjustable.webp";
+const HAIR_SCALE_FIXES = new Set(["HairM11", "HairM12", "HairM13", "HairF11"]);
+const HAIR_HEAD_TOP_FIXES = new Set(["HairM17", "HairF12"]);
+const HAIR_TEXTURE_FLIP_Y = new Set(["HairF22", "HairF23", "HairF24"]);
+const HAIR_VISIBLE_MESHES: Record<string, string[]> = { HairF14: ["HairF14"] };
+const HAIR_POSITION_FIXES: Record<string, [number, number, number]> = { HairM17: [0, 0.08, -0.04], HairF12: [0, 0.0, -0.04] };
+const HAIR_HEAD_TOP_Y = 1.68;
+const HAIR_LOW_TOP_Y = 1.18;
 
 const DEFAULT_STATE: EditorState = {
   sex: "male", weapon: "Blade", eye: "Eye0", face: "FaceNone", glass: "GlassNone", hair: "HairM0", costume: "CostumeM0",
@@ -157,6 +164,10 @@ function fallbackWeapon(id: string) {
   g.add(mesh);
   return g;
 }
+function alignHairTop(group: THREE.Group, topY: number) {
+  const box = new THREE.Box3().setFromObject(group);
+  if (!box.isEmpty()) group.position.y += topY - box.max.y;
+}
 
 export default function Viewer() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -200,13 +211,16 @@ export default function Viewer() {
   }, []);
 
   const applyMaterial = useCallback(async (group: THREE.Group, spec: PartSpec) => {
-    const [texture, skinBase, shirtTexture] = await Promise.all([
+    const [loadedTexture, skinBase, shirtTexture] = await Promise.all([
       loadTexture(spec.texture).catch(() => null),
       spec.kind === "skin" ? loadTexture(SKIN_BASE_TEXTURE).catch(() => null) : Promise.resolve(null),
       spec.kind === "costume" && spec.id !== "leg" ? loadTexture(spec.textures?.color).catch(() => null) : Promise.resolve(null),
     ]);
+    const texture = spec.textureFlipY && loadedTexture ? loadedTexture.clone() : loadedTexture;
+    if (texture && spec.textureFlipY) { texture.flipY = true; texture.needsUpdate = true; }
     group.traverse((obj) => {
       if (/text|scale|rotation|import|true player|left leg|right leg|block y/i.test(obj.name)) obj.visible = false;
+      if (obj instanceof THREE.Mesh && spec.visibleMeshes && !spec.visibleMeshes.includes(obj.name)) obj.visible = false;
       if (!(obj instanceof THREE.Mesh)) return;
       obj.frustumCulled = false;
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
@@ -309,7 +323,7 @@ export default function Viewer() {
       ...(weapon?.hands ?? []).map((path, i) => ({ id: `hand${i}`, path, kind: "skin" as const, texture: weapon?.skin })),
       ...(weapon?.gear ?? []).map((path, i) => ({ id: `gear${i}`, path, kind: "part" as const, texture: weapon?.gearTexture })),
       ...(weapon?.weapons ?? []).map((path, i) => ({ id: `weapon${i}`, path, kind: "part" as const, texture: weapon?.gearTexture })),
-      { id: "hair", path: catalog.hair[state.hair]?.model ?? "", kind: "hair", texture: catalog.hair[state.hair]?.texture },
+      { id: state.hair, path: catalog.hair[state.hair]?.model ?? "", kind: "hair", texture: catalog.hair[state.hair]?.texture, textureFlipY: HAIR_TEXTURE_FLIP_Y.has(state.hair), visibleMeshes: HAIR_VISIBLE_MESHES[state.hair] },
       { id: "eye", path: catalog.eye[state.eye]?.mesh ?? "", kind: "face", texture: catalog.eye[state.eye]?.texture },
       ...(isEmptyAsset(catalog.face[state.face]) ? [] : [{ id: "face", path: catalog.face[state.face]?.mesh ?? "", kind: "face" as const, texture: catalog.face[state.face]?.texture }]),
       ...(isEmptyAsset(catalog.glass[state.glass]) ? [] : [{ id: "glass", path: catalog.glass[state.glass]?.mesh ?? "", kind: "face" as const, texture: catalog.glass[state.glass]?.texture }]),
@@ -328,8 +342,14 @@ export default function Viewer() {
     await applyMaterial(group, spec);
     if (spec.kind === "hair" && url.toLowerCase().endsWith(".fbx")) group.scale.setScalar(0.01);
     if (spec.kind === "hair") {
-      const box = new THREE.Box3().setFromObject(group);
-      if (!box.isEmpty() && box.max.y < 0.9) group.position.y += 1.18 - box.max.y;
+      if (HAIR_SCALE_FIXES.has(spec.id)) group.scale.multiplyScalar(2.5);
+      if (HAIR_HEAD_TOP_FIXES.has(spec.id)) alignHairTop(group, HAIR_HEAD_TOP_Y);
+      else {
+        const box = new THREE.Box3().setFromObject(group);
+        if (!box.isEmpty() && box.max.y < 0.9) group.position.y += HAIR_LOW_TOP_Y - box.max.y;
+      }
+      const positionFix = HAIR_POSITION_FIXES[spec.id];
+      if (positionFix) group.position.add(new THREE.Vector3(...positionFix));
     }
     let hasMesh = false;
     group.traverse((obj) => { if (obj instanceof THREE.Mesh && obj.visible) hasMesh = true; });
