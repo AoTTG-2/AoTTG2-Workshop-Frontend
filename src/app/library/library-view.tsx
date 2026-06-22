@@ -1,13 +1,17 @@
+"use client";
+
 import { useQuery } from "@tanstack/react-query";
 import { Button, Input } from "@aottg2/ui";
-import { FormEvent, useEffect, useState } from "react";
+import { Box, CalendarDays, Download, Eye, FileCode2, Glasses, Grid3X3, Hammer, HardHat, Heart, Image, Map, Mountain, Palette, ScanFace, Shirt, Sparkles, Swords, UploadCloud, User, Zap } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { type FormEvent, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays, Download, Heart, UploadCloud } from "lucide-react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "../auth/useAuth";
-import { AssetTag, AssetTagButton } from "../components/AssetTag";
-import { listAssets, type SkinPartPayload, type SkinSetPayload, type WorkshopAsset, type WorkshopMedia } from "../lib/api/workshop";
-import { toast } from "../lib/toast";
+import { useAuth } from "../../auth/useAuth";
+import { AssetTag, AssetTagButton } from "../../components/AssetTag";
+import { SideCard } from "../../components/SideCard";
+import { assetPath, listAssets, type AssetListQuery, type AssetListResponse, type SkinPartPayload, type SkinSetPayload, type WorkshopAsset, type WorkshopMedia } from "../../lib/api/workshop";
+import { toast } from "../../lib/toast";
 
 const pageSize = 24;
 const typeFilters = [
@@ -16,37 +20,44 @@ const typeFilters = [
   { label: "Skin Sets", value: "skin_set" },
 ];
 const categoryFilters = [
-  { label: "Human", category: "human" },
-  { label: "Titan", category: "titan" },
-  { label: "Shifter", category: "shifter" },
-  { label: "Skybox", category: "skybox" },
-  { label: "Custom Logic", type: "custom_logic" },
-  { label: "Maps", type: "map" },
+  { label: "Human", category: "human", icon: User },
+  { label: "Titan", category: "titan", icon: Mountain },
+  { label: "Shifter", category: "shifter", icon: Zap },
+  { label: "Skybox", category: "skybox", icon: Image },
+  { label: "Custom Logic", type: "custom_logic", icon: FileCode2 },
+  { label: "Maps", type: "map", icon: Map },
 ];
-const humanParts = [
-  "Hair",
-  "Eye",
-  "Glass",
-  "Face",
-  "Skin",
-  "Costume",
-  "Logo",
-  "Gear",
-  "Gas",
-  "Hoodie",
-  "WeaponTrail",
-  "Horse",
-  "Thunderspears",
-  "Hooks",
-  "Hat",
-  "Head",
-  "Back",
-];
+const humanParts = ["Hair", "Eye", "Glass", "Face", "Skin", "Costume", "Logo", "Gear", "Gas", "Hoodie", "WeaponTrail", "Horse", "Thunderspears", "Hooks", "Hat", "Head", "Back"];
+const humanPartIcons = {
+  Hair: Sparkles,
+  Eye,
+  Glass: Glasses,
+  Face: ScanFace,
+  Skin: User,
+  Costume: Shirt,
+  Logo: Palette,
+  Gear: Box,
+  Gas: Zap,
+  Hoodie: Shirt,
+  WeaponTrail: Swords,
+  Horse: User,
+  Thunderspears: Zap,
+  Hooks: Hammer,
+  Hat: HardHat,
+  Head: ScanFace,
+  Back: Grid3X3,
+} satisfies Record<string, typeof User>;
 
-export function Marketplace() {
+interface LibraryViewProps {
+  initialData: AssetListResponse;
+  initialQuery: AssetListQuery & { page: number; pageSize: number };
+  initialError: boolean;
+}
+
+export function LibraryView({ initialData, initialError, initialQuery }: LibraryViewProps) {
   const { isAuthenticated } = useAuth();
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const q = searchParams.get("q") ?? "";
   const type = searchParams.get("type") ?? "";
   const tag = searchParams.get("tag") ?? "";
@@ -62,6 +73,7 @@ export function Marketplace() {
   const query = useQuery({
     queryKey: ["workshop", "assets", { q, type, tag, category, slot, page, pageSize }],
     queryFn: () => listAssets({ q, type, tag, category, slot: normalizeSlotParam(slot), page, pageSize }),
+    initialData: sameQuery(initialQuery, { q, type, tag, category, slot, page, pageSize }) && !initialError ? initialData : undefined,
   });
 
   useEffect(() => {
@@ -73,7 +85,7 @@ export function Marketplace() {
   const totalPages = Math.max(1, Math.ceil((query.data?.total ?? 0) / pageSize));
 
   function handleAddAsset() {
-    navigate(isAuthenticated ? "/library/publish" : "/login");
+    router.push(isAuthenticated ? "/library/publish" : "/login");
   }
 
   function updateParams(next: { q?: string; type?: string; tag?: string; category?: string; slot?: string; page?: number }) {
@@ -88,7 +100,7 @@ export function Marketplace() {
     if (next.q !== undefined || next.type !== undefined || next.tag !== undefined || next.category !== undefined || next.slot !== undefined) {
       params.delete("page");
     }
-    setSearchParams(params);
+    router.push(`/library${params.size ? `?${params}` : ""}`);
   }
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -111,23 +123,24 @@ export function Marketplace() {
 
       <div className="grid gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
         <aside className="grid content-start gap-4">
-          <FilterSection title="Category">
-            <FilterButton active={!category && !type && !slot} label="All content" onClick={() => updateParams({ category: "", type: "", slot: "", page: 1 })} />
+          <SideCard title="Category" contentClassName="grid gap-1 p-2">
+            <SideFilterItem active={!category && !type && !slot} icon={<Grid3X3 className="h-4 w-4" />} label="All content" onClick={() => updateParams({ category: "", type: "", slot: "", page: 1 })} />
             {categoryFilters.map((item) => (
-              <FilterButton
+              <SideFilterItem
                 key={item.label}
                 active={Boolean((item.category && category === item.category && !slot) || (item.type && type === item.type))}
+                icon={<item.icon className="h-4 w-4" />}
                 label={item.label}
                 onClick={() => updateParams({ category: item.category ?? "", type: item.type ?? "", slot: "", page: 1 })}
               />
             ))}
-          </FilterSection>
+          </SideCard>
 
-          <FilterSection title="Human Parts">
+          <SideCard title="Human Parts" variant="secondary" contentClassName="grid gap-1 p-2">
             {humanParts.map((part) => (
-              <FilterButton key={part} active={category === "human" && slot === part} label={part} onClick={() => updateParams({ category: "human", type: "", slot: part, page: 1 })} />
+              <SideFilterItem key={part} active={category === "human" && slot === part} icon={renderHumanPartIcon(part)} label={part} onClick={() => updateParams({ category: "human", type: "", slot: part, page: 1 })} />
             ))}
-          </FilterSection>
+          </SideCard>
         </aside>
 
         <section className="min-w-0">
@@ -158,9 +171,7 @@ export function Marketplace() {
           {query.data && query.data.assets.length > 0 ? (
             <>
               <div className="mb-3 flex items-center justify-between gap-3 text-sm text-muted-foreground">
-                <span>
-                  Showing {query.data.assets.length} of {query.data.total} assets
-                </span>
+                <span>Showing {query.data.assets.length} of {query.data.total} assets</span>
                 <span>Newest first</span>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -169,9 +180,7 @@ export function Marketplace() {
                 ))}
               </div>
               <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-                <span className="text-sm text-muted-foreground">
-                  Page {page} of {totalPages}
-                </span>
+                <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
                 <div className="flex gap-2">
                   <Button type="button" variant="ghost" disabled={page <= 1} onClick={() => updateParams({ page: page - 1 })}>
                     Previous
@@ -189,21 +198,23 @@ export function Marketplace() {
   );
 }
 
-function FilterSection({ title, children }: { title: string; children: ReactNode }) {
+function SideFilterItem({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) {
   return (
-    <section className="grid gap-2 border border-border bg-card/50 p-3">
-      <h2 className="font-primary text-sm uppercase text-foreground">{title}</h2>
-      <div className="grid gap-1">{children}</div>
-    </section>
+    <button
+      type="button"
+      aria-current={active ? "page" : undefined}
+      className="flex h-10 min-w-10 w-full items-center gap-3 px-2 font-primary text-sm tracking-wide text-foreground transition-[color,background-color,transform] duration-150 ease-out hover:bg-muted/60 hover:text-primary active:scale-[0.96] aria-[current=page]:bg-muted/70 aria-[current=page]:text-primary"
+      onClick={onClick}
+    >
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden="true">{icon}</span>
+      <span className="truncate">{label}</span>
+    </button>
   );
 }
 
-function FilterButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button type="button" className={`min-h-9 px-2 text-left text-sm font-semibold transition-colors ${active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"}`} onClick={onClick}>
-      {label}
-    </button>
-  );
+function renderHumanPartIcon(part: string) {
+  const Icon = humanPartIcons[part as keyof typeof humanPartIcons] ?? Box;
+  return <Icon className="h-4 w-4" />;
 }
 
 function ActivePill({ label, onClear }: { label: string; onClear: () => void }) {
@@ -219,18 +230,18 @@ function AssetCard({ asset, onTagSelect }: { asset: WorkshopAsset; onTagSelect: 
   const category = assetCategory(asset);
   return (
     <article className="grid overflow-hidden border border-border bg-card/60 transition-colors hover:border-primary/60">
-      <Link className="group grid" to={`/library/${asset.id}`}>
+      <Link className="group grid" href={assetPath(asset)}>
         <PreviewImage media={thumbnail} title={asset.title} />
       </Link>
       <div className="flex min-h-56 flex-col gap-2 p-3">
-        <Link className="line-clamp-1 text-sm text-foreground hover:text-primary" to={`/library/${asset.id}`}>
+        <Link className="line-clamp-1 text-sm text-foreground hover:text-primary" href={assetPath(asset)}>
           <span className="font-primary font-semibold uppercase">{asset.title}</span> <span className="font-normal text-muted-foreground">by {asset.authorDisplayName}</span>
         </Link>
         <p className="line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">{asset.shortDescription || plainPreview(asset.descriptionMarkdown) || summarizeAsset(asset)}</p>
         <div className="mt-auto flex flex-wrap gap-1.5">
           <AssetTag variant="category">{formatLabel(category)}</AssetTag>
-          {asset.tags.slice(0, 3).map((assetTag) => (
-            <AssetTagButton key={assetTag} onClick={() => onTagSelect(assetTag)}>
+          {asset.tags.slice(0, 3).map((assetTag, index) => (
+            <AssetTagButton key={`${assetTag}-${index}`} onClick={() => onTagSelect(assetTag)}>
               {assetTag}
             </AssetTagButton>
           ))}
@@ -363,4 +374,8 @@ function formatRelativeDate(value: string) {
 
 function formatCount(value: number) {
   return new Intl.NumberFormat(undefined, { notation: "compact" }).format(value);
+}
+
+function sameQuery(left: AssetListQuery, right: AssetListQuery) {
+  return (left.q ?? "") === (right.q ?? "") && (left.type ?? "") === (right.type ?? "") && (left.tag ?? "") === (right.tag ?? "") && (left.category ?? "") === (right.category ?? "") && (left.slot ?? "") === (right.slot ?? "") && (left.page ?? 1) === (right.page ?? 1);
 }

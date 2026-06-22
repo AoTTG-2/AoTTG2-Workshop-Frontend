@@ -5,6 +5,7 @@ import { AUTH_API_BASE_URL, WORKSHOP_API_BASE_URL, WORKSHOP_CONTENT_API_BASE_URL
 export interface WorkshopUser {
   authAccountId: string;
   displayName: string;
+  creatorName: string | null;
   photonUserId?: string | null;
   roles: string[];
   permissions?: string[];
@@ -43,6 +44,8 @@ export interface SkinSetPayload {
 export interface WorkshopAsset {
   id: string;
   publicId: string;
+  creatorName: string;
+  assetSlug: string;
   type: WorkshopAssetType | string;
   title: string;
   descriptionMarkdown?: string | null;
@@ -219,6 +222,12 @@ function fallbackWorkshopError(status: number) {
   return "Workshop request failed.";
 }
 
+export function assetPath(asset: Pick<WorkshopAsset, "creatorName" | "assetSlug" | "publicId">) {
+  return asset.creatorName && asset.assetSlug
+    ? `/${encodeURIComponent(asset.creatorName)}/${encodeURIComponent(asset.assetSlug)}`
+    : `/library/${encodeURIComponent(asset.publicId)}`;
+}
+
 export async function getWorkshopMe(accessToken: string): Promise<WorkshopUser | null> {
   const response = await fetch(`${WORKSHOP_API_BASE_URL}/me`, {
     headers: {
@@ -232,6 +241,23 @@ export async function getWorkshopMe(accessToken: string): Promise<WorkshopUser |
 
   if (!response.ok) {
     throw new Error("Failed to load Workshop user");
+  }
+
+  return parseJson<WorkshopUser>(response);
+}
+
+export async function setCreatorName(accessToken: string, creatorName: string): Promise<WorkshopUser> {
+  const response = await fetch(`${WORKSHOP_API_BASE_URL}/me/creator-name`, jsonAuthInit("PUT", accessToken, { creatorName }));
+
+  if (response.status === 401) {
+    clearTokens();
+    throw new Error("Sign in required.");
+  }
+
+  if (!response.ok) {
+    const data = await parseJson<ApiError>(response);
+    const validationMessage = Object.values(data.errors ?? {}).flat()[0];
+    throw new Error(data.error || data.detail || validationMessage || data.title || fallbackWorkshopError(response.status));
   }
 
   return parseJson<WorkshopUser>(response);
@@ -268,6 +294,22 @@ export async function listAssets(query: AssetListQuery = {}): Promise<AssetListR
 
 export async function getAsset(id: string, accessToken?: string | null): Promise<WorkshopAsset> {
   const response = await fetch(`${WORKSHOP_CONTENT_API_BASE_URL}/assets/${encodeURIComponent(id)}`, {
+    headers: authHeaders(accessToken),
+  });
+
+  if (response.status === 404) {
+    throw new Error("Asset not found");
+  }
+
+  if (!response.ok) {
+    throw new Error("Failed to load asset");
+  }
+
+  return parseJson<WorkshopAsset>(response);
+}
+
+export async function getAssetBySeoPath(creatorName: string, assetSlug: string, accessToken?: string | null): Promise<WorkshopAsset> {
+  const response = await fetch(`${WORKSHOP_CONTENT_API_BASE_URL}/assets/${encodeURIComponent(creatorName)}/${encodeURIComponent(assetSlug)}`, {
     headers: authHeaders(accessToken),
   });
 
@@ -363,7 +405,7 @@ async function writeEngagement(id: string, method: "PUT" | "DELETE" | "POST", ac
   return parseJson<EngagementWriteResponse>(response);
 }
 
-export async function createAsset(accessToken: string, asset: unknown): Promise<unknown> {
+export async function createAsset(accessToken: string, asset: unknown): Promise<WorkshopAsset> {
   const response = await fetch(`${WORKSHOP_CONTENT_API_BASE_URL}/assets`, {
     method: "POST",
     headers: {
@@ -391,5 +433,5 @@ export async function createAsset(accessToken: string, asset: unknown): Promise<
     throw new Error(serverMessage || fallbackMessage);
   }
 
-  return parseJson<unknown>(response);
+  return parseJson<WorkshopAsset>(response);
 }

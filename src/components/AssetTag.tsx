@@ -1,5 +1,5 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
-import { Link, type LinkProps } from "react-router-dom";
+import Link from "next/link";
 
 type AssetTagVariant = "category" | "tag" | "empty";
 type AssetTagSize = "sm" | "md";
@@ -56,7 +56,7 @@ export function AssetTagLink({
   size = "sm",
   className,
   ...props
-}: AssetTagBaseProps & LinkProps & ComponentPropsWithoutRef<typeof Link>) {
+}: AssetTagBaseProps & ComponentPropsWithoutRef<typeof Link>) {
   return (
     <Link className={assetTagClass(variant, size, className)} {...props}>
       {children}

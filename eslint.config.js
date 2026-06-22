@@ -5,7 +5,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
   {
-    ignores: ["dist", "node_modules"],
+    ignores: [".next", "dist", "node_modules", "out"],
   },
   js.configs.recommended,
   {
@@ -26,6 +26,7 @@ export default [
         fetch: "readonly",
         navigator: "readonly",
         URLSearchParams: "readonly",
+        URL: "readonly",
         Response: "readonly",
         RequestInit: "readonly",
         HTMLFormElement: "readonly",

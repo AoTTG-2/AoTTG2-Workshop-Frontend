@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect } from "react";
-import { Link } from "react-router-dom";
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardTitle } from "@aottg2/ui";
 import { toast } from "../lib/toast";
 
@@ -39,7 +39,7 @@ export function AuthShell({
 export function BackHomeLink() {
   return (
     <p className="mt-5 text-center text-sm font-semibold">
-      <Link className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" to="/library">
+      <Link className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" href="/library">
         ← Back to library
       </Link>
     </p>

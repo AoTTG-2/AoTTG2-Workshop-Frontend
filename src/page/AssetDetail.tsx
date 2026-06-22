@@ -1,3 +1,5 @@
+"use client";
+
 import { useQuery } from "@tanstack/react-query";
 import { Button, CommentBox, CommentSection, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, renderCommentMarkdown, type CommentItem } from "@aottg2/ui";
 import { motion, useReducedMotion } from "motion/react";
@@ -6,12 +8,14 @@ import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Copy, Download, Eye, Flag, Heart, Link as LinkIcon, MessageCircle, MoreHorizontal, Star, Trash2 } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { getAccessToken } from "../auth/storage";
 import { useAuth } from "../auth/useAuth";
 import { canModerateAssets, canModerateComments } from "../auth/workshopPermissions";
 import { AssetTag, AssetTagLink } from "../components/AssetTag";
-import { createAssetComment, deleteWorkshopAsset, deleteWorkshopComment, getAsset, hideModerationComment, listAssetComments, replyToAssetComment, reportWorkshopComment, setAssetFavorite, setAssetLike, trackAssetDownload, trackAssetView, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopComment, type WorkshopMedia } from "../lib/api/workshop";
+import { SideCard } from "../components/SideCard";
+import { assetPath, createAssetComment, deleteWorkshopAsset, deleteWorkshopComment, getAsset, getAssetBySeoPath, hideModerationComment, listAssetComments, replyToAssetComment, reportWorkshopComment, setAssetFavorite, setAssetLike, trackAssetDownload, trackAssetView, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopComment, type WorkshopMedia } from "../lib/api/workshop";
 import { toast } from "../lib/toast";
 
 const markdownComponents: Components = {
@@ -38,23 +42,34 @@ const markdownComponents: Components = {
   img: ({ alt, src }) => <img className="mt-4 max-h-[520px] w-full object-contain" src={src ?? ""} alt={alt ?? ""} loading="lazy" />,
 };
 
-export function AssetDetail() {
-  const { id = "" } = useParams();
-  const navigate = useNavigate();
+interface AssetDetailProps {
+  id?: string;
+  creatorName?: string;
+  assetSlug?: string;
+  initialAsset?: WorkshopAsset;
+}
+
+export function AssetDetail({ id = "", creatorName = "", assetSlug = "", initialAsset }: AssetDetailProps = {}) {
+  const router = useRouter();
+  const seoLookup = creatorName && assetSlug ? { creatorName, assetSlug } : null;
   const query = useQuery({
-    queryKey: ["workshop", "asset", id],
-    queryFn: () => getAsset(id, getAccessToken()),
-    enabled: Boolean(id),
+    queryKey: ["workshop", "asset", seoLookup ?? id],
+    queryFn: () => (seoLookup ? getAssetBySeoPath(seoLookup.creatorName, seoLookup.assetSlug, getAccessToken()) : getAsset(id, getAccessToken())),
+    enabled: Boolean(seoLookup || id),
+    initialData: initialAsset,
   });
   const asset = query.data;
   const refetchAsset = query.refetch;
   const trackedView = useRef<string | null>(null);
 
   useEffect(() => {
-    if (asset?.publicId && id !== asset.publicId) {
-      navigate(`/library/${asset.publicId}`, { replace: true });
+    if (asset && id) {
+      const canonicalPath = assetPath(asset);
+      if (canonicalPath !== `/library/${id}`) {
+        router.replace(canonicalPath);
+      }
     }
-  }, [asset?.publicId, id, navigate]);
+  }, [asset, id, router]);
 
   useEffect(() => {
     if (!asset?.id || trackedView.current === asset.id) return;
@@ -81,7 +96,7 @@ export function AssetDetail() {
   if (query.isError || !asset) {
     return (
       <main className="mx-auto w-full max-w-4xl px-6 py-8">
-        <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" to="/library">
+        <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" href="/library">
           Back to library
         </Link>
         <div className="mt-6 border border-border bg-card/40 p-6">
@@ -97,7 +112,7 @@ export function AssetDetail() {
 
 function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefresh: () => Promise<unknown> }) {
   const { isAuthenticated, profile, workshopUser } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
   const reduceMotion = useReducedMotion();
   const media = mediaForGallery(asset.media);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -107,7 +122,7 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
   const summary = summarizeAsset(asset);
   const liked = Boolean(asset.viewerEngagement?.liked);
   const favorited = Boolean(asset.viewerEngagement?.favorited);
-  const publicAssetUrl = `${window.location.origin}/library/${asset.publicId}`;
+  const publicAssetUrl = `${typeof window === "undefined" ? "" : window.location.origin}${assetPath(asset)}`;
   const accountId = workshopUser?.authAccountId ?? profile?.accountId;
   const permissionSource = workshopUser ?? profile;
   const canDeleteAsset = isAuthenticated && (accountId === asset.ownerAuthAccountId || canModerateAssets(permissionSource));
@@ -165,7 +180,7 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
     try {
       await deleteWorkshopAsset(asset.publicId || asset.id, token);
       toast.success("Asset deleted", { description: "Removed from the Workshop library." });
-      navigate("/library");
+      router.push("/library");
     } catch (error) {
       toast.error("Could not delete asset", { description: error instanceof Error ? error.message : "Try again." });
     }
@@ -173,7 +188,7 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
-      <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" to="/library">
+      <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" href="/library">
         Back to library
       </Link>
 
@@ -253,14 +268,14 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
         </motion.section>
 
         <motion.aside className="grid content-start gap-4" initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: "easeOut", delay: reduceMotion ? 0 : 0.06 }}>
-          <InfoPanel title="Tags">
+          <SideCard title="Tags" variant="secondary">
             <div className="flex flex-wrap gap-2">
               <AssetTag variant="category" size="md">
                 {formatLabel(category)}
               </AssetTag>
               {asset.tags.length > 0 ? (
-                asset.tags.map((tag) => (
-                  <AssetTagLink key={tag} size="md" to={`/library?tag=${encodeURIComponent(tag)}`}>
+                asset.tags.map((tag, index) => (
+                  <AssetTagLink key={`${tag}-${index}`} size="md" href={`/library?tag=${encodeURIComponent(tag)}`}>
                     {tag}
                   </AssetTagLink>
                 ))
@@ -270,14 +285,14 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
                 </AssetTag>
               )}
             </div>
-          </InfoPanel>
+          </SideCard>
 
-          <InfoPanel title="Creator">
+          <SideCard title="Creator" variant="secondary">
             <div className="text-sm font-semibold text-foreground">{asset.authorDisplayName}</div>
             <div className="mt-1 text-xs text-muted-foreground">Owner</div>
-          </InfoPanel>
+          </SideCard>
 
-          <InfoPanel title="Details">
+          <SideCard title="Details" variant="secondary">
             <dl className="grid gap-2 text-sm">
               <SummaryRow label="Type" value={formatLabel(asset.type)} />
               <SummaryRow label="Category" value={formatLabel(category)} />
@@ -285,16 +300,16 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
               <SummaryRow label="Published" value={formatDate(asset.createdAt)} />
               <SummaryRow label="Updated" value={formatDate(asset.updatedAt)} />
             </dl>
-          </InfoPanel>
+          </SideCard>
 
-          <InfoPanel title="Payload">
+          <SideCard title="Payload" variant="secondary">
             <AssetSummary asset={asset} />
             {textureUrls.length > 0 ? (
               <Button className="mt-3 w-full" type="button" variant="ghost" onClick={() => copyText("texture URLs", textureUrls.join("\n"))}>
                 Copy Texture URLs
               </Button>
             ) : null}
-          </InfoPanel>
+          </SideCard>
         </motion.aside>
       </div>
 
@@ -526,15 +541,6 @@ function MenuAction({ icon, label, destructive = false, onClick }: { icon: React
       {icon}
       {label}
     </button>
-  );
-}
-
-function InfoPanel({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="border border-border bg-card/50 p-4">
-      <h2 className="font-primary text-xl uppercase leading-none text-foreground">{title}</h2>
-      <div className="mt-3">{children}</div>
-    </section>
   );
 }
 

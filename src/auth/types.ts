@@ -20,6 +20,7 @@ export interface ProfileResponse {
 export interface WorkshopUser {
   authAccountId: string;
   displayName: string;
+  creatorName: string | null;
   photonUserId?: string | null;
   roles: string[];
   permissions?: string[];

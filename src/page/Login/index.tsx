@@ -1,13 +1,16 @@
+"use client";
+
 import { FormEvent, useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "../../auth/useAuth";
 import { Button, Input, Label } from "@aottg2/ui";
 import { AuthShell, ErrorMessage } from "../AuthShell";
 import { OAuthButtons, OAuthDivider } from "../OAuthButtons";
 
 export default function Login() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAuthenticated, isLoading, login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,9 +19,9 @@ export default function Login() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      navigate("/dashboard", { replace: true });
+      router.replace("/dashboard");
     }
-  }, [isAuthenticated, isLoading, navigate]);
+  }, [isAuthenticated, isLoading, router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,7 +31,7 @@ export default function Login() {
     try {
       const result = await login(email, password);
       if (result.ok) {
-        navigate("/dashboard");
+        router.push("/dashboard");
       } else {
         setError(result.error ?? "Login failed. Please try again.");
       }
@@ -84,11 +87,11 @@ export default function Login() {
         <span>
           No account?{" "}
           <Button asChild variant="link" className="h-auto p-0 text-foreground normal-case tracking-normal">
-            <Link to="/register">Register</Link>
+            <Link href="/register">Register</Link>
           </Button>
         </span>
         <Button asChild variant="link" className="h-auto p-0 text-foreground normal-case tracking-normal">
-          <Link to="/forgot-password">Forgot password?</Link>
+          <Link href="/forgot-password">Forgot password?</Link>
         </Button>
       </div>
     </AuthShell>
