@@ -212,8 +212,8 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
               </Button>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button type="button" className={`workshop-control-free group inline-flex items-center gap-2 px-2 py-1 text-lg font-semibold transition-colors hover:text-primary ${liked ? "text-primary" : "text-muted-foreground"}`} aria-label={liked ? "Remove thank" : "Thank"} onClick={() => void toggleLike()}>
-                    <ThumbsUp className={`h-7 w-7 transition-colors ${liked ? "fill-current" : "fill-none group-hover:fill-current"}`} aria-hidden="true" />
+                  <button type="button" className={`workshop-control-free group ml-3 inline-flex items-center gap-2 px-2 py-1 text-lg font-semibold transition-[color,filter] hover:text-primary hover:drop-shadow-[0_0_8px_currentColor] ${liked ? "text-primary drop-shadow-[0_0_8px_currentColor]" : "text-muted-foreground"}`} aria-label={liked ? "Remove thank" : "Thank"} onClick={() => void toggleLike()}>
+                    <ThumbsUp className="h-7 w-7 fill-none transition-colors" aria-hidden="true" />
                     {formatCount(asset.engagement?.likeCount ?? 0)}
                   </button>
                 </TooltipTrigger>
