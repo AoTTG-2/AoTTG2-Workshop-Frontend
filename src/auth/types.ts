@@ -18,7 +18,12 @@ export interface ProfileResponse {
 }
 
 export interface WorkshopUser {
-  [key: string]: unknown;
+  authAccountId: string;
+  displayName: string;
+  photonUserId?: string | null;
+  roles: string[];
+  permissions?: string[];
+  lastSeenAt: string;
 }
 
 export interface AuthResponse {

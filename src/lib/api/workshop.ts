@@ -1,7 +1,14 @@
-import { WORKSHOP_API_BASE_URL, WORKSHOP_CONTENT_API_BASE_URL } from "../config";
+import { clearTokens, getRefreshToken, setTokens } from "../../auth/storage";
+import type { AuthResponse } from "../../auth/types";
+import { AUTH_API_BASE_URL, WORKSHOP_API_BASE_URL, WORKSHOP_CONTENT_API_BASE_URL } from "../config";
 
 export interface WorkshopUser {
-  [key: string]: unknown;
+  authAccountId: string;
+  displayName: string;
+  photonUserId?: string | null;
+  roles: string[];
+  permissions?: string[];
+  lastSeenAt: string;
 }
 
 export type WorkshopAssetType = "skin_part" | "skin_set";
@@ -35,6 +42,7 @@ export interface SkinSetPayload {
 
 export interface WorkshopAsset {
   id: string;
+  publicId: string;
   type: WorkshopAssetType | string;
   title: string;
   descriptionMarkdown?: string | null;
@@ -55,6 +63,7 @@ export interface AssetEngagement {
   favoriteCount: number;
   viewCount: number;
   downloadCount: number;
+  commentCount: number;
 }
 
 export interface ViewerEngagement {
@@ -96,6 +105,35 @@ export interface VariantCatalog {
   humanSkinParts: string[];
 }
 
+export interface WorkshopComment {
+  id: string;
+  assetId: string;
+  parentCommentId: string | null;
+  body: string;
+  status: "visible" | "deleted" | "hidden";
+  authorAuthAccountId: string;
+  authorDisplayName: string;
+  createdAt: string;
+  updatedAt: string;
+  replies: WorkshopComment[];
+}
+
+export interface CommentListResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  comments: WorkshopComment[];
+}
+
+export interface CommentReportResponse {
+  id: string;
+  commentId: string;
+  reporterAuthAccountId: string;
+  reason: string;
+  createdAt: string;
+  resolvedAt?: string | null;
+}
+
 interface ApiError {
   error?: string;
   title?: string;
@@ -113,6 +151,72 @@ async function parseJson<T>(response: Response): Promise<T> {
   } catch {
     return {} as T;
   }
+}
+
+async function refreshWorkshopSession(): Promise<string | null> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  const response = await fetch(`${AUTH_API_BASE_URL}/auth/refresh`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ refreshToken }),
+  });
+
+  if (!response.ok) {
+    clearTokens();
+    return null;
+  }
+
+  const data = await parseJson<AuthResponse>(response);
+  setTokens(data.accessToken, data.refreshToken);
+  return data.accessToken;
+}
+
+async function workshopJson<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  const response = await fetch(`${WORKSHOP_CONTENT_API_BASE_URL}${path}`, init);
+
+  if (response.status === 401 && retry) {
+    const nextToken = await refreshWorkshopSession();
+    if (nextToken) {
+      return workshopJson<T>(path, {
+        ...init,
+        headers: { ...(init.headers as Record<string, string> | undefined), authorization: `Bearer ${nextToken}` },
+      }, false);
+    }
+  }
+
+  if (response.status === 401) {
+    clearTokens();
+    throw new Error("Sign in required.");
+  }
+
+  if (!response.ok) {
+    const data = await parseJson<ApiError>(response);
+    const validationMessage = Object.values(data.errors ?? {}).flat()[0];
+    throw new Error(data.error || data.detail || validationMessage || data.title || fallbackWorkshopError(response.status));
+  }
+
+  return parseJson<T>(response);
+}
+
+function jsonAuthInit(method: string, accessToken: string, body?: unknown): RequestInit {
+  return {
+    method,
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${accessToken}`,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  };
+}
+
+function fallbackWorkshopError(status: number) {
+  if (status === 400) return "Check the fields and try again.";
+  if (status === 404) return "This item is unavailable.";
+  if (status === 429) return "Slow down and try again in a moment.";
+  if (status >= 500) return "Workshop server error. Try again later.";
+  return "Workshop request failed.";
 }
 
 export async function getWorkshopMe(accessToken: string): Promise<WorkshopUser | null> {
@@ -178,6 +282,13 @@ export async function getAsset(id: string, accessToken?: string | null): Promise
   return parseJson<WorkshopAsset>(response);
 }
 
+export async function deleteWorkshopAsset(id: string, accessToken: string): Promise<{ deleted: boolean }> {
+  return workshopJson<{ deleted: boolean }>(`/assets/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+}
+
 export async function setAssetLike(id: string, liked: boolean, accessToken: string): Promise<EngagementWriteResponse> {
   return writeEngagement(id, liked ? "PUT" : "DELETE", "like", accessToken);
 }
@@ -192,6 +303,47 @@ export async function trackAssetView(id: string, accessToken?: string | null): P
 
 export async function trackAssetDownload(id: string, accessToken?: string | null): Promise<EngagementWriteResponse> {
   return writeEngagement(id, "POST", "download", accessToken);
+}
+
+export async function listAssetComments(assetId: string, page = 1, pageSize = 24): Promise<CommentListResponse> {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  return workshopJson<CommentListResponse>(`/assets/${encodeURIComponent(assetId)}/comments?${params.toString()}`);
+}
+
+export async function createAssetComment(assetId: string, body: string, accessToken: string): Promise<WorkshopComment> {
+  return workshopJson<WorkshopComment>(`/assets/${encodeURIComponent(assetId)}/comments`, jsonAuthInit("POST", accessToken, { body }));
+}
+
+export async function replyToAssetComment(assetId: string, commentId: string, body: string, accessToken: string): Promise<WorkshopComment> {
+  return workshopJson<WorkshopComment>(`/assets/${encodeURIComponent(assetId)}/comments/${encodeURIComponent(commentId)}/replies`, jsonAuthInit("POST", accessToken, { body }));
+}
+
+export async function deleteWorkshopComment(commentId: string, accessToken: string): Promise<{ deleted: boolean }> {
+  return workshopJson<{ deleted: boolean }>(`/comments/${encodeURIComponent(commentId)}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export async function reportWorkshopComment(commentId: string, reason: string, accessToken: string): Promise<CommentReportResponse> {
+  return workshopJson<CommentReportResponse>(`/comments/${encodeURIComponent(commentId)}/reports`, jsonAuthInit("POST", accessToken, { reason }));
+}
+
+export async function listModerationComments(accessToken: string, status: "reported" | "hidden" = "reported", page = 1, pageSize = 24): Promise<CommentListResponse> {
+  const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+  return workshopJson<CommentListResponse>(`/moderation/comments?${params.toString()}`, { headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function hideModerationComment(commentId: string, accessToken: string): Promise<WorkshopComment> {
+  return workshopJson<WorkshopComment>(`/moderation/comments/${encodeURIComponent(commentId)}/hide`, { method: "PUT", headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function restoreModerationComment(commentId: string, accessToken: string): Promise<WorkshopComment> {
+  return workshopJson<WorkshopComment>(`/moderation/comments/${encodeURIComponent(commentId)}/restore`, { method: "PUT", headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function resolveModerationReport(reportId: string, accessToken: string): Promise<CommentReportResponse> {
+  return workshopJson<CommentReportResponse>(`/moderation/comment-reports/${encodeURIComponent(reportId)}/resolve`, { method: "PUT", headers: { authorization: `Bearer ${accessToken}` } });
 }
 
 async function writeEngagement(id: string, method: "PUT" | "DELETE" | "POST", action: string, accessToken?: string | null): Promise<EngagementWriteResponse> {

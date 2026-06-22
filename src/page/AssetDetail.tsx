@@ -1,15 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "@aottg2/ui";
+import { Button, CommentBox, CommentSection, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, renderCommentMarkdown, type CommentItem } from "@aottg2/ui";
+import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Copy, Download, Eye, Flag, Heart, Link as LinkIcon, MoreHorizontal, Star } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Copy, Download, Eye, Flag, Heart, Link as LinkIcon, MessageCircle, MoreHorizontal, Star, Trash2 } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { getAccessToken } from "../auth/storage";
 import { useAuth } from "../auth/useAuth";
+import { canModerateAssets, canModerateComments } from "../auth/workshopPermissions";
 import { AssetTag, AssetTagLink } from "../components/AssetTag";
-import { getAsset, setAssetFavorite, setAssetLike, trackAssetDownload, trackAssetView, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopMedia } from "../lib/api/workshop";
+import { createAssetComment, deleteWorkshopAsset, deleteWorkshopComment, getAsset, hideModerationComment, listAssetComments, replyToAssetComment, reportWorkshopComment, setAssetFavorite, setAssetLike, trackAssetDownload, trackAssetView, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopComment, type WorkshopMedia } from "../lib/api/workshop";
 import { toast } from "../lib/toast";
 
 const markdownComponents: Components = {
@@ -38,6 +40,7 @@ const markdownComponents: Components = {
 
 export function AssetDetail() {
   const { id = "" } = useParams();
+  const navigate = useNavigate();
   const query = useQuery({
     queryKey: ["workshop", "asset", id],
     queryFn: () => getAsset(id, getAccessToken()),
@@ -46,6 +49,12 @@ export function AssetDetail() {
   const asset = query.data;
   const refetchAsset = query.refetch;
   const trackedView = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (asset?.publicId && id !== asset.publicId) {
+      navigate(`/library/${asset.publicId}`, { replace: true });
+    }
+  }, [asset?.publicId, id, navigate]);
 
   useEffect(() => {
     if (!asset?.id || trackedView.current === asset.id) return;
@@ -87,7 +96,9 @@ export function AssetDetail() {
 }
 
 function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefresh: () => Promise<unknown> }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, profile, workshopUser } = useAuth();
+  const navigate = useNavigate();
+  const reduceMotion = useReducedMotion();
   const media = mediaForGallery(asset.media);
   const [activeIndex, setActiveIndex] = useState(0);
   const activeMedia = media[activeIndex];
@@ -96,6 +107,10 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
   const summary = summarizeAsset(asset);
   const liked = Boolean(asset.viewerEngagement?.liked);
   const favorited = Boolean(asset.viewerEngagement?.favorited);
+  const publicAssetUrl = `${window.location.origin}/library/${asset.publicId}`;
+  const accountId = workshopUser?.authAccountId ?? profile?.accountId;
+  const permissionSource = workshopUser ?? profile;
+  const canDeleteAsset = isAuthenticated && (accountId === asset.ownerAuthAccountId || canModerateAssets(permissionSource));
 
   async function copyText(label: string, value: string) {
     try {
@@ -140,13 +155,29 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
     await onRefresh();
   }
 
+  async function deleteAsset() {
+    const token = getAccessToken();
+    if (!token) {
+      toast.info("Sign in required.", { description: "Your session may have expired." });
+      return;
+    }
+    if (!window.confirm(`Delete "${asset.title}"?`)) return;
+    try {
+      await deleteWorkshopAsset(asset.publicId || asset.id, token);
+      toast.success("Asset deleted", { description: "Removed from the Workshop library." });
+      navigate("/library");
+    } catch (error) {
+      toast.error("Could not delete asset", { description: error instanceof Error ? error.message : "Try again." });
+    }
+  }
+
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
       <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" to="/library">
         Back to library
       </Link>
 
-      <header className="mt-5 border-b border-border pb-5">
+      <motion.header className="mt-5 border-b border-border pb-5" initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18, ease: "easeOut" }}>
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
             <h1 className="font-primary text-balance text-4xl font-semibold uppercase leading-none tracking-tight">{asset.title}</h1>
@@ -155,43 +186,56 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
               <EngagementStat icon={<Download className="h-4 w-4" />} label="downloads" value={asset.engagement?.downloadCount ?? 0} />
               <EngagementStat icon={<Heart className="h-4 w-4" />} label="likes" value={asset.engagement?.likeCount ?? 0} />
               <EngagementStat icon={<Eye className="h-4 w-4" />} label="views" value={asset.engagement?.viewCount ?? 0} />
+              <EngagementStat icon={<MessageCircle className="h-4 w-4" />} label="comments" value={asset.engagement?.commentCount ?? 0} />
             </div>
           </div>
-          <div className="flex flex-wrap items-start gap-2 md:justify-end">
-            <Button type="button" onClick={importAsset}>
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Import Asset
-            </Button>
-            <Button type="button" variant="ghost" aria-label={liked ? "Unlike" : "Like"} title={liked ? "Unlike" : "Like"} onClick={() => void toggleLike()}>
-              <Heart className="h-4 w-4" fill={liked ? "currentColor" : "none"} aria-hidden="true" />
-            </Button>
-            <Button type="button" variant="ghost" aria-label={favorited ? "Unfavorite" : "Favorite"} title={favorited ? "Unfavorite" : "Favorite"} onClick={() => void toggleFavorite()}>
-              <Star className="h-4 w-4" fill={favorited ? "currentColor" : "none"} aria-hidden="true" />
-            </Button>
-            <details className="group relative">
-              <summary className="workshop-control-free flex h-10 min-h-10 cursor-pointer list-none items-center border border-border px-3 text-sm font-semibold uppercase text-muted-foreground hover:text-primary [&::-webkit-details-marker]:hidden" aria-label="More actions" title="More actions">
-                <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-              </summary>
-              <div className="absolute right-0 top-11 z-20 grid w-44 border border-border bg-popover p-1 text-popover-foreground shadow-md">
-                <MenuAction icon={<Copy className="h-4 w-4" />} label="Copy ID" onClick={() => copyText("asset id", asset.id)} />
-                <MenuAction icon={<LinkIcon className="h-4 w-4" />} label="Copy Link" onClick={() => copyText("asset link", window.location.href)} />
-                <MenuAction icon={<Flag className="h-4 w-4" />} label="Report" onClick={() => comingSoon("Report")} />
-              </div>
-            </details>
-          </div>
+          <TooltipProvider delayDuration={0} skipDelayDuration={0}>
+            <div className="flex flex-wrap items-start gap-2 md:justify-end">
+              <Button type="button" onClick={importAsset}>
+                <Download className="h-4 w-4" aria-hidden="true" />
+                Import Asset
+              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" className={`workshop-control-free group inline-flex items-center gap-2 px-2 py-1 text-lg font-semibold transition-colors hover:text-red-500 ${liked ? "text-red-500" : "text-muted-foreground"}`} aria-label={liked ? "Unlike" : "Like"} onClick={() => void toggleLike()}>
+                    <Heart className={`h-7 w-7 transition-colors ${liked ? "fill-current" : "fill-none group-hover:fill-current"}`} aria-hidden="true" />
+                    {formatCount(asset.engagement?.likeCount ?? 0)}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{liked ? "Unlike" : "Like"}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" className={`workshop-control-free group inline-flex items-center px-2 py-1 transition-colors hover:text-yellow-400 ${favorited ? "text-yellow-400" : "text-muted-foreground"}`} aria-label={favorited ? "Unfavorite" : "Favorite"} onClick={() => void toggleFavorite()}>
+                    <Star className={`h-7 w-7 transition-colors ${favorited ? "fill-current" : "fill-none group-hover:fill-current"}`} aria-hidden="true" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>{favorited ? "Unfavorite" : "Favorite"}</TooltipContent>
+              </Tooltip>
+              <details className="group relative">
+                <summary className="workshop-control-free flex h-10 min-h-10 cursor-pointer list-none items-center border border-border px-3 text-sm font-semibold uppercase text-muted-foreground hover:text-primary [&::-webkit-details-marker]:hidden" aria-label="More actions" title="More actions">
+                  <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                </summary>
+                <div className="absolute right-0 top-11 z-20 grid w-44 border border-border bg-popover p-1 text-popover-foreground shadow-md">
+                  <MenuAction icon={<Copy className="h-4 w-4" />} label="Copy ID" onClick={() => copyText("asset id", asset.publicId)} />
+                  <MenuAction icon={<LinkIcon className="h-4 w-4" />} label="Copy Link" onClick={() => copyText("asset link", publicAssetUrl)} />
+                  <MenuAction icon={<Flag className="h-4 w-4" />} label="Report" onClick={() => comingSoon("Report")} />
+                  {canDeleteAsset ? <MenuAction destructive icon={<Trash2 className="h-4 w-4" />} label="Delete Asset" onClick={deleteAsset} /> : null}
+                </div>
+              </details>
+            </div>
+          </TooltipProvider>
         </div>
-      </header>
+      </motion.header>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="min-w-0 space-y-5">
+        <motion.section className="min-w-0 space-y-5" initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: "easeOut", delay: reduceMotion ? 0 : 0.03 }}>
           <section className="border border-border bg-card/50 p-3">
             <GalleryImage media={activeMedia} title={asset.title} />
             {media.length > 1 ? (
               <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
                 {media.map((item, index) => (
-                  <button key={`${item.url}-${index}`} type="button" className={`workshop-control-free border ${index === activeIndex ? "border-primary" : "border-border"}`} onClick={() => setActiveIndex(index)}>
-                    <img className="aspect-video w-full object-cover" src={item.url} alt={item.description || asset.title} loading="lazy" />
-                  </button>
+                  <GalleryThumb key={`${item.url}-${index}`} item={item} title={asset.title} active={index === activeIndex} onClick={() => setActiveIndex(index)} />
                 ))}
               </div>
             ) : null}
@@ -206,9 +250,9 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
               <p className="text-sm text-muted-foreground">No description yet.</p>
             )}
           </section>
-        </section>
+        </motion.section>
 
-        <aside className="grid content-start gap-4">
+        <motion.aside className="grid content-start gap-4" initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: "easeOut", delay: reduceMotion ? 0 : 0.06 }}>
           <InfoPanel title="Tags">
             <div className="flex flex-wrap gap-2">
               <AssetTag variant="category" size="md">
@@ -251,9 +295,219 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
               </Button>
             ) : null}
           </InfoPanel>
-        </aside>
+        </motion.aside>
       </div>
+
+      <AssetComments asset={asset} onAssetRefresh={onRefresh} />
     </main>
+  );
+}
+
+function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAssetRefresh: () => Promise<unknown> }) {
+  const { isAuthenticated, profile, workshopUser } = useAuth();
+  const reduceMotion = useReducedMotion();
+  const accountId = workshopUser?.authAccountId ?? profile?.accountId;
+  const permissionSource = workshopUser ?? profile;
+  const assetCommentId = asset.publicId || asset.id;
+  const commentsQuery = useQuery({
+    queryKey: ["workshop", "asset-comments", assetCommentId],
+    queryFn: () => listAssetComments(assetCommentId),
+    enabled: Boolean(assetCommentId),
+  });
+  const [body, setBody] = useState("");
+  const [replyBody, setReplyBody] = useState("");
+  const [replyTo, setReplyTo] = useState<{ commentId: string; rowId: string; author: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!replyTo) return;
+    window.requestAnimationFrame(() => {
+      document.getElementById(`reply-box-${replyTo.rowId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [replyTo]);
+
+  function startReply(commentId: string, rowId: string, author: string) {
+    setReplyTo({ commentId, rowId, author });
+    setReplyBody(`@${author} `);
+  }
+
+  async function refreshAfterWrite() {
+    await commentsQuery.refetch();
+    await onAssetRefresh();
+  }
+
+  async function submitComment() {
+    const token = getAccessToken();
+    const text = body.trim();
+    if (!isAuthenticated || !token) {
+      toast.info("Sign in to comment.", { description: "Comments are saved to your account." });
+      return;
+    }
+    if (!text) {
+      toast.error("Comment is empty.", { description: "Write something before posting." });
+      return;
+    }
+    if (text.length > 1000) {
+      toast.error("Comment is too long.", { description: "Keep comments under 1000 characters." });
+      return;
+    }
+
+    try {
+      setBusy(true);
+      await createAssetComment(assetCommentId, text, token);
+      setBody("");
+      await refreshAfterWrite();
+    } catch (error) {
+      toast.error("Could not post comment", { description: error instanceof Error ? error.message : "Try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitReply() {
+    const token = getAccessToken();
+    const text = replyBody.trim();
+    if (!isAuthenticated || !token || !replyTo) return;
+    if (!text) {
+      toast.error("Reply is empty.", { description: "Write something before posting." });
+      return;
+    }
+    if (text.length > 1000) {
+      toast.error("Reply is too long.", { description: "Keep replies under 1000 characters." });
+      return;
+    }
+
+    try {
+      setBusy(true);
+      await replyToAssetComment(assetCommentId, replyTo.commentId, text, token);
+      setReplyBody("");
+      setReplyTo(null);
+      await refreshAfterWrite();
+    } catch (error) {
+      toast.error("Could not post reply", { description: error instanceof Error ? error.message : "Try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteComment(commentId: string) {
+    const token = getAccessToken();
+    if (!token) {
+      toast.info("Sign in required.", { description: "Your session may have expired." });
+      return;
+    }
+    try {
+      await deleteWorkshopComment(commentId, token);
+      await refreshAfterWrite();
+    } catch (error) {
+      toast.error("Could not delete comment", { description: error instanceof Error ? error.message : "Try again." });
+    }
+  }
+
+  async function reportComment(commentId: string) {
+    const token = getAccessToken();
+    if (!isAuthenticated || !token) {
+      toast.info("Sign in to report comments.", { description: "Reports are attached to your account." });
+      return;
+    }
+    const reason = window.prompt("Reason for reporting this comment?", "spam")?.trim();
+    if (!reason) return;
+    try {
+      await reportWorkshopComment(commentId, reason, token);
+      toast.success("Comment reported", { description: "Moderators can review it now." });
+    } catch (error) {
+      toast.error("Could not report comment", { description: error instanceof Error ? error.message : "Try again." });
+    }
+  }
+
+  async function hideComment(commentId: string) {
+    const token = getAccessToken();
+    if (!token) {
+      toast.info("Sign in required.", { description: "Your session may have expired." });
+      return;
+    }
+    try {
+      await hideModerationComment(commentId, token);
+      await refreshAfterWrite();
+    } catch (error) {
+      toast.error("Could not hide comment", { description: error instanceof Error ? error.message : "Try again." });
+    }
+  }
+
+  function toItem(comment: WorkshopComment, parent = comment): CommentItem {
+    const deleted = comment.status === "deleted";
+    const canWrite = isAuthenticated && !deleted;
+    const actions = canWrite
+      ? [
+          { label: "Reply", onSelect: () => startReply(parent.id, comment.id, comment.authorDisplayName) },
+          accountId === comment.authorAuthAccountId ? { label: "Delete", destructive: true, onSelect: () => void deleteComment(comment.id) } : null,
+          canModerateComments(permissionSource) && comment.status === "visible" ? { label: "Hide", destructive: true, onSelect: () => void hideComment(comment.id) } : null,
+          accountId !== comment.authorAuthAccountId ? { label: "Report", destructive: true, onSelect: () => void reportComment(comment.id) } : null,
+        ].filter((item): item is NonNullable<typeof item> => item !== null)
+      : undefined;
+
+    return {
+      id: comment.id,
+      author: { name: comment.authorDisplayName },
+      createdAt: formatDate(comment.createdAt),
+      editedAt: comment.updatedAt !== comment.createdAt ? formatDate(comment.updatedAt) : undefined,
+      body: renderCommentMarkdown(comment.body),
+      deleted,
+      actions,
+      replies: comment.replies.map((reply) => toItem(reply, comment)),
+    };
+  }
+
+  const comments = commentsQuery.data?.comments.map((comment) => toItem(comment)) ?? [];
+
+  return (
+    <motion.section className="mt-5 border-t border-border pt-5" initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18, ease: "easeOut", delay: reduceMotion ? 0 : 0.08 }}>
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="font-primary text-2xl uppercase leading-none text-foreground">Comments</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{commentsQuery.data?.total ?? asset.engagement?.commentCount ?? 0} visible threads</p>
+        </div>
+        {!isAuthenticated ? <span className="text-sm text-muted-foreground">Sign in to comment or report.</span> : null}
+      </div>
+
+      <CommentBox
+        value={body}
+        onChange={setBody}
+        onSubmit={() => void submitComment()}
+        submitLabel="Comment"
+        placeholder="Write a comment..."
+        disabled={busy || !isAuthenticated}
+        textareaProps={{ maxLength: 1000 }}
+      />
+
+      <div className="mt-4">
+        <CommentSection
+          comments={comments}
+          empty={commentsQuery.isLoading ? "Loading comments..." : commentsQuery.isError ? "Comments could not be loaded." : "No comments yet."}
+          renderBody={(comment) => (
+            <>
+              {comment.body}
+              {replyTo?.rowId === comment.id ? (
+                <motion.div initial={reduceMotion ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.16, ease: "easeOut" }}>
+                  <CommentBox
+                    id={`reply-box-${comment.id}`}
+                    className="mt-3"
+                    value={replyBody}
+                    onChange={setReplyBody}
+                    onSubmit={() => void submitReply()}
+                    onCancel={() => { setReplyTo(null); setReplyBody(""); }}
+                    submitLabel="Reply"
+                    placeholder={`Reply to ${replyTo.author}...`}
+                    disabled={busy}
+                    textareaProps={{ maxLength: 1000 }}
+                  />
+                </motion.div>
+              ) : null}
+            </>
+          )}
+        />
+      </div>
+    </motion.section>
   );
 }
 
@@ -266,9 +520,9 @@ function EngagementStat({ icon, label, value }: { icon: ReactNode; label: string
   );
 }
 
-function MenuAction({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void | Promise<void> }) {
+function MenuAction({ icon, label, destructive = false, onClick }: { icon: ReactNode; label: string; destructive?: boolean; onClick: () => void | Promise<void> }) {
   return (
-    <button type="button" role="menuitem" className="workshop-control-free flex items-center gap-2 px-2 py-1.5 text-left text-sm font-semibold uppercase text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={() => void onClick()}>
+    <button type="button" role="menuitem" className={`workshop-control-free flex items-center gap-2 px-2 py-1.5 text-left text-sm font-semibold uppercase hover:bg-accent hover:text-accent-foreground ${destructive ? "text-destructive" : "text-muted-foreground"}`} onClick={() => void onClick()}>
       {icon}
       {label}
     </button>
@@ -322,11 +576,43 @@ function SummaryRow({ label, value }: { label: string; value?: string | null }) 
 }
 
 function GalleryImage({ media, title }: { media?: WorkshopMedia; title: string }) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setLoaded(false);
+    setFailed(false);
+  }, [media?.url]);
+
   if (!media) {
     return <div className="grid aspect-video place-items-center bg-muted/50 font-primary text-sm uppercase text-muted-foreground">No preview</div>;
   }
 
-  return <img className="aspect-video w-full object-cover" src={media.url} alt={media.description || title} />;
+  if (failed) {
+    return <div className="grid aspect-video place-items-center bg-muted/50 font-primary text-sm uppercase text-muted-foreground">No preview</div>;
+  }
+
+  return (
+    <div className="relative aspect-video overflow-hidden bg-muted/50">
+      {!loaded ? <div className="absolute inset-0 animate-pulse bg-muted" aria-hidden="true" /> : null}
+      <img className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} src={media.url} alt={media.description || title} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
+    </div>
+  );
+}
+
+function GalleryThumb({ item, title, active, onClick }: { item: WorkshopMedia; title: string; active: boolean; onClick: () => void }) {
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    setLoaded(false);
+  }, [item.url]);
+
+  return (
+    <button type="button" className={`workshop-control-free relative aspect-video overflow-hidden border bg-muted/50 ${active ? "border-primary" : "border-border"}`} onClick={onClick}>
+      {!loaded ? <div className="absolute inset-0 animate-pulse bg-muted" aria-hidden="true" /> : null}
+      <img className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} src={item.url} alt={item.description || title} loading="lazy" onLoad={() => setLoaded(true)} onError={() => setLoaded(true)} />
+    </button>
+  );
 }
 
 function mediaForGallery(media: WorkshopMedia[]) {
