@@ -39,8 +39,8 @@ export function AuthShell({
 export function BackHomeLink() {
   return (
     <p className="mt-5 text-center text-sm font-semibold">
-      <Link className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" to="/marketplace">
-        ← Back to marketplace
+      <Link className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" to="/library">
+        ← Back to library
       </Link>
     </p>
   );

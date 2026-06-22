@@ -1,12 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@aottg2/ui";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Copy, Download, Eye, Flag, Heart, Link as LinkIcon, MoreHorizontal, Star } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
+import { getAccessToken } from "../auth/storage";
+import { useAuth } from "../auth/useAuth";
 import { AssetTag, AssetTagLink } from "../components/AssetTag";
-import { getAsset, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopMedia } from "../lib/api/workshop";
+import { getAsset, setAssetFavorite, setAssetLike, trackAssetDownload, trackAssetView, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopMedia } from "../lib/api/workshop";
 import { toast } from "../lib/toast";
 
 const markdownComponents: Components = {
@@ -37,9 +40,22 @@ export function AssetDetail() {
   const { id = "" } = useParams();
   const query = useQuery({
     queryKey: ["workshop", "asset", id],
-    queryFn: () => getAsset(id),
+    queryFn: () => getAsset(id, getAccessToken()),
     enabled: Boolean(id),
   });
+  const asset = query.data;
+  const refetchAsset = query.refetch;
+  const trackedView = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!asset?.id || trackedView.current === asset.id) return;
+    trackedView.current = asset.id;
+    void trackAssetView(asset.id, getAccessToken())
+      .then((result) => {
+        if (result.counted) void refetchAsset();
+      })
+      .catch(() => undefined);
+  }, [asset?.id, refetchAsset]);
 
   if (query.isLoading) {
     return (
@@ -53,11 +69,11 @@ export function AssetDetail() {
     );
   }
 
-  if (query.isError || !query.data) {
+  if (query.isError || !asset) {
     return (
       <main className="mx-auto w-full max-w-4xl px-6 py-8">
-        <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" to="/marketplace">
-          Back to marketplace
+        <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" to="/library">
+          Back to library
         </Link>
         <div className="mt-6 border border-border bg-card/40 p-6">
           <h1 className="font-primary text-3xl uppercase">Asset not found</h1>
@@ -67,16 +83,19 @@ export function AssetDetail() {
     );
   }
 
-  return <AssetDetailContent asset={query.data} />;
+  return <AssetDetailContent asset={asset} onRefresh={() => refetchAsset()} />;
 }
 
-function AssetDetailContent({ asset }: { asset: WorkshopAsset }) {
+function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefresh: () => Promise<unknown> }) {
+  const { isAuthenticated } = useAuth();
   const media = mediaForGallery(asset.media);
   const [activeIndex, setActiveIndex] = useState(0);
   const activeMedia = media[activeIndex];
   const textureUrls = collectTextureUrls(asset);
   const category = assetCategory(asset);
   const summary = summarizeAsset(asset);
+  const liked = Boolean(asset.viewerEngagement?.liked);
+  const favorited = Boolean(asset.viewerEngagement?.favorited);
 
   async function copyText(label: string, value: string) {
     try {
@@ -91,44 +110,74 @@ function AssetDetailContent({ asset }: { asset: WorkshopAsset }) {
     toast.info(`${label} coming soon`, { description: "This action is not available yet." });
   }
 
+  async function importAsset() {
+    await copyText("asset JSON", JSON.stringify(asset.payload, null, 2));
+    try {
+      await trackAssetDownload(asset.id, getAccessToken());
+      await onRefresh();
+    } catch {
+      // Import still worked; stats can refresh later.
+    }
+  }
+
+  async function toggleLike() {
+    const token = getAccessToken();
+    if (!isAuthenticated || !token) {
+      toast.info("Sign in to like assets.", { description: "Likes are saved to your account." });
+      return;
+    }
+    await setAssetLike(asset.id, !liked, token);
+    await onRefresh();
+  }
+
+  async function toggleFavorite() {
+    const token = getAccessToken();
+    if (!isAuthenticated || !token) {
+      toast.info("Sign in to favorite assets.", { description: "Favorites are saved to your account." });
+      return;
+    }
+    await setAssetFavorite(asset.id, !favorited, token);
+    await onRefresh();
+  }
+
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
-      <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" to="/marketplace">
-        Back to marketplace
+      <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" to="/library">
+        Back to library
       </Link>
 
       <header className="mt-5 border-b border-border pb-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex min-w-0 gap-4">
-            <PreviewIcon media={activeMedia} title={asset.title} />
-            <div className="min-w-0">
-              <h1 className="font-primary text-balance text-4xl font-semibold uppercase leading-none tracking-tight">{asset.title}</h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {formatLabel(category)} / {formatLabel(asset.type)} / {summary}
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">By {asset.authorDisplayName}</p>
-              {asset.shortDescription ? <p className="mt-3 max-w-2xl text-pretty text-base text-foreground">{asset.shortDescription}</p> : null}
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <h1 className="font-primary text-balance text-4xl font-semibold uppercase leading-none tracking-tight">{asset.title}</h1>
+            {asset.shortDescription ? <p className="mt-3 line-clamp-1 max-w-2xl text-base text-foreground">{asset.shortDescription}</p> : null}
+            <div className="mt-3 flex flex-wrap items-center gap-4 text-xs font-semibold uppercase text-muted-foreground">
+              <EngagementStat icon={<Download className="h-4 w-4" />} label="downloads" value={asset.engagement?.downloadCount ?? 0} />
+              <EngagementStat icon={<Heart className="h-4 w-4" />} label="likes" value={asset.engagement?.likeCount ?? 0} />
+              <EngagementStat icon={<Eye className="h-4 w-4" />} label="views" value={asset.engagement?.viewCount ?? 0} />
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={() => copyText("JSON payload", JSON.stringify(asset.payload, null, 2))}>
-              Copy JSON
+          <div className="flex flex-wrap items-start gap-2 md:justify-end">
+            <Button type="button" onClick={importAsset}>
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Import Asset
             </Button>
-            <Button type="button" variant="ghost" onClick={() => comingSoon("Like")}>
-              Like
+            <Button type="button" variant="ghost" aria-label={liked ? "Unlike" : "Like"} title={liked ? "Unlike" : "Like"} onClick={() => void toggleLike()}>
+              <Heart className="h-4 w-4" fill={liked ? "currentColor" : "none"} aria-hidden="true" />
             </Button>
-            <Button type="button" variant="ghost" onClick={() => comingSoon("Favorite")}>
-              Favorite
+            <Button type="button" variant="ghost" aria-label={favorited ? "Unfavorite" : "Favorite"} title={favorited ? "Unfavorite" : "Favorite"} onClick={() => void toggleFavorite()}>
+              <Star className="h-4 w-4" fill={favorited ? "currentColor" : "none"} aria-hidden="true" />
             </Button>
-            <Button type="button" variant="ghost" onClick={() => copyText("asset id", asset.id)}>
-              Copy ID
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => copyText("asset link", window.location.href)}>
-              Copy Link
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => comingSoon("Report")}>
-              Report
-            </Button>
+            <details className="group relative">
+              <summary className="workshop-control-free flex h-10 min-h-10 cursor-pointer list-none items-center border border-border px-3 text-sm font-semibold uppercase text-muted-foreground hover:text-primary [&::-webkit-details-marker]:hidden" aria-label="More actions" title="More actions">
+                <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+              </summary>
+              <div className="absolute right-0 top-11 z-20 grid w-44 border border-border bg-popover p-1 text-popover-foreground shadow-md">
+                <MenuAction icon={<Copy className="h-4 w-4" />} label="Copy ID" onClick={() => copyText("asset id", asset.id)} />
+                <MenuAction icon={<LinkIcon className="h-4 w-4" />} label="Copy Link" onClick={() => copyText("asset link", window.location.href)} />
+                <MenuAction icon={<Flag className="h-4 w-4" />} label="Report" onClick={() => comingSoon("Report")} />
+              </div>
+            </details>
           </div>
         </div>
       </header>
@@ -167,7 +216,7 @@ function AssetDetailContent({ asset }: { asset: WorkshopAsset }) {
               </AssetTag>
               {asset.tags.length > 0 ? (
                 asset.tags.map((tag) => (
-                  <AssetTagLink key={tag} size="md" to={`/marketplace?tag=${encodeURIComponent(tag)}`}>
+                  <AssetTagLink key={tag} size="md" to={`/library?tag=${encodeURIComponent(tag)}`}>
                     {tag}
                   </AssetTagLink>
                 ))
@@ -205,6 +254,24 @@ function AssetDetailContent({ asset }: { asset: WorkshopAsset }) {
         </aside>
       </div>
     </main>
+  );
+}
+
+function EngagementStat({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {icon}
+      {formatCount(value)} {label}
+    </span>
+  );
+}
+
+function MenuAction({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void | Promise<void> }) {
+  return (
+    <button type="button" role="menuitem" className="workshop-control-free flex items-center gap-2 px-2 py-1.5 text-left text-sm font-semibold uppercase text-muted-foreground hover:bg-accent hover:text-accent-foreground" onClick={() => void onClick()}>
+      {icon}
+      {label}
+    </button>
   );
 }
 
@@ -252,14 +319,6 @@ function SummaryRow({ label, value }: { label: string; value?: string | null }) 
       <dd className="break-words text-foreground">{value}</dd>
     </div>
   );
-}
-
-function PreviewIcon({ media, title }: { media?: WorkshopMedia; title: string }) {
-  if (!media) {
-    return <div className="grid h-20 w-20 shrink-0 place-items-center bg-muted font-primary text-xs uppercase text-muted-foreground">No image</div>;
-  }
-
-  return <img className="h-20 w-20 shrink-0 object-cover shadow-[0_12px_24px_rgb(0_0_0_/_0.22)]" src={media.url} alt={media.description || title} />;
 }
 
 function GalleryImage({ media, title }: { media?: WorkshopMedia; title: string }) {
@@ -332,4 +391,8 @@ function formatLabel(value: string) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat(undefined, { notation: "compact" }).format(value);
 }

@@ -129,17 +129,9 @@
   border-color: hsl(var(--foreground) / 0.08) !important;
 }
 
-.workshop-logo-button {
-  font-size: 1.75rem !important;
-  text-shadow: 0 2px 0 rgb(0 0 0 / 0.18);
-}
-
-.workshop-logo-button:hover {
-  color: hsl(var(--primary));
-}
-
-.aottg2-theme nav button.workshop-control-free {
-  font-size: 1.125rem !important;
+.aottg2-theme header nav > button.workshop-control-free,
+.aottg2-theme header nav .group > button.workshop-control-free {
+  font-size: inherit !important;
 }
 
 .aottg2-theme button.workshop-tag-sm {

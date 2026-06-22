@@ -170,8 +170,8 @@ export function CreateAsset() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["workshop", "assets"] });
-      toast.success("Asset created", { description: "Your asset was saved and the marketplace will refresh." });
-      navigate("/marketplace");
+      toast.success("Asset created", { description: "Your asset was saved and the library page will refresh." });
+      navigate("/library");
     },
     onError: (nextError) => {
       toast.error("Could not create asset", { description: selectError(nextError), id: "create-asset-error" });
@@ -306,7 +306,7 @@ export function CreateAsset() {
         )}
 
         <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-6">
-          <Button type="button" variant="ghost" onClick={() => navigate("/marketplace")}>
+          <Button type="button" variant="ghost" onClick={() => navigate("/library")}>
             Cancel
           </Button>
           <Button type="submit" disabled={mutation.isPending}>

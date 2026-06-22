@@ -46,6 +46,26 @@ export interface WorkshopAsset {
   authorDisplayName: string;
   createdAt: string;
   updatedAt: string;
+  engagement?: AssetEngagement;
+  viewerEngagement?: ViewerEngagement | null;
+}
+
+export interface AssetEngagement {
+  likeCount: number;
+  favoriteCount: number;
+  viewCount: number;
+  downloadCount: number;
+}
+
+export interface ViewerEngagement {
+  liked: boolean;
+  favorited: boolean;
+}
+
+export interface EngagementWriteResponse {
+  engagement: AssetEngagement;
+  viewerEngagement?: ViewerEngagement | null;
+  counted: boolean;
 }
 
 export interface AssetListQuery {
@@ -81,6 +101,10 @@ interface ApiError {
   title?: string;
   detail?: string;
   errors?: Record<string, string[]>;
+}
+
+function authHeaders(accessToken?: string | null) {
+  return accessToken ? { authorization: `Bearer ${accessToken}` } : undefined;
 }
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -132,14 +156,16 @@ export async function listAssets(query: AssetListQuery = {}): Promise<AssetListR
   const response = await fetch(`${WORKSHOP_CONTENT_API_BASE_URL}/assets${params.size ? `?${params.toString()}` : ""}`);
 
   if (!response.ok) {
-    throw new Error("Failed to load marketplace assets");
+    throw new Error("Failed to load assets");
   }
 
   return parseJson<AssetListResponse>(response);
 }
 
-export async function getAsset(id: string): Promise<WorkshopAsset> {
-  const response = await fetch(`${WORKSHOP_CONTENT_API_BASE_URL}/assets/${encodeURIComponent(id)}`);
+export async function getAsset(id: string, accessToken?: string | null): Promise<WorkshopAsset> {
+  const response = await fetch(`${WORKSHOP_CONTENT_API_BASE_URL}/assets/${encodeURIComponent(id)}`, {
+    headers: authHeaders(accessToken),
+  });
 
   if (response.status === 404) {
     throw new Error("Asset not found");
@@ -150,6 +176,39 @@ export async function getAsset(id: string): Promise<WorkshopAsset> {
   }
 
   return parseJson<WorkshopAsset>(response);
+}
+
+export async function setAssetLike(id: string, liked: boolean, accessToken: string): Promise<EngagementWriteResponse> {
+  return writeEngagement(id, liked ? "PUT" : "DELETE", "like", accessToken);
+}
+
+export async function setAssetFavorite(id: string, favorited: boolean, accessToken: string): Promise<EngagementWriteResponse> {
+  return writeEngagement(id, favorited ? "PUT" : "DELETE", "favorite", accessToken);
+}
+
+export async function trackAssetView(id: string, accessToken?: string | null): Promise<EngagementWriteResponse> {
+  return writeEngagement(id, "POST", "view", accessToken);
+}
+
+export async function trackAssetDownload(id: string, accessToken?: string | null): Promise<EngagementWriteResponse> {
+  return writeEngagement(id, "POST", "download", accessToken);
+}
+
+async function writeEngagement(id: string, method: "PUT" | "DELETE" | "POST", action: string, accessToken?: string | null): Promise<EngagementWriteResponse> {
+  const response = await fetch(`${WORKSHOP_CONTENT_API_BASE_URL}/assets/${encodeURIComponent(id)}/${action}`, {
+    method,
+    headers: authHeaders(accessToken),
+  });
+
+  if (response.status === 401) {
+    throw new Error("Sign in required.");
+  }
+
+  if (!response.ok) {
+    throw new Error("Could not update engagement.");
+  }
+
+  return parseJson<EngagementWriteResponse>(response);
 }
 
 export async function createAsset(accessToken: string, asset: unknown): Promise<unknown> {

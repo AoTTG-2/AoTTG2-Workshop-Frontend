@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button, Input } from "@aottg2/ui";
 import { FormEvent, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { UploadCloud } from "lucide-react";
+import { CalendarDays, Download, Heart, UploadCloud } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { AssetTag, AssetTagButton } from "../components/AssetTag";
@@ -66,14 +66,14 @@ export function Marketplace() {
 
   useEffect(() => {
     if (query.error) {
-      toast.error("Could not load marketplace", { description: query.error instanceof Error ? query.error.message : "Try again." });
+      toast.error("Could not load library", { description: query.error instanceof Error ? query.error.message : "Try again." });
     }
   }, [query.error]);
 
   const totalPages = Math.max(1, Math.ceil((query.data?.total ?? 0) / pageSize));
 
   function handleAddAsset() {
-    navigate(isAuthenticated ? "/marketplace/create" : "/login");
+    navigate(isAuthenticated ? "/library/publish" : "/login");
   }
 
   function updateParams(next: { q?: string; type?: string; tag?: string; category?: string; slot?: string; page?: number }) {
@@ -100,7 +100,7 @@ export function Marketplace() {
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-primary text-balance text-3xl font-semibold uppercase leading-none tracking-tight">Workshop Marketplace</h1>
+          <h1 className="font-primary text-balance text-3xl font-semibold uppercase leading-none tracking-tight">Library</h1>
           <p className="mt-2 max-w-2xl text-pretty text-sm text-muted-foreground">Browse shared AoTTG2 skins, sets, maps, and custom logic.</p>
         </div>
         <Button className="min-h-10 transition-transform active:scale-[0.96]" onClick={handleAddAsset}>
@@ -153,7 +153,7 @@ export function Marketplace() {
           </div>
 
           {query.isLoading ? <AssetGridSkeleton /> : null}
-          {query.isError ? <StateMessage title="Marketplace unavailable" message="Assets could not be loaded. Check the Workshop API and try again." /> : null}
+          {query.isError ? <StateMessage title="Library unavailable" message="Assets could not be loaded. Check the Workshop API and try again." /> : null}
           {query.data && query.data.assets.length === 0 ? <StateMessage title="No assets found" message="Try a different search, category, part, or tag filter." /> : null}
           {query.data && query.data.assets.length > 0 ? (
             <>
@@ -219,11 +219,11 @@ function AssetCard({ asset, onTagSelect }: { asset: WorkshopAsset; onTagSelect: 
   const category = assetCategory(asset);
   return (
     <article className="grid overflow-hidden border border-border bg-card/60 transition-colors hover:border-primary/60">
-      <Link className="group grid" to={`/marketplace/assets/${asset.id}`}>
+      <Link className="group grid" to={`/library/${asset.id}`}>
         <PreviewImage media={thumbnail} title={asset.title} />
       </Link>
       <div className="flex min-h-56 flex-col gap-2 p-3">
-        <Link className="line-clamp-1 text-sm text-foreground hover:text-primary" to={`/marketplace/assets/${asset.id}`}>
+        <Link className="line-clamp-1 text-sm text-foreground hover:text-primary" to={`/library/${asset.id}`}>
           <span className="font-primary font-semibold uppercase">{asset.title}</span> <span className="font-normal text-muted-foreground">by {asset.authorDisplayName}</span>
         </Link>
         <p className="line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">{asset.shortDescription || plainPreview(asset.descriptionMarkdown) || summarizeAsset(asset)}</p>
@@ -236,11 +236,26 @@ function AssetCard({ asset, onTagSelect }: { asset: WorkshopAsset; onTagSelect: 
           ))}
         </div>
         <div className="flex items-center justify-between gap-3 pt-3 text-xs font-semibold uppercase text-muted-foreground">
-          <span>{summarizeAsset(asset)}</span>
-          <span>{formatDate(asset.createdAt)}</span>
+          <div className="flex min-w-0 items-center gap-3">
+            <StatIcon icon={<Download className="h-3.5 w-3.5" />} label={`${asset.engagement?.downloadCount ?? 0} downloads`} value={asset.engagement?.downloadCount ?? 0} />
+            <StatIcon icon={<Heart className="h-3.5 w-3.5" />} label={`${asset.engagement?.likeCount ?? 0} likes`} value={asset.engagement?.likeCount ?? 0} />
+          </div>
+          <span className="ml-auto inline-flex shrink-0 items-center gap-1" title={formatDate(asset.createdAt)}>
+            <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
+            {formatRelativeDate(asset.createdAt)}
+          </span>
         </div>
       </div>
     </article>
+  );
+}
+
+function StatIcon({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
+  return (
+    <span className="inline-flex items-center gap-1" aria-label={label}>
+      {icon}
+      {formatCount(value)}
+    </span>
   );
 }
 
@@ -334,4 +349,18 @@ function formatLabel(value: string) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
+function formatRelativeDate(value: string) {
+  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 30) return `${days} days ago`;
+  if (days < 60) return "Last month";
+  if (days < 365) return `${Math.floor(days / 30)} months ago`;
+  return formatDate(value);
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat(undefined, { notation: "compact" }).format(value);
 }
