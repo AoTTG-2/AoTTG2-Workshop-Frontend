@@ -435,8 +435,8 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
   }
 
   function toItem(comment: WorkshopComment, parent = comment): CommentItem {
-    const deleted = comment.status === "deleted";
-    const canWrite = isAuthenticated && !deleted;
+    const tombstone = comment.status === "deleted" || comment.status === "hidden";
+    const canWrite = isAuthenticated && !tombstone;
     const actions = canWrite
       ? [
           { label: "Reply", onSelect: () => startReply(parent.id, comment.id, comment.authorDisplayName) },
@@ -452,7 +452,7 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
       createdAt: formatDate(comment.createdAt),
       editedAt: comment.updatedAt !== comment.createdAt ? formatDate(comment.updatedAt) : undefined,
       body: renderCommentMarkdown(comment.body),
-      deleted,
+      deleted: tombstone,
       actions,
       replies: comment.replies.map((reply) => toItem(reply, comment)),
     };
