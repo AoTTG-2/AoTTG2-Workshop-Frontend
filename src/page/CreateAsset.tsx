@@ -63,6 +63,7 @@ const commonSchema = z
   .object({
     title: z.string().trim().min(1, "Title is required"),
     descriptionMarkdown: z.string().trim().optional(),
+    shortDescription: z.string().trim().max(144, "Short description must be 144 characters or less").optional(),
     thumbnailUrl: z.string().trim(),
     galleryUrls: z.string().trim(),
     tags: z.string().trim().optional(),
@@ -157,7 +158,7 @@ export function CreateAsset() {
   const { data: loadedCatalog } = useQuery({ queryKey: ["workshop", "variants"], queryFn: getVariantCatalog, staleTime: 60 * 60 * 1000 });
   const catalog = loadedCatalog ?? fallbackCatalog;
   const [kind, setKind] = useState<AssetKind>("skin_part");
-  const [common, setCommon] = useState({ title: "", descriptionMarkdown: "", thumbnailUrl: "", galleryUrls: "", tags: "" });
+  const [common, setCommon] = useState({ title: "", shortDescription: "", descriptionMarkdown: "", thumbnailUrl: "", galleryUrls: "", tags: "" });
   const [part, setPart] = useState<VariantTargetForm>({ slot: "Hair", textureUrl: "", variantScope: "specific", variants: "HairM3" });
   const [items, setItems] = useState<VariantTargetForm[]>([{ slot: "Costume", textureUrl: "", variantScope: "specific", variants: "CostumeM5" }]);
 
@@ -188,6 +189,7 @@ export function CreateAsset() {
         type: "skin_part",
         title: data.title,
         descriptionMarkdown: data.descriptionMarkdown,
+        shortDescription: data.shortDescription,
         media: mediaFromCommon(data),
         payload: {
           category: "human",
@@ -205,6 +207,7 @@ export function CreateAsset() {
       type: "skin_set",
       title: data.title,
       descriptionMarkdown: data.descriptionMarkdown,
+      shortDescription: data.shortDescription,
       media: mediaFromCommon(data),
       payload: {
         category: "human",
@@ -249,6 +252,9 @@ export function CreateAsset() {
           <h2 className="text-sm font-semibold uppercase text-muted-foreground">Asset Details</h2>
           <Field label="Title">
             <Input className="h-10 text-sm" value={common.title} onChange={(event) => setCommon({ ...common, title: event.target.value })} />
+          </Field>
+          <Field label="Short Description">
+            <Textarea maxLength={144} value={common.shortDescription} onChange={(event) => setCommon({ ...common, shortDescription: event.target.value })} />
           </Field>
           <Field label="Description Markdown">
             <Textarea value={common.descriptionMarkdown} onChange={(event) => setCommon({ ...common, descriptionMarkdown: event.target.value })} />

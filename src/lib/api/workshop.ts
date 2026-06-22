@@ -38,6 +38,7 @@ export interface WorkshopAsset {
   type: WorkshopAssetType | string;
   title: string;
   descriptionMarkdown?: string | null;
+  shortDescription?: string | null;
   media: WorkshopMedia[];
   payload: SkinPartPayload | SkinSetPayload | Record<string, unknown>;
   tags: string[];

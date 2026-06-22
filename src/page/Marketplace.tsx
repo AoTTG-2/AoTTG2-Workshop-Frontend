@@ -226,7 +226,7 @@ function AssetCard({ asset, onTagSelect }: { asset: WorkshopAsset; onTagSelect: 
         <Link className="line-clamp-1 text-sm text-foreground hover:text-primary" to={`/marketplace/assets/${asset.id}`}>
           <span className="font-primary font-semibold uppercase">{asset.title}</span> <span className="font-normal text-muted-foreground">by {asset.authorDisplayName}</span>
         </Link>
-        <p className="line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">{plainPreview(asset.descriptionMarkdown) || summarizeAsset(asset)}</p>
+        <p className="line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">{asset.shortDescription || plainPreview(asset.descriptionMarkdown) || summarizeAsset(asset)}</p>
         <div className="mt-auto flex flex-wrap gap-1.5">
           <AssetTag variant="category">{formatLabel(category)}</AssetTag>
           {asset.tags.slice(0, 3).map((assetTag) => (

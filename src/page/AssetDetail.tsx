@@ -107,6 +107,7 @@ function AssetDetailContent({ asset }: { asset: WorkshopAsset }) {
                 {formatLabel(category)} / {formatLabel(asset.type)} / {summary}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">By {asset.authorDisplayName}</p>
+              {asset.shortDescription ? <p className="mt-3 max-w-2xl text-pretty text-base text-foreground">{asset.shortDescription}</p> : null}
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
