@@ -6,6 +6,8 @@ import { useAuth } from "./auth/useAuth";
 
 const Login = lazy(() => import("./page/Login"));
 const Marketplace = lazy(() => import("./page/Marketplace").then((m) => ({ default: m.Marketplace })));
+const AssetDetail = lazy(() => import("./page/AssetDetail").then((m) => ({ default: m.AssetDetail })));
+const CreateAsset = lazy(() => import("./page/CreateAsset").then((m) => ({ default: m.CreateAsset })));
 const Dashboard = lazy(() => import("./page/Dashboard").then((m) => ({ default: m.DashboardShell })));
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -97,10 +99,19 @@ export default function App() {
       <TopBar />
       <ScrollToTop />
       <Suspense fallback={<RouteLoadingFallback />}>
-        <div className="route-shell bg-background min-h-screen">
+        <div className="route-shell min-h-screen bg-background pt-20">
           <Routes>
             <Route index element={<Navigate to="/marketplace" replace />} />
             <Route path="/marketplace" element={<Marketplace />} />
+            <Route path="/marketplace/assets/:id" element={<AssetDetail />} />
+            <Route
+              path="/marketplace/create"
+              element={
+                <RequireAuth>
+                  <CreateAsset />
+                </RequireAuth>
+              }
+            />
             <Route path="/login" element={<Login />} />
             <Route
               path="/dashboard"

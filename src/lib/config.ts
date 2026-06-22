@@ -1,4 +1,5 @@
 const normalizeApiBase = (value: string) => value.trim().replace(/\/+$/, "").replace(/\/v1$/i, "");
+const normalizeWorkshopApiBase = (value: string) => normalizeApiBase(value).replace(/\/workshop$/i, "");
 
 const localAuthApi = "http://localhost:5010";
 const productionAuthApi = "https://aottg2.com";
@@ -11,3 +12,7 @@ export const AUTH_API_BASE_URL = `${
 export const WORKSHOP_API_BASE_URL = `${
   normalizeApiBase(import.meta.env.VITE_WORKSHOP_API_BASE_URL ?? localWorkshopApi)
 }/v1`;
+
+export const WORKSHOP_CONTENT_API_BASE_URL = `${
+  normalizeWorkshopApiBase(import.meta.env.VITE_WORKSHOP_API_BASE_URL ?? localWorkshopApi)
+}/v1/workshop`;

@@ -49,6 +49,7 @@ export default function Login() {
           <Label htmlFor="email">Email address</Label>
           <Input
             id="email"
+            className="h-10 text-sm"
             type="email"
             autoComplete="email"
             placeholder="mikasa.ackerman@scouts.example"
@@ -62,6 +63,7 @@ export default function Login() {
           <Label htmlFor="password">Password</Label>
           <Input
             id="password"
+            className="h-10 text-sm"
             type="password"
             autoComplete="current-password"
             placeholder="Your password"

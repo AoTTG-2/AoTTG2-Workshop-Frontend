@@ -9,7 +9,7 @@ export default [
   },
   js.configs.recommended,
   {
-    files: ["**/*.{js,jsx,ts,tsx}"],
+    files: ["**/*.{js,mjs,cjs,jsx,ts,tsx}"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
@@ -18,10 +18,14 @@ export default [
         ecmaFeatures: { jsx: true },
       },
       globals: {
+        console: "readonly",
+        process: "readonly",
         window: "readonly",
         document: "readonly",
         localStorage: "readonly",
         fetch: "readonly",
+        navigator: "readonly",
+        URLSearchParams: "readonly",
         Response: "readonly",
         RequestInit: "readonly",
         HTMLFormElement: "readonly",
@@ -38,6 +42,12 @@ export default [
       "@typescript-eslint/no-empty-object-type": "off",
       "@typescript-eslint/consistent-type-definitions": ["error", "interface"],
       "no-console": ["warn"],
+    },
+  },
+  {
+    files: ["scripts/**/*.mjs"],
+    rules: {
+      "no-console": "off",
     },
   },
 ];
