@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Copy, Download, Eye, Flag, Heart, Link as LinkIcon, MessageCircle, MoreHorizontal, Star, Trash2 } from "lucide-react";
+import { Copy, Download, Eye, Flag, Link as LinkIcon, MessageCircle, MoreHorizontal, Star, ThumbsUp, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "../auth/storage";
@@ -153,7 +153,7 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
   async function toggleLike() {
     const token = getAccessToken();
     if (!isAuthenticated || !token) {
-      toast.info("Sign in to like assets.", { description: "Likes are saved to your account." });
+      toast.info("Sign in to thank assets.", { description: "Thanks are saved to your account." });
       return;
     }
     await setAssetLike(asset.id, !liked, token);
@@ -198,10 +198,10 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
             <h1 className="font-primary text-balance text-4xl font-semibold uppercase leading-none tracking-tight">{asset.title}</h1>
             {asset.shortDescription ? <p className="mt-3 line-clamp-1 max-w-2xl text-base text-foreground">{asset.shortDescription}</p> : null}
             <div className="mt-3 flex flex-wrap items-center gap-4 text-xs font-semibold uppercase text-muted-foreground">
-              <EngagementStat icon={<Download className="h-4 w-4" />} label="downloads" value={asset.engagement?.downloadCount ?? 0} />
-              <EngagementStat icon={<Heart className="h-4 w-4" />} label="likes" value={asset.engagement?.likeCount ?? 0} />
-              <EngagementStat icon={<Eye className="h-4 w-4" />} label="views" value={asset.engagement?.viewCount ?? 0} />
-              <EngagementStat icon={<MessageCircle className="h-4 w-4" />} label="comments" value={asset.engagement?.commentCount ?? 0} />
+              <EngagementStat icon={<Download className="h-4 w-4" />} label="download" value={asset.engagement?.downloadCount ?? 0} />
+              <EngagementStat icon={<ThumbsUp className="h-4 w-4" />} label="thank" value={asset.engagement?.likeCount ?? 0} />
+              <EngagementStat icon={<Eye className="h-4 w-4" />} label="view" value={asset.engagement?.viewCount ?? 0} />
+              <EngagementStat icon={<MessageCircle className="h-4 w-4" />} label="comment" value={asset.engagement?.commentCount ?? 0} />
             </div>
           </div>
           <TooltipProvider delayDuration={0} skipDelayDuration={0}>
@@ -212,12 +212,12 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
               </Button>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button type="button" className={`workshop-control-free group inline-flex items-center gap-2 px-2 py-1 text-lg font-semibold transition-colors hover:text-red-500 ${liked ? "text-red-500" : "text-muted-foreground"}`} aria-label={liked ? "Unlike" : "Like"} onClick={() => void toggleLike()}>
-                    <Heart className={`h-7 w-7 transition-colors ${liked ? "fill-current" : "fill-none group-hover:fill-current"}`} aria-hidden="true" />
+                  <button type="button" className={`workshop-control-free group inline-flex items-center gap-2 px-2 py-1 text-lg font-semibold transition-colors hover:text-primary ${liked ? "text-primary" : "text-muted-foreground"}`} aria-label={liked ? "Remove thank" : "Thank"} onClick={() => void toggleLike()}>
+                    <ThumbsUp className={`h-7 w-7 transition-colors ${liked ? "fill-current" : "fill-none group-hover:fill-current"}`} aria-hidden="true" />
                     {formatCount(asset.engagement?.likeCount ?? 0)}
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>{liked ? "Unlike" : "Like"}</TooltipContent>
+                <TooltipContent>{liked ? "Remove thank" : "Thank"}</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -530,7 +530,7 @@ function EngagementStat({ icon, label, value }: { icon: ReactNode; label: string
   return (
     <span className="inline-flex items-center gap-1.5">
       {icon}
-      {formatCount(value)} {label}
+      {formatCount(value)} {value === 1 ? label : `${label}s`}
     </span>
   );
 }

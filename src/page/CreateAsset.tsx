@@ -568,7 +568,7 @@ function ListingPreview({ kind, common, authorName }: { kind: AssetKind; common:
           </div>
           <div className="flex items-center justify-between gap-3 pt-3 text-xs font-semibold uppercase text-muted-foreground">
             <span>0 downloads</span>
-            <span>0 likes</span>
+            <span>0 thanks</span>
           </div>
         </div>
       </article>

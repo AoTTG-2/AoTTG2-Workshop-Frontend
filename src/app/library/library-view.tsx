@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Button, Input } from "@aottg2/ui";
-import { Box, CalendarDays, Download, Eye, FileCode2, Glasses, Grid3X3, Hammer, HardHat, Heart, Image, Map, Mountain, Palette, ScanFace, Shirt, Sparkles, Swords, UploadCloud, User, Zap } from "lucide-react";
+import { Box, CalendarDays, Download, Eye, FileCode2, Glasses, Grid3X3, Hammer, HardHat, ThumbsUp, Image, Map, Mountain, Palette, ScanFace, Shirt, Sparkles, Swords, UploadCloud, User, Zap } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
@@ -248,8 +248,8 @@ function AssetCard({ asset, onTagSelect }: { asset: WorkshopAsset; onTagSelect: 
         </div>
         <div className="flex items-center justify-between gap-3 pt-3 text-xs font-semibold uppercase text-muted-foreground">
           <div className="flex min-w-0 items-center gap-3">
-            <StatIcon icon={<Download className="h-3.5 w-3.5" />} label={`${asset.engagement?.downloadCount ?? 0} downloads`} value={asset.engagement?.downloadCount ?? 0} />
-            <StatIcon icon={<Heart className="h-3.5 w-3.5" />} label={`${asset.engagement?.likeCount ?? 0} likes`} value={asset.engagement?.likeCount ?? 0} />
+            <StatIcon icon={<Download className="h-3.5 w-3.5" />} label={formatStatLabel(asset.engagement?.downloadCount ?? 0, "download")} value={asset.engagement?.downloadCount ?? 0} />
+            <StatIcon icon={<ThumbsUp className="h-3.5 w-3.5" />} label={formatStatLabel(asset.engagement?.likeCount ?? 0, "thank")} value={asset.engagement?.likeCount ?? 0} />
           </div>
           <span className="ml-auto inline-flex shrink-0 items-center gap-1" title={formatDate(asset.createdAt)}>
             <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
@@ -374,6 +374,10 @@ function formatRelativeDate(value: string) {
 
 function formatCount(value: number) {
   return new Intl.NumberFormat(undefined, { notation: "compact" }).format(value);
+}
+
+function formatStatLabel(value: number, label: string) {
+  return `${value} ${value === 1 ? label : `${label}s`}`;
 }
 
 function sameQuery(left: AssetListQuery, right: AssetListQuery) {
