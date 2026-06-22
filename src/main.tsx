@@ -6,8 +6,8 @@ import { Aottg2Theme, Toaster } from "@aottg2/ui";
 import App from "./App";
 import { AuthProvider } from "./auth/AuthProvider";
 import { queryClient } from "./lib/queryClient";
-import "./index.css";
 import "@aottg2/ui/styles.css";
+import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

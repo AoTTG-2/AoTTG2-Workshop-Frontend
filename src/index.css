@@ -4,6 +4,7 @@
 
 :root {
   color-scheme: dark;
+  --workshop-control-height: 2.5rem;
 }
 
 * {
@@ -68,4 +69,10 @@
       animation: none;
     }
   }
+}
+
+.aottg2-theme button:not([role="checkbox"]):not([role="switch"]),
+.aottg2-theme [role="button"] {
+  height: var(--workshop-control-height);
+  min-height: var(--workshop-control-height);
 }

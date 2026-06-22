@@ -49,8 +49,10 @@ export interface WorkshopAsset {
 
 export interface AssetListQuery {
   q?: string;
-  type?: WorkshopAssetType | "";
+  type?: string;
   tag?: string;
+  category?: string;
+  slot?: string;
   page?: number;
   pageSize?: number;
 }
@@ -121,6 +123,8 @@ export async function listAssets(query: AssetListQuery = {}): Promise<AssetListR
   if (query.q?.trim()) params.set("q", query.q.trim());
   if (query.type) params.set("type", query.type);
   if (query.tag?.trim()) params.set("tag", query.tag.trim());
+  if (query.category?.trim()) params.set("category", query.category.trim());
+  if (query.slot?.trim()) params.set("slot", query.slot.trim());
   if (query.page && query.page > 1) params.set("page", String(query.page));
   if (query.pageSize) params.set("pageSize", String(query.pageSize));
 
