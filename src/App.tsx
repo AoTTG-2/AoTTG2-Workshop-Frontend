@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, Navbar, type NavbarItem } from "@aottg2/ui";
-import { lazy, Suspense, useEffect } from "react";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@aottg2/ui";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./auth/useAuth";
 
@@ -35,38 +35,76 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-function TopBar() {
+interface AppProps {
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
+}
+
+interface NavItem {
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+}
+
+function TopBar({ theme, onToggleTheme }: AppProps) {
   const { isAuthenticated, profile, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  const items: NavbarItem[] = [
-    { label: "MARKETPLACE", href: "/marketplace", active: location.pathname === "/marketplace" || location.pathname === "/" },
+  const items: NavItem[] = [
+    { label: "MARKETPLACE", active: location.pathname === "/marketplace" || location.pathname === "/", onClick: () => navigate("/marketplace") },
     ...(isAuthenticated
       ? [
-          { label: `CREATOR (${profile?.displayName ?? "ACCOUNT"})`, id: "dashboard", active: location.pathname === "/dashboard" },
-          { label: "LOGOUT", id: "logout" },
+          { label: `CREATOR (${profile?.displayName ?? "ACCOUNT"})`, active: location.pathname === "/dashboard", onClick: () => navigate("/dashboard") },
+          { label: "LOGOUT", onClick: () => void logout().then(() => navigate("/marketplace")) },
         ]
-      : [{ label: "LOGIN", href: "/login", active: location.pathname === "/login" }]),
+      : [{ label: "LOGIN", active: location.pathname === "/login", onClick: () => navigate("/login") }]),
   ];
 
-  function handleNav(item: NavbarItem) {
-    if (item.href) {
-      navigate(item.href);
-      return;
-    }
-
-    if (item.id === "dashboard") {
-      navigate("/dashboard");
-      return;
-    }
-
-    if (item.id === "logout") {
-      void logout().then(() => navigate("/marketplace"));
-    }
+  function selectItem(item: NavItem) {
+    item.onClick();
+    setMobileOpen(false);
   }
 
-  return <Navbar items={items} logo="text" logoText="WORKSHOP" onLogoClick={() => navigate("/")} onItemSelect={handleNav} fixed />;
+  return (
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-transparent bg-background/95 shadow-[0_14px_40px_rgb(0_0_0_/_0.28)] backdrop-blur">
+      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
+        <button type="button" className="workshop-logo-button workshop-control-free flex shrink-0 items-center font-primary text-4xl leading-none tracking-wide sm:text-5xl" aria-label="AoTTG2 Workshop home" onClick={() => navigate("/")}>
+          <span className="text-foreground">AoTTG</span>
+          <span className="text-primary">WORKSHOP</span>
+        </button>
+
+        <nav className="hidden min-w-0 items-center justify-end gap-7 md:flex" aria-label="Primary navigation">
+          {items.map((item) => (
+            <button key={item.label} type="button" className={`workshop-control-free font-primary text-xl uppercase leading-none transition-colors hover:text-primary ${item.active ? "text-primary" : "text-foreground"}`} onClick={() => selectItem(item)}>
+              {item.label}
+            </button>
+          ))}
+          <button type="button" className="workshop-control-free font-primary text-xl uppercase leading-none text-foreground transition-colors hover:text-primary" onClick={onToggleTheme}>
+            {theme === "dark" ? "LIGHT" : "DARK"}
+          </button>
+        </nav>
+
+        <Button className="md:hidden" type="button" variant="ghost" onClick={() => setMobileOpen((open) => !open)} aria-expanded={mobileOpen} aria-controls="mobile-navigation">
+          MENU
+        </Button>
+      </div>
+
+      {mobileOpen ? (
+        <nav id="mobile-navigation" className="grid gap-2 bg-background px-4 pb-4 shadow-[0_18px_30px_rgb(0_0_0_/_0.24)] md:hidden" aria-label="Mobile navigation">
+          {items.map((item) => (
+            <Button key={item.label} className="w-full justify-start" type="button" variant={item.active ? "default" : "ghost"} onClick={() => selectItem(item)}>
+              {item.label}
+            </Button>
+          ))}
+          <Button className="w-full justify-start" type="button" variant="ghost" onClick={onToggleTheme}>
+            {theme === "dark" ? "LIGHT MODE" : "DARK MODE"}
+          </Button>
+        </nav>
+      ) : null}
+    </header>
+  );
 }
 
 function RouteLoadingFallback() {
@@ -93,10 +131,10 @@ function ScrollToTop() {
   return null;
 }
 
-export default function App() {
+export default function App({ theme, onToggleTheme }: AppProps) {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <TopBar />
+      <TopBar theme={theme} onToggleTheme={onToggleTheme} />
       <ScrollToTop />
       <Suspense fallback={<RouteLoadingFallback />}>
         <div className="route-shell min-h-screen bg-background pt-20">

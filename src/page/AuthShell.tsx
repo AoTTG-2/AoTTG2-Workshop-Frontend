@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardTitle, toast } from "@aottg2/ui";
+import { Card, CardContent, CardDescription, CardTitle } from "@aottg2/ui";
+import { toast } from "../lib/toast";
 
 interface AuthShellProps {
   eyebrow?: string;

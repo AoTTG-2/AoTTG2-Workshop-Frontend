@@ -5,6 +5,7 @@
 :root {
   color-scheme: dark;
   --workshop-control-height: 2.5rem;
+  --workshop-surface-shadow: 0 3px 10px rgb(0 0 0 / 0.14);
 }
 
 * {
@@ -75,4 +76,84 @@
 .aottg2-theme [role="button"] {
   height: var(--workshop-control-height);
   min-height: var(--workshop-control-height);
+  font-size: 0.875rem;
+}
+
+.aottg2-theme button.workshop-control-free {
+  height: auto;
+  min-height: 0;
+}
+
+[data-sonner-toaster].aottg2-sonner {
+  --width: min(26.25rem, calc(100vw - 2rem));
+  width: min(26.25rem, calc(100vw - 2rem)) !important;
+}
+
+[data-sonner-toaster].aottg2-sonner [data-sonner-toast].aottg2-toast {
+  position: absolute !important;
+  width: min(var(--width), calc(100vw - 2rem)) !important;
+  max-width: calc(100vw - 2rem);
+  transition-property: transform, opacity, height, box-shadow !important;
+}
+
+.aottg2-theme[data-theme="dark"],
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: 0 0% 6%;
+  --card: 0 0% 8%;
+  --popover: 0 0% 8%;
+  --muted: 0 0% 17%;
+  --border: 0 0% 12%;
+  --input: 0 0% 24%;
+  --workshop-surface-shadow: 0 3px 10px rgb(0 0 0 / 0.24);
+}
+
+.aottg2-theme[data-theme="light"],
+:root[data-theme="light"] {
+  color-scheme: light;
+  --background: 0 0% 97%;
+  --card: 0 0% 100%;
+  --popover: 0 0% 100%;
+  --muted: 0 0% 91%;
+  --workshop-surface-shadow: 0 3px 9px rgb(0 0 0 / 0.08);
+}
+
+.aottg2-theme .workshop-surface,
+.aottg2-theme [class*="bg-card"] {
+  background-color: hsl(var(--card)) !important;
+  border-color: transparent !important;
+  box-shadow: var(--workshop-surface-shadow);
+}
+
+.aottg2-theme .workshop-soft-border {
+  border-color: hsl(var(--foreground) / 0.08) !important;
+}
+
+.workshop-logo-button {
+  font-size: 1.75rem !important;
+  text-shadow: 0 2px 0 rgb(0 0 0 / 0.18);
+}
+
+.workshop-logo-button:hover {
+  color: hsl(var(--primary));
+}
+
+.aottg2-theme nav button.workshop-control-free {
+  font-size: 1.125rem !important;
+}
+
+.aottg2-theme button.workshop-tag-sm {
+  height: 1.75rem !important;
+  min-height: 1.75rem !important;
+}
+
+.aottg2-theme button.workshop-tag-md {
+  height: 2rem !important;
+  min-height: 2rem !important;
+}
+
+@media (min-width: 640px) {
+  .workshop-logo-button {
+    font-size: 2.25rem !important;
+  }
 }

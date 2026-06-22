@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { Button, toast } from "@aottg2/ui";
+import { Button } from "@aottg2/ui";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Link, useParams } from "react-router-dom";
+import { AssetTag, AssetTagLink } from "../components/AssetTag";
 import { getAsset, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopMedia } from "../lib/api/workshop";
+import { toast } from "../lib/toast";
 
 const markdownComponents: Components = {
   h1: ({ children }) => <h2 className="mt-6 font-primary text-2xl uppercase leading-none text-foreground first:mt-0">{children}</h2>,
@@ -79,14 +81,14 @@ function AssetDetailContent({ asset }: { asset: WorkshopAsset }) {
   async function copyText(label: string, value: string) {
     try {
       await navigator.clipboard.writeText(value);
-      toast.success(`${label} copied`);
+      toast.success(`${label} copied`, { description: "Copied to clipboard." });
     } catch {
-      toast.error(`Could not copy ${label.toLowerCase()}`);
+      toast.error(`Could not copy ${label.toLowerCase()}`, { description: "Clipboard access is unavailable or blocked." });
     }
   }
 
   function comingSoon(label: string) {
-    toast.info(`${label} coming soon`);
+    toast.info(`${label} coming soon`, { description: "This action is not available yet." });
   }
 
   return (
@@ -137,7 +139,7 @@ function AssetDetailContent({ asset }: { asset: WorkshopAsset }) {
             {media.length > 1 ? (
               <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
                 {media.map((item, index) => (
-                  <button key={`${item.url}-${index}`} type="button" className={`border ${index === activeIndex ? "border-primary" : "border-border"}`} onClick={() => setActiveIndex(index)}>
+                  <button key={`${item.url}-${index}`} type="button" className={`workshop-control-free border ${index === activeIndex ? "border-primary" : "border-border"}`} onClick={() => setActiveIndex(index)}>
                     <img className="aspect-video w-full object-cover" src={item.url} alt={item.description || asset.title} loading="lazy" />
                   </button>
                 ))}
@@ -159,15 +161,19 @@ function AssetDetailContent({ asset }: { asset: WorkshopAsset }) {
         <aside className="grid content-start gap-4">
           <InfoPanel title="Tags">
             <div className="flex flex-wrap gap-2">
-              <Pill label={formatLabel(category)} strong />
+              <AssetTag variant="category" size="md">
+                {formatLabel(category)}
+              </AssetTag>
               {asset.tags.length > 0 ? (
                 asset.tags.map((tag) => (
-                  <Link key={tag} className="min-h-8 bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground hover:text-primary" to={`/marketplace?tag=${encodeURIComponent(tag)}`}>
+                  <AssetTagLink key={tag} size="md" to={`/marketplace?tag=${encodeURIComponent(tag)}`}>
                     {tag}
-                  </Link>
+                  </AssetTagLink>
                 ))
               ) : (
-                <span className="text-sm text-muted-foreground">No tags</span>
+                <AssetTag variant="empty" size="md">
+                  No tags
+                </AssetTag>
               )}
             </div>
           </InfoPanel>
@@ -252,7 +258,7 @@ function PreviewIcon({ media, title }: { media?: WorkshopMedia; title: string })
     return <div className="grid h-20 w-20 shrink-0 place-items-center bg-muted font-primary text-xs uppercase text-muted-foreground">No image</div>;
   }
 
-  return <img className="h-20 w-20 shrink-0 border border-border object-cover" src={media.url} alt={media.description || title} />;
+  return <img className="h-20 w-20 shrink-0 object-cover shadow-[0_12px_24px_rgb(0_0_0_/_0.22)]" src={media.url} alt={media.description || title} />;
 }
 
 function GalleryImage({ media, title }: { media?: WorkshopMedia; title: string }) {
@@ -261,10 +267,6 @@ function GalleryImage({ media, title }: { media?: WorkshopMedia; title: string }
   }
 
   return <img className="aspect-video w-full object-cover" src={media.url} alt={media.description || title} />;
-}
-
-function Pill({ label, strong = false }: { label: string; strong?: boolean }) {
-  return <span className={`min-h-8 px-2 py-1 text-xs font-semibold ${strong ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>{label}</span>;
 }
 
 function mediaForGallery(media: WorkshopMedia[]) {

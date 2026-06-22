@@ -1,10 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { Button, Input, toast } from "@aottg2/ui";
+import { Button, Input } from "@aottg2/ui";
 import { FormEvent, useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { UploadCloud } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { AssetTag, AssetTagButton } from "../components/AssetTag";
 import { listAssets, type SkinPartPayload, type SkinSetPayload, type WorkshopAsset, type WorkshopMedia } from "../lib/api/workshop";
+import { toast } from "../lib/toast";
 
 const pageSize = 24;
 const typeFilters = [
@@ -101,7 +104,8 @@ export function Marketplace() {
           <p className="mt-2 max-w-2xl text-pretty text-sm text-muted-foreground">Browse shared AoTTG2 skins, sets, maps, and custom logic.</p>
         </div>
         <Button className="min-h-10 transition-transform active:scale-[0.96]" onClick={handleAddAsset}>
-          ADD ASSET
+          <UploadCloud className="h-4 w-4" aria-hidden="true" />
+          PUBLISH ASSET
         </Button>
       </div>
 
@@ -218,30 +222,26 @@ function AssetCard({ asset, onTagSelect }: { asset: WorkshopAsset; onTagSelect: 
       <Link className="group grid" to={`/marketplace/assets/${asset.id}`}>
         <PreviewImage media={thumbnail} title={asset.title} />
       </Link>
-      <div className="grid gap-2 p-3">
-        <Link className="line-clamp-1 text-sm font-semibold text-foreground hover:text-primary" to={`/marketplace/assets/${asset.id}`}>
-          {asset.title} <span className="font-normal text-muted-foreground">by {asset.authorDisplayName}</span>
+      <div className="flex min-h-56 flex-col gap-2 p-3">
+        <Link className="line-clamp-1 text-sm text-foreground hover:text-primary" to={`/marketplace/assets/${asset.id}`}>
+          <span className="font-primary font-semibold uppercase">{asset.title}</span> <span className="font-normal text-muted-foreground">by {asset.authorDisplayName}</span>
         </Link>
         <p className="line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">{plainPreview(asset.descriptionMarkdown) || summarizeAsset(asset)}</p>
-        <div className="flex flex-wrap gap-1.5">
-          <Pill label={formatLabel(category)} strong />
+        <div className="mt-auto flex flex-wrap gap-1.5">
+          <AssetTag variant="category">{formatLabel(category)}</AssetTag>
           {asset.tags.slice(0, 3).map((assetTag) => (
-            <button key={assetTag} type="button" className="min-h-7 rounded-none bg-muted px-2 text-xs font-semibold text-muted-foreground hover:text-primary" onClick={() => onTagSelect(assetTag)}>
+            <AssetTagButton key={assetTag} onClick={() => onTagSelect(assetTag)}>
               {assetTag}
-            </button>
+            </AssetTagButton>
           ))}
         </div>
-        <div className="flex items-center justify-between gap-3 pt-1 text-xs font-semibold uppercase text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 pt-3 text-xs font-semibold uppercase text-muted-foreground">
           <span>{summarizeAsset(asset)}</span>
           <span>{formatDate(asset.createdAt)}</span>
         </div>
       </div>
     </article>
   );
-}
-
-function Pill({ label, strong = false }: { label: string; strong?: boolean }) {
-  return <span className={`min-h-7 px-2 py-1 text-xs font-semibold ${strong ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>{label}</span>;
 }
 
 function PreviewImage({ media, title }: { media?: WorkshopMedia; title: string }) {

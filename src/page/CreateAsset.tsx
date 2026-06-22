@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Input, Label, Textarea, toast } from "@aottg2/ui";
+import { Button, Input, Label, Textarea } from "@aottg2/ui";
 import { useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { getAccessToken } from "../auth/storage";
 import { createAsset, getVariantCatalog, type VariantCatalog } from "../lib/api/workshop";
+import { toast } from "../lib/toast";
 
 type AssetKind = "skin_part" | "skin_set";
 type VariantScope = "all" | "specific";
@@ -168,7 +169,7 @@ export function CreateAsset() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["workshop", "assets"] });
-      toast.success("Asset created");
+      toast.success("Asset created", { description: "Your asset was saved and the marketplace will refresh." });
       navigate("/marketplace");
     },
     onError: (nextError) => {
