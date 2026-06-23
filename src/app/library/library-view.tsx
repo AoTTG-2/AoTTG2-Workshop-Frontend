@@ -1,15 +1,15 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Input, Spinner } from "@aottg2/ui";
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Input } from "@aottg2/ui";
 import { Box, CalendarDays, ChevronDown, Download, Eye, FileCode2, Glasses, Grid3X3, Hammer, HardHat, Image, Map, Mountain, Palette, ScanFace, Search, Shirt, Sparkles, Swords, ThumbsUp, UploadCloud, User, Zap } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useAuth } from "../../auth/useAuth";
-import { AssetTag, AssetTagButton } from "../../components/AssetTag";
 import { SideCard } from "../../components/SideCard";
-import { assetPath, listAssets, type AssetListQuery, type AssetListResponse, type SkinPartPayload, type SkinSetPayload, type WorkshopAsset, type WorkshopMedia } from "../../lib/api/workshop";
+import { WorkshopAssetCard } from "../../components/WorkshopAssetCard";
+import { assetPath, listAssets, type AssetListQuery, type AssetListResponse } from "../../lib/api/workshop";
 import { toast } from "../../lib/toast";
 
 const pageSize = 24;
@@ -212,8 +212,8 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
               </motion.div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {query.data.assets.map((asset, index) => (
-                  <motion.div key={asset.id} initial={motionInitial(reduceMotion, 10)} animate={motionAnimate} transition={motionTransition(Math.min(index, 12) * 0.025)}>
-                    <AssetCard asset={asset} onTagSelect={(nextTag) => updateParams({ tag: nextTag, page: 1 })} />
+                  <motion.div key={asset.id} className="relative z-0 hover:z-50 focus-within:z-50" initial={motionInitial(reduceMotion, 10)} animate={motionAnimate} transition={motionTransition(Math.min(index, 12) * 0.025)}>
+                    <WorkshopAssetCard asset={asset} onOpen={() => router.push(assetPath(asset))} onTagSelect={(nextTag) => updateParams({ tag: nextTag, page: 1 })} />
                   </motion.div>
                 ))}
               </div>
@@ -263,111 +263,6 @@ function ActivePill({ label, onClear }: { label: string; onClear: () => void }) 
   );
 }
 
-function AssetCard({ asset, onTagSelect }: { asset: WorkshopAsset; onTagSelect: (tag: string) => void }) {
-  const router = useRouter();
-  const thumbnail = selectPreview(asset.media);
-  const category = assetCategory(asset);
-  const href = assetPath(asset);
-
-  function openAsset() {
-    router.push(href);
-  }
-
-  function handleKeyDown(event: KeyboardEvent) {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    openAsset();
-  }
-
-  function handleTagClick(event: MouseEvent, assetTag: string) {
-    event.stopPropagation();
-    onTagSelect(assetTag);
-  }
-
-  return (
-    <article
-      className="workshop-hover-card grid cursor-pointer overflow-hidden border border-border bg-card/60"
-      role="link"
-      tabIndex={0}
-      aria-label={`View ${asset.title}`}
-      onClick={openAsset}
-      onKeyDown={handleKeyDown}
-    >
-      <div className="grid">
-        <PreviewImage media={thumbnail} title={asset.title} />
-      </div>
-      <div className="flex min-h-56 flex-col gap-2 p-3">
-        <p className="line-clamp-1 text-sm text-foreground">
-          <span className="workshop-card-title font-primary font-semibold uppercase">{asset.title}</span> <span className="font-normal text-muted-foreground">by {asset.authorDisplayName}</span>
-        </p>
-        <p className="line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">{asset.shortDescription || plainPreview(asset.descriptionMarkdown) || summarizeAsset(asset)}</p>
-        <div className="mt-auto flex flex-wrap gap-1.5">
-          <AssetTag variant="category">{formatLabel(category)}</AssetTag>
-          {asset.tags.slice(0, 3).map((assetTag, index) => (
-            <AssetTagButton key={`${assetTag}-${index}`} onClick={(event) => handleTagClick(event, assetTag)}>
-              {assetTag}
-            </AssetTagButton>
-          ))}
-        </div>
-        <div className="flex items-center justify-between gap-3 pt-3 text-xs font-semibold uppercase text-muted-foreground">
-          <div className="flex min-w-0 items-center gap-3">
-            <StatIcon icon={<Download className="h-3.5 w-3.5" />} label={formatStatLabel(asset.engagement?.downloadCount ?? 0, "download")} value={asset.engagement?.downloadCount ?? 0} />
-            <StatIcon icon={<ThumbsUp className="h-3.5 w-3.5" />} label={formatStatLabel(asset.engagement?.likeCount ?? 0, "thank")} value={asset.engagement?.likeCount ?? 0} />
-          </div>
-          <span className="ml-auto inline-flex shrink-0 items-center gap-1" title={formatDate(asset.createdAt)}>
-            <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
-            {formatRelativeDate(asset.createdAt)}
-          </span>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function StatIcon({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
-  return (
-    <span className="inline-flex items-center gap-1" aria-label={label}>
-      {icon}
-      {formatCount(value)}
-    </span>
-  );
-}
-
-function PreviewImage({ media, title }: { media?: WorkshopMedia; title: string }) {
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setLoaded(false);
-    setFailed(false);
-  }, [media?.url]);
-
-  if (!media) {
-    return <div className="grid aspect-video place-items-center bg-muted/50 font-primary text-sm uppercase text-muted-foreground">No preview</div>;
-  }
-
-  if (failed) {
-    return <div className="grid aspect-video place-items-center bg-muted/50 font-primary text-sm uppercase text-muted-foreground">No preview</div>;
-  }
-
-  return (
-    <div className="relative aspect-video overflow-hidden bg-muted/50">
-      {!loaded ? <ThumbnailLoading /> : null}
-      <img className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} src={media.url} alt={media.description || title} loading="lazy" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
-    </div>
-  );
-}
-
-function ThumbnailLoading() {
-  return (
-    <div className="absolute inset-0 grid place-items-center bg-muted/50">
-      <div className="flex animate-pulse items-center gap-2 font-primary text-xs font-semibold uppercase text-muted-foreground">
-        <Spinner size="sm" variant="primary" label="Loading thumbnail" />
-      </div>
-    </div>
-  );
-}
-
 function AssetGridSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -396,40 +291,6 @@ function StateMessage({ title, message }: { title: string; message: string }) {
   );
 }
 
-function selectPreview(media: WorkshopMedia[]) {
-  return media.find((item) => item.kind === "thumbnail") ?? media.find((item) => item.kind === "gallery") ?? media[0];
-}
-
-function assetCategory(asset: WorkshopAsset) {
-  if ((asset.type === "skin_part" || asset.type === "skin_set") && "category" in asset.payload && typeof asset.payload.category === "string") {
-    return asset.payload.category;
-  }
-
-  return asset.type;
-}
-
-function summarizeAsset(asset: WorkshopAsset) {
-  if (asset.type === "skin_part" && isSkinPartPayload(asset.payload)) {
-    const variants = asset.payload.variantScope === "specific" && asset.payload.variants?.length ? `: ${asset.payload.variants.join(", ")}` : "";
-    return `${asset.payload.slot ?? "Skin part"}${variants}`;
-  }
-
-  if (asset.type === "skin_set" && isSkinSetPayload(asset.payload)) {
-    const count = asset.payload.items?.length ?? 0;
-    return `${count} set ${count === 1 ? "item" : "items"}`;
-  }
-
-  return formatLabel(asset.type);
-}
-
-function isSkinPartPayload(payload: WorkshopAsset["payload"]): payload is SkinPartPayload {
-  return "slot" in payload || "textureUrl" in payload;
-}
-
-function isSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkinSetPayload {
-  return "items" in payload;
-}
-
 function normalizeSlotParam(value: string) {
   if (value === "Gear") return "GearL";
   if (value === "Thunderspears") return "ThunderspearL";
@@ -437,37 +298,8 @@ function normalizeSlotParam(value: string) {
   return value;
 }
 
-function plainPreview(value?: string | null) {
-  return (value ?? "")
-    .replace(/[#*_`>~-]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function formatLabel(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
-}
-
-function formatRelativeDate(value: string) {
-  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
-  if (days <= 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 30) return `${days} days ago`;
-  if (days < 60) return "Last month";
-  if (days < 365) return `${Math.floor(days / 30)} months ago`;
-  return formatDate(value);
-}
-
-function formatCount(value: number) {
-  return new Intl.NumberFormat(undefined, { notation: "compact" }).format(value);
-}
-
-function formatStatLabel(value: number, label: string) {
-  return `${value} ${value === 1 ? label : `${label}s`}`;
 }
 
 const motionAnimate = { opacity: 1, y: 0 };

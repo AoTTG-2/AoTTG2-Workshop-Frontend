@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, Textarea } from "@aottg2/ui";
-import { Bold, Check, Code, Code2, Eye, Glasses, Heading, Image as ImageIcon, Italic, Link as LinkIcon, List, ListOrdered, Map, Palette, Quote, Search, Shirt, Sparkles, Strikethrough, UserRound } from "lucide-react";
+import { Backpack, Badge, Bold, Cable, Cloud, Code, Code2, Cog, Crown, Eye, Flag, Glasses, Hand, Heading, Image as ImageIcon, Italic, Link as LinkIcon, List, ListOrdered, Map, Palette, Quote, Rocket, Search, Shield, Shirt, Smile, Sparkles, Strikethrough, UserRound, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ElementRef, FormEvent, ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
@@ -11,10 +11,11 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { getAccessToken } from "../auth/storage";
 import { useAuth } from "../auth/useAuth";
-import { assetPath, createAsset, getVariantCatalog, setCreatorName, type VariantCatalog, type WorkshopVariantOption } from "../lib/api/workshop";
+import { assetPath, createAsset, getVariantCatalog, setCreatorName, type VariantCatalog, type WorkshopAsset, type WorkshopVariantOption } from "../lib/api/workshop";
 import { WORKSHOP_STATIC_API_ORIGIN } from "../lib/config";
 import { toast } from "../lib/toast";
 import { SideCard } from "../components/SideCard";
+import { WorkshopAssetCard } from "../components/WorkshopAssetCard";
 
 type AssetKind = "skin_part" | "skin_set";
 type WizardStep = "type" | "listing" | "data" | "description";
@@ -23,6 +24,7 @@ interface VariantTargetForm {
   slot: string;
   textureUrl: string;
   variants: string[];
+  hookTiling?: string;
 }
 
 const wizardSteps: { key: WizardStep; label: string }[] = [
@@ -31,6 +33,35 @@ const wizardSteps: { key: WizardStep; label: string }[] = [
   { key: "listing", label: "Listing" },
   { key: "description", label: "Publish" },
 ];
+const previewCreatedAt = new Date().toISOString();
+const previewEngagement = {
+  downloadCount: 152,
+  likeCount: 41,
+  favoriteCount: 18,
+  viewCount: 640,
+  commentCount: 7,
+};
+
+const skinTypeLabels: Record<string, string> = {
+  Set: "Set",
+  Eye: "Eyes",
+  Glass: "Glasses",
+  Skin: "Body Skin",
+  Logo: "Cape Logo",
+  GearL: "Left Gear",
+  GearR: "Right Gear",
+  Gas: "Gas Smoke",
+  WeaponTrail: "Blade Trail",
+  ThunderspearL: "Left Thunderspear",
+  ThunderspearR: "Right Thunderspear",
+  HookL: "Left Hook",
+  HookR: "Right Hook",
+  Hat: "Hat",
+  Head: "Head Accessory",
+  Back: "Back Accessory",
+};
+
+const pairedTilingSlots = new Set(["HookLTiling", "HookRTiling"]);
 
 const markdownComponents: Components = {
   h1: ({ children }) => <h2 className="mt-6 font-primary text-2xl uppercase leading-none text-foreground first:mt-0">{children}</h2>,
@@ -147,6 +178,7 @@ const itemSchema = z
     slot: z.string().min(1, "Slot is required"),
     textureUrl: httpUrl,
     variants: z.array(z.string()),
+    hookTiling: z.string().trim().optional(),
   });
 
 const skinPartSchema = commonSchema
@@ -154,6 +186,7 @@ const skinPartSchema = commonSchema
     slot: z.string().min(1, "Slot is required"),
     textureUrl: httpUrl,
     variants: z.array(z.string()),
+    hookTiling: z.string().trim().optional(),
   });
 
 const skinSetSchema = commonSchema.extend({
@@ -198,16 +231,33 @@ function isCompatibilitySlot(slot: string, catalog: VariantCatalog) {
   return catalog.humanCompatibilitySlots?.includes(slot) ?? compatibilityVariantOptions(slot, catalog).length > 0;
 }
 
+function isHookSlot(slot: string) {
+  return slot === "HookL" || slot === "HookR";
+}
+
+function hookTilingSlot(slot: string) {
+  return slot === "HookL" ? "HookLTiling" : "HookRTiling";
+}
+
+function hookTilingPayload(value: { slot: string; hookTiling?: string }) {
+  if (!isHookSlot(value.slot)) return {};
+  const tiling = Number(value.hookTiling || "1");
+  if (!Number.isFinite(tiling) || tiling <= 0) {
+    throw new Error(`${skinTypeLabel(value.slot)} tiling must be greater than 0`);
+  }
+  return { tilingSlot: hookTilingSlot(value.slot), tiling };
+}
+
 function prepareTarget(value: VariantTargetForm, catalog: VariantCatalog) {
   const data = itemSchema.parse(value);
   if (!isCompatibilitySlot(data.slot, catalog)) {
-    return { slot: data.slot, textureUrl: data.textureUrl, variantScope: "all" as const };
+    return { slot: data.slot, textureUrl: data.textureUrl, variantScope: "all" as const, ...hookTilingPayload(data) };
   }
 
   const allowed = new Set(compatibilityVariantOptions(data.slot, catalog).map((option) => option.id));
   const variants = data.variants.filter((variant) => allowed.has(variant));
   if (variants.length === 0) {
-    throw new Error(`Choose at least one compatible model for ${data.slot}`);
+    throw new Error(`Choose at least one compatible model for ${skinTypeLabel(data.slot)}`);
   }
 
   return { slot: data.slot, textureUrl: data.textureUrl, variantScope: "specific" as const, variants };
@@ -236,14 +286,22 @@ function variantDisplayLabel(option: WorkshopVariantOption) {
   return number ? `${prefix} ${number}` : option.label || option.id;
 }
 
-function selectedPreviewOption(value: VariantTargetForm, catalog: VariantCatalog) {
-  const selected = value.variants[0];
-  return selected ? compatibilityVariantOptions(value.slot, catalog).find((option) => option.id === selected) : undefined;
+function selectedVariantOptions(value: VariantTargetForm, catalog: VariantCatalog) {
+  const options = compatibilityVariantOptions(value.slot, catalog);
+  return value.variants.map((variant) => options.find((option) => option.id === variant) ?? toCatalogOption(variant));
 }
 
-function slotSummary(value: VariantTargetForm, catalog: VariantCatalog) {
-  if (!isCompatibilitySlot(value.slot, catalog)) return "Texture only";
-  return value.variants.length ? `${value.variants.length} model${value.variants.length === 1 ? "" : "s"}` : "Choose models";
+function targetTitle(value: VariantTargetForm, catalog: VariantCatalog) {
+  const label = skinTypeLabel(value.slot);
+  if (!isCompatibilitySlot(value.slot, catalog)) return label;
+  const selected = selectedVariantOptions(value, catalog);
+  if (selected.length === 0) return `${label} - Choose Models`;
+  if (selected.length === 1) return `${label} - ${variantDisplayLabel(selected[0])}`;
+  return `${label} - ${selected.length} Models`;
+}
+
+function skinTypeLabel(slot: string) {
+  return skinTypeLabels[slot] ?? slot;
 }
 
 function skinTypeIcon(slot: string) {
@@ -252,6 +310,18 @@ function skinTypeIcon(slot: string) {
   if (slot === "Costume") return <Shirt className="h-5 w-5" aria-hidden="true" />;
   if (slot === "Eye") return <Eye className="h-5 w-5" aria-hidden="true" />;
   if (slot === "Glass") return <Glasses className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "Face") return <Smile className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "Skin") return <Hand className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "Logo") return <Flag className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "GearL" || slot === "GearR") return <Cog className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "Gas") return <Cloud className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "WeaponTrail") return <Zap className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "Horse") return <Shield className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "ThunderspearL" || slot === "ThunderspearR") return <Rocket className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "HookL" || slot === "HookR") return <Cable className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "Hat") return <Crown className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "Head") return <Badge className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "Back") return <Backpack className="h-5 w-5" aria-hidden="true" />;
   return <Palette className="h-5 w-5" aria-hidden="true" />;
 }
 
@@ -285,7 +355,7 @@ export function CreateAsset() {
   const stepIndex = wizardSteps.findIndex((item) => item.key === step);
   const normalizedCreatorName = normalizeSlug(creatorNameInput);
   const canSetCreatorName = Boolean(normalizedCreatorName) && normalizedCreatorName.length <= 32 && creatorNameAccepted && !creatorNameBusy;
-  const humanPartChoices = catalog.humanSkinParts.filter(Boolean);
+  const humanPartChoices = catalog.humanSkinParts.filter((slot) => slot && !pairedTilingSlots.has(slot));
 
   const mutation = useMutation({
     mutationFn: (asset: unknown) => {
@@ -446,17 +516,25 @@ export function CreateAsset() {
               <TypeChoice disabled icon={<Code2 className="h-5 w-5" aria-hidden="true" />} title="Custom Logics" body="Coming after backend support." onClick={() => undefined} />
             </SideCard>
             <SideCard title="Skin Type" variant="secondary" contentClassName="grid auto-rows-fr gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <TypeChoice active={kind === "skin_set"} compact icon={skinTypeIcon("Set")} title="Set" onClick={() => setKind("skin_set")} />
+              <div className="sm:col-span-2 lg:col-span-4">
+                <TypeChoice
+                  active={kind === "skin_set"}
+                  icon={skinTypeIcon("Set")}
+                  title={skinTypeLabel("Set")}
+                  body="Publish multiple skin parts together. Add Hair, Eyes, Costume, Hooks, and other texture URLs in one asset."
+                  onClick={() => setKind("skin_set")}
+                />
+              </div>
               {humanPartChoices.map((slot) => (
                 <TypeChoice
                   key={slot}
                   active={kind === "skin_part" && part.slot === slot}
                   compact
                   icon={skinTypeIcon(slot)}
-                  title={slot}
+                  title={skinTypeLabel(slot)}
                   onClick={() => {
                     setKind("skin_part");
-                    setPart((current) => ({ ...current, slot, variants: [] }));
+                    setPart((current) => ({ ...current, slot, variants: [], hookTiling: isHookSlot(slot) ? current.hookTiling || "1" : undefined }));
                   }}
                 />
               ))}
@@ -494,35 +572,23 @@ export function CreateAsset() {
           kind === "skin_part" ? (
             <section className="grid gap-4 border-t border-border pt-6">
               <h2 className="text-sm font-semibold uppercase text-muted-foreground">Skin Part Target</h2>
-              <TargetFields value={part} onChange={setPart} catalog={catalog} texturePlaceholder="https://i.imgur.com/hair.png" />
+              <SkinTargetCard value={part} onChange={setPart} catalog={catalog} texturePlaceholder="https://i.imgur.com/hair.png" />
             </section>
           ) : (
             <section className="grid gap-5 border-t border-border pt-6">
               <h2 className="text-sm font-semibold uppercase text-muted-foreground">Skin Set Items</h2>
-              {items.map((item, index) => (
-                <SideCard
-                  key={index}
-                  title={`Set item ${index + 1}`}
-                  className="border-l-4 border-l-primary"
-                  contentClassName="grid gap-4"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <TargetThumb value={item} catalog={catalog} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground">{item.slot}</p>
-                        <p className="text-xs text-muted-foreground">{slotSummary(item, catalog)}</p>
-                      </div>
-                    </div>
-                    {items.length > 1 ? (
-                      <Button type="button" variant="ghost" size="sm" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
-                        Remove
-                      </Button>
-                    ) : null}
-                  </div>
-                  <TargetFields value={item} onChange={(nextItem) => updateItem(index, nextItem)} catalog={catalog} texturePlaceholder="https://i.imgur.com/costume.png" />
-                </SideCard>
-              ))}
+              <div className="grid gap-4 lg:grid-cols-2">
+                {items.map((item, index) => (
+                  <SkinTargetCard
+                    key={index}
+                    value={item}
+                    onChange={(nextItem) => updateItem(index, nextItem)}
+                    catalog={catalog}
+                    texturePlaceholder="https://i.imgur.com/costume.png"
+                    onRemove={items.length > 1 ? () => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index)) : undefined}
+                  />
+                ))}
+              </div>
               <div>
                 <Button type="button" variant="secondary" onClick={() => setItems((current) => [...current, { slot: "Hair", textureUrl: "", variants: [] }])}>
                   Add set item
@@ -608,11 +674,13 @@ export function CreateAsset() {
 }
 
 function TypeChoice({ active = false, compact = false, disabled = false, icon, title, body, onClick }: { active?: boolean; compact?: boolean; disabled?: boolean; icon?: ReactNode; title: string; body?: string; onClick: () => void }) {
+  const minHeight = body ? (compact ? "min-h-[76px]" : "min-h-[104px]") : compact ? "min-h-16" : "min-h-20";
+
   return (
     <Button
       type="button"
       variant={active ? "default" : "ghost"}
-      className={`group flex !h-auto w-full flex-col !items-start !justify-start gap-2 !overflow-visible !whitespace-normal px-4 py-4 text-left ${compact ? "min-h-[76px]" : "min-h-[104px]"} ${active ? "aottg2-emboss-bg aottg2-cta-primary shadow-[0_3px_0_hsl(var(--primary)/0.45)]" : "bg-[color-mix(in_srgb,hsl(var(--input))_58%,hsl(var(--background)))] shadow-[inset_0_1px_5px_rgb(0_0_0_/_0.28),inset_0_1px_0_rgb(255_255_255_/_0.04)] hover:bg-foreground"} ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
+      className={`group flex !h-auto w-full flex-col !items-start !justify-center gap-2 !overflow-visible !whitespace-normal px-4 py-4 text-left ${minHeight} ${active ? "aottg2-emboss-bg aottg2-cta-primary shadow-[0_3px_0_hsl(var(--primary)/0.45)]" : "bg-[color-mix(in_srgb,hsl(var(--input))_58%,hsl(var(--background)))] shadow-[inset_0_1px_5px_rgb(0_0_0_/_0.28),inset_0_1px_0_rgb(255_255_255_/_0.04)] hover:bg-foreground"} ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
       disabled={disabled}
       onClick={onClick}
     >
@@ -627,29 +695,31 @@ function TypeChoice({ active = false, compact = false, disabled = false, icon, t
 
 function ListingPreview({ kind, common, authorName }: { kind: AssetKind; common: { title: string; shortDescription: string; thumbnailUrl: string; tags: string }; authorName: string }) {
   const title = common.title.trim() || "Untitled Asset";
-  const tags = splitList(common.tags).slice(0, 3);
+  const thumbnailUrl = common.thumbnailUrl.trim();
+  const asset: WorkshopAsset = {
+    id: "preview",
+    publicId: "preview",
+    creatorName: "preview",
+    assetSlug: "preview",
+    type: kind,
+    title,
+    shortDescription: common.shortDescription.trim() || null,
+    descriptionMarkdown: null,
+    media: thumbnailUrl ? [{ kind: "thumbnail", url: thumbnailUrl, description: title }] : [],
+    payload: { category: "human" },
+    tags: splitList(common.tags),
+    ownerAuthAccountId: "preview",
+    authorDisplayName: authorName,
+    createdAt: previewCreatedAt,
+    updatedAt: previewCreatedAt,
+    engagement: previewEngagement,
+    viewerEngagement: null,
+  };
+
   return (
     <aside className="grid content-start gap-3">
       <h2 className="text-sm font-semibold uppercase text-muted-foreground">Card Preview</h2>
-      <article className="grid overflow-hidden border border-border bg-card/60">
-        <CardPreviewImage url={common.thumbnailUrl.trim()} title={title} />
-        <div className="flex min-h-40 flex-col gap-2 p-3">
-          <div className="line-clamp-1 text-sm text-foreground">
-            <span className="font-primary font-semibold uppercase">{title}</span> <span className="font-normal text-muted-foreground">by {authorName}</span>
-          </div>
-          <p className="line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">{common.shortDescription.trim() || formatLabel(kind)}</p>
-          <div className="mt-auto flex flex-wrap gap-1.5 pt-1">
-            <Tag>{formatLabel(kind)}</Tag>
-            {tags.map((tag) => (
-              <Tag key={tag}>{tag}</Tag>
-            ))}
-          </div>
-          <div className="flex items-center justify-between gap-3 pt-3 text-xs font-semibold uppercase text-muted-foreground">
-            <span>0 downloads</span>
-            <span>0 thanks</span>
-          </div>
-        </div>
-      </article>
+      <WorkshopAssetCard asset={asset} interactive={false} />
     </aside>
   );
 }
@@ -697,7 +767,7 @@ function GalleryPreview({ urls, title }: { urls: string[]; title: string }) {
   );
 }
 
-function TexturePreview({ url, label }: { url: string; label: string }) {
+function TexturePreviewButton({ url, label, onClick }: { url: string; label: string; onClick: () => void }) {
   const [failed, setFailed] = useState(false);
   const cleanUrl = url.trim();
 
@@ -707,32 +777,19 @@ function TexturePreview({ url, label }: { url: string; label: string }) {
 
   if (!cleanUrl || failed) {
     return (
-      <div className="grid aspect-square h-20 place-items-center border border-border bg-muted/40 text-muted-foreground">
-        <ImageIcon className="h-5 w-5" />
-      </div>
+      <Button type="button" variant="ghost" className="flex !h-full min-h-40 w-full items-center justify-center gap-3 border border-border bg-muted/40 p-4 text-center text-foreground" onClick={onClick}>
+        <ImageIcon className="h-6 w-6 shrink-0" />
+        <span className="font-primary text-base font-semibold uppercase leading-none text-foreground">Set Texture URL</span>
+      </Button>
     );
   }
 
   return (
-    <div className="relative aspect-square h-20 overflow-hidden border border-border bg-muted/40">
+    <Button type="button" variant="ghost" className="relative !h-full min-h-40 w-full overflow-hidden border border-border bg-muted/40 p-0" onClick={onClick}>
       <img className="absolute inset-0 h-full w-full object-contain" src={cleanUrl} alt={label} loading="lazy" onError={() => setFailed(true)} />
-    </div>
+      <span className="sr-only">Change texture URL</span>
+    </Button>
   );
-}
-
-function TargetThumb({ value, catalog }: { value: VariantTargetForm; catalog: VariantCatalog }) {
-  const option = selectedPreviewOption(value, catalog);
-  const imageUrl = previewUrl(option?.previewUrl);
-
-  return (
-    <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden border border-border bg-muted/40 text-muted-foreground">
-      {imageUrl ? <img className="h-full w-full object-contain" src={imageUrl} alt={value.slot} loading="lazy" /> : <ImageIcon className="h-5 w-5" />}
-    </div>
-  );
-}
-
-function Tag({ children }: { children: ReactNode }) {
-  return <span className="inline-flex min-h-7 items-center border border-border bg-muted/40 px-2 text-xs font-semibold uppercase text-muted-foreground">{children}</span>;
 }
 
 function ReviewSummary({ kind, common, part, items }: { kind: AssetKind; common: { title: string; shortDescription: string; thumbnailUrl: string; galleryUrls: string; tags: string }; part: VariantTargetForm; items: VariantTargetForm[] }) {
@@ -745,7 +802,7 @@ function ReviewSummary({ kind, common, part, items }: { kind: AssetKind; common:
         <SummaryRow label="Short Description" value={common.shortDescription.trim() || "None"} />
         <SummaryRow label="Media" value={`${mediaUrls(common).length} URL${mediaUrls(common).length === 1 ? "" : "s"}`} />
         <SummaryRow label="Tags" value={splitList(common.tags).join(", ") || "None"} />
-        <SummaryRow label="Asset Data" value={kind === "skin_part" ? `${part.slot}${part.variants.length ? ` - ${part.variants.length} model${part.variants.length === 1 ? "" : "s"}` : ""}` : `${items.length} set item${items.length === 1 ? "" : "s"}`} />
+        <SummaryRow label="Asset Data" value={kind === "skin_part" ? `${skinTypeLabel(part.slot)}${part.variants.length ? ` - ${part.variants.length} model${part.variants.length === 1 ? "" : "s"}` : ""}` : `${items.length} set item${items.length === 1 ? "" : "s"}`} />
       </div>
     </aside>
   );
@@ -813,48 +870,162 @@ function formatLabel(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function TargetFields({
+function SkinTargetCard({
   value,
   onChange,
   catalog,
   texturePlaceholder,
+  onRemove,
 }: {
   value: VariantTargetForm;
   onChange: (value: VariantTargetForm) => void;
   catalog: VariantCatalog;
   texturePlaceholder: string;
+  onRemove?: () => void;
 }) {
   const [slotOpen, setSlotOpen] = useState(false);
   const [variantOpen, setVariantOpen] = useState(false);
+  const [textureOpen, setTextureOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
   const compatibilityOptions = compatibilityVariantOptions(value.slot, catalog);
   const needsCompatibility = isCompatibilitySlot(value.slot, catalog);
+  const needsHookTiling = isHookSlot(value.slot);
+  const selectedOptions = selectedVariantOptions(value, catalog);
 
   function selectSlot(slot: string) {
-    onChange({ ...value, slot, variants: [] });
+    onChange({ ...value, slot, variants: [], hookTiling: isHookSlot(slot) ? value.hookTiling || "1" : undefined });
     setSlotOpen(false);
     if (isCompatibilitySlot(slot, catalog)) setVariantOpen(true);
   }
 
+  function toggleVariant(variant: string) {
+    onChange({ ...value, variants: value.variants.includes(variant) ? value.variants.filter((item) => item !== variant) : [...value.variants, variant] });
+  }
+
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_180px]">
-        <Field label="Skin Item">
-          <Button type="button" variant="secondary" className="h-10 justify-between gap-3 px-3" onClick={() => setSlotOpen(true)}>
-            <span>{value.slot}</span>
-            <span className="text-xs text-muted-foreground">{slotSummary(value, catalog)}</span>
+    <SideCard
+      title={
+        <span className="flex h-4 items-center justify-between gap-3">
+          <span className="min-w-0 truncate">{targetTitle(value, catalog)}</span>
+          {onRemove ? (
+            <Button type="button" variant="ghost" className="!h-4 !min-h-4 w-4 shrink-0 p-0 font-primary text-sm leading-none text-primary-foreground hover:bg-transparent hover:text-primary-foreground/80" onClick={() => setRemoveOpen(true)}>
+              X
+            </Button>
+          ) : null}
+        </span>
+      }
+      className="border-l-4 border-l-primary"
+      contentClassName="grid gap-4"
+    >
+      <div className="grid items-stretch gap-4 sm:grid-cols-[minmax(260px,1fr)_minmax(0,1fr)]">
+        <TexturePreviewButton url={value.textureUrl} label={`${skinTypeLabel(value.slot)} texture`} onClick={() => setTextureOpen(true)} />
+        <div className="grid content-start gap-3">
+          <Button type="button" variant="secondary" className="min-h-16 justify-between gap-3 px-3" onClick={() => setSlotOpen(true)}>
+            <span>{skinTypeLabel(value.slot)}</span>
+            {skinTypeIcon(value.slot)}
           </Button>
-        </Field>
-        <Field label="Texture URL">
-          <Input className="h-10 text-sm" placeholder={texturePlaceholder} value={value.textureUrl} onChange={(event) => onChange({ ...value, textureUrl: event.target.value })} />
-        </Field>
-        <div className="grid gap-2">
-          <span className="text-sm font-medium">Texture Preview</span>
-          <TexturePreview url={value.textureUrl} label={`${value.slot} texture`} />
+          {needsCompatibility ? (
+            <Button type="button" variant="secondary" className="min-h-16 justify-between gap-3 px-3" onClick={() => setVariantOpen(true)}>
+              <span>{selectedOptions.length === 1 ? variantDisplayLabel(selectedOptions[0]) : selectedOptions.length ? `${selectedOptions.length} Models` : "Choose Models"}</span>
+              <span className="text-xs">{compatibilityOptions.length} available</span>
+            </Button>
+          ) : needsHookTiling ? (
+            <Field label="Hook Tiling">
+              <Input className="h-12 text-sm" min="0.01" step="0.01" type="number" value={value.hookTiling || "1"} onChange={(event) => onChange({ ...value, hookTiling: event.target.value })} />
+            </Field>
+          ) : (
+            <Button type="button" variant="secondary" className="min-h-16 justify-start px-3" disabled>
+              No Model Picker
+            </Button>
+          )}
         </div>
       </div>
-      {needsCompatibility ? <VariantFields slot={value.slot} value={value} onChange={onChange} options={compatibilityOptions} open={variantOpen} onOpenChange={setVariantOpen} /> : null}
+      {needsCompatibility && selectedOptions.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {selectedOptions.map((option) => {
+            const imageUrl = previewUrl(option.previewUrl);
+            return (
+              <Button key={option.id} type="button" variant="ghost" size="sm" className="min-h-8 gap-2 border border-border bg-primary/15 px-2 text-xs font-semibold text-primary" onClick={() => toggleVariant(option.id)}>
+                <span className="grid h-7 w-7 place-items-center overflow-hidden bg-muted/50">
+                  {imageUrl ? <img className="h-full w-full object-contain" src={imageUrl} alt="" loading="lazy" /> : skinTypeIcon(value.slot)}
+                </span>
+                {variantDisplayLabel(option)}
+              </Button>
+            );
+          })}
+        </div>
+      ) : null}
+      {onRemove ? (
+        <Dialog open={removeOpen} onOpenChange={setRemoveOpen}>
+          <DialogContent variant="destructive">
+            <DialogHeader>
+              <DialogTitle>Remove Set Item</DialogTitle>
+              <DialogDescription>Remove {targetTitle(value, catalog)} from this skin set.</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setRemoveOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="button" variant="destructive" onClick={onRemove}>
+                Remove
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+      <TextureUrlDialog open={textureOpen} onOpenChange={setTextureOpen} value={value.textureUrl} label={skinTypeLabel(value.slot)} placeholder={texturePlaceholder} onSave={(textureUrl) => onChange({ ...value, textureUrl })} />
       <SlotPickerDialog slot={value.slot} catalog={catalog} open={slotOpen} onOpenChange={setSlotOpen} onSelect={selectSlot} />
-    </div>
+      {needsCompatibility ? <VariantPickerDialog slot={value.slot} options={compatibilityOptions} selected={value.variants} open={variantOpen} onOpenChange={setVariantOpen} onToggle={toggleVariant} /> : null}
+    </SideCard>
+  );
+}
+
+function TextureUrlDialog({
+  open,
+  onOpenChange,
+  value,
+  label,
+  placeholder,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  value: string;
+  label: string;
+  placeholder: string;
+  onSave: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    if (open) setDraft(value);
+  }, [open, value]);
+
+  function save() {
+    onSave(draft.trim());
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{label} Texture URL</DialogTitle>
+          <DialogDescription>Paste the direct image URL for this texture.</DialogDescription>
+        </DialogHeader>
+        <Field label="Texture URL">
+          <Input className="h-10 text-sm" placeholder={placeholder} value={draft} onChange={(event) => setDraft(event.target.value)} />
+        </Field>
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" variant="secondary" onClick={save}>
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -878,64 +1049,23 @@ function SlotPickerDialog({
           <DialogTitle>Choose Skin Item</DialogTitle>
           <DialogDescription>Select the texture slot first. Model selection opens next when this slot needs it.</DialogDescription>
         </DialogHeader>
-        <div className="grid max-h-[60vh] gap-3 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-4">
-          {catalog.humanSkinParts.map((item) => {
+        <div className="grid max-h-[60vh] auto-rows-fr gap-3 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-4">
+          {catalog.humanSkinParts.filter((item) => !pairedTilingSlots.has(item)).map((item) => {
             const active = item === slot;
             return (
-              <Button key={item} type="button" variant={active ? "default" : "ghost"} className="h-auto min-h-20 justify-start border p-4 text-left" onClick={() => onSelect(item)}>
-                <span className="grid gap-1">
-                  <span className="font-primary text-xl font-semibold uppercase leading-none">{item}</span>
-                  <span className={`text-xs ${active ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{isCompatibilitySlot(item, catalog) ? "Opens model picker" : "Texture URL only"}</span>
-                </span>
-              </Button>
+              <TypeChoice
+                key={item}
+                active={active}
+                compact
+                icon={skinTypeIcon(item)}
+                title={skinTypeLabel(item)}
+                onClick={() => onSelect(item)}
+              />
             );
           })}
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function VariantFields({
-  slot,
-  value,
-  onChange,
-  options,
-  open,
-  onOpenChange,
-}: {
-  slot: string;
-  value: VariantTargetForm;
-  onChange: (value: VariantTargetForm) => void;
-  options: WorkshopVariantOption[];
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const selected = value.variants;
-
-  function toggleVariant(variant: string) {
-    onChange({ ...value, variants: selected.includes(variant) ? selected.filter((item) => item !== variant) : [...selected, variant] });
-  }
-
-  return (
-    <div className="grid gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" variant="secondary" onClick={() => onOpenChange(true)}>
-          Choose Compatible Models
-        </Button>
-        <span className="text-sm text-muted-foreground">{selected.length ? `${selected.length} selected` : "None selected"}</span>
-      </div>
-      {selected.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {selected.map((variant) => (
-            <Button key={variant} type="button" variant="ghost" size="sm" className="min-h-10 rounded-full bg-primary/15 px-3 text-xs font-semibold text-primary" onClick={() => toggleVariant(variant)}>
-              {variant} ×
-            </Button>
-          ))}
-        </div>
-      ) : null}
-      <VariantPickerDialog slot={slot} options={options} selected={selected} open={open} onOpenChange={onOpenChange} onToggle={toggleVariant} />
-    </div>
   );
 }
 
@@ -976,7 +1106,7 @@ function VariantPickerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl">
         <DialogHeader>
-          <DialogTitle>{slot} Compatible Models</DialogTitle>
+          <DialogTitle>{skinTypeLabel(slot)} Compatible Models</DialogTitle>
           <DialogDescription>Choose every model this texture fits.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
@@ -1005,23 +1135,13 @@ function VariantPickerDialog({
                     key={option.id}
                     type="button"
                     variant={checked ? "default" : "ghost"}
-                    className="group relative grid h-auto gap-2 border p-2 text-left"
+                    className={`group grid h-auto min-h-44 gap-2 border p-2 text-center ${checked ? "aottg2-emboss-bg aottg2-cta-primary shadow-[0_3px_0_hsl(var(--primary)/0.45)]" : "bg-[color-mix(in_srgb,hsl(var(--input))_58%,hsl(var(--background)))] shadow-[inset_0_1px_5px_rgb(0_0_0_/_0.28),inset_0_1px_0_rgb(255_255_255_/_0.04)] hover:bg-foreground"}`}
                     onClick={() => onToggle(option.id)}
                   >
-                    <span className="relative aspect-square overflow-hidden bg-muted/50">
-                      {imageUrl ? <img className="absolute inset-0 h-full w-full object-contain" src={imageUrl} alt={label} loading="lazy" /> : null}
-                      <span className={`absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full border text-xs ${checked ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background/80 text-transparent"}`}>
-                        <Check className="h-4 w-4" />
-                      </span>
+                    <span className="grid aspect-square h-28 w-full place-items-center overflow-hidden bg-muted/50">
+                      {imageUrl ? <img className="max-h-full max-w-full object-contain" src={imageUrl} alt={label} loading="lazy" /> : null}
                     </span>
-                    <span className={checked ? "text-sm font-semibold text-primary-foreground" : "text-sm font-semibold text-foreground"}>{label}</span>
-                    <span className={checked ? "text-xs text-primary-foreground/80" : "text-xs text-muted-foreground"}>{option.id}</span>
-                    {imageUrl ? (
-                      <span className="pointer-events-none absolute left-1/2 top-2 z-20 hidden w-56 -translate-x-1/2 -translate-y-full border border-border bg-popover p-2 shadow-xl group-hover:block group-focus-visible:block">
-                        <img className="aspect-square w-full object-contain" src={imageUrl} alt="" loading="lazy" />
-                        <span className="mt-1 block text-center text-xs font-semibold text-popover-foreground">{label}</span>
-                      </span>
-                    ) : null}
+                    <span className={`font-primary text-lg font-semibold uppercase leading-none ${checked ? "text-primary-foreground" : "text-foreground group-hover:text-background"}`}>{label}</span>
                   </Button>
                 );
               })}
