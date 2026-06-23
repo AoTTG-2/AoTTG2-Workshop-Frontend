@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   const name = creator.profile?.displayName || creator.displayName;
   const description = creator.profile?.description || `${name}'s AoTTG2 Workshop portfolio.`;
-  const path = `/${encodeURIComponent(creator.creatorName)}`;
+  const path = `/creator/${encodeURIComponent(creator.creatorName)}`;
   return {
     title: `${name} | AoTTG2 Workshop`,
     description,
