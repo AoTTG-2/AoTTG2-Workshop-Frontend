@@ -1,4 +1,4 @@
-import { AUTH_FRONTEND_LOGIN_URL } from "../lib/config";
+import { AUTH_FRONTEND_LOGIN_URL, AUTH_FRONTEND_LOGOUT_URL } from "../lib/config";
 
 export function localPath(raw: string | null, fallback = "/"): string {
   if (!raw) return fallback;
@@ -17,6 +17,12 @@ export function localPath(raw: string | null, fallback = "/"): string {
 
 export function websiteLoginUrl(next: string): string {
   const url = new URL(AUTH_FRONTEND_LOGIN_URL);
+  url.searchParams.set("next", `${window.location.origin}${next}`);
+  return url.href;
+}
+
+export function websiteLogoutUrl(next = "/"): string {
+  const url = new URL(AUTH_FRONTEND_LOGOUT_URL);
   url.searchParams.set("next", `${window.location.origin}${next}`);
   return url.href;
 }

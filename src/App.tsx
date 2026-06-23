@@ -5,6 +5,7 @@ import { Gauge, LogIn, LogOut, Moon, Sun, UserCircle } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { websiteLogoutUrl } from "./auth/loginRedirect";
 import { useAuth } from "./auth/useAuth";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
@@ -81,9 +82,9 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
 
   async function handleLogout() {
     closeFocusedMenu();
-    router.replace("/");
     setMobileOpen(false);
     await logout();
+    window.location.href = websiteLogoutUrl("/");
   }
 
   function switchTheme() {
