@@ -81,8 +81,9 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
 
   async function handleLogout() {
     closeFocusedMenu();
+    router.replace("/");
+    setMobileOpen(false);
     await logout();
-    go("/library");
   }
 
   function switchTheme() {

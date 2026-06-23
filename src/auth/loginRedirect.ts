@@ -1,6 +1,6 @@
 import { AUTH_FRONTEND_LOGIN_URL } from "../lib/config";
 
-export function localPath(raw: string | null, fallback = "/dashboard"): string {
+export function localPath(raw: string | null, fallback = "/"): string {
   if (!raw) return fallback;
 
   try {
