@@ -10,6 +10,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   try {
     const data = await listAssets({ pageSize: 100 });
+    const creatorNames = [...new Set(data.assets.map((asset) => asset.creatorName).filter(Boolean))];
+    routes.push(
+      ...creatorNames.map((creatorName) => ({
+        url: absoluteUrl(`/${encodeURIComponent(creatorName)}`),
+        changeFrequency: "weekly" as const,
+        priority: 0.7,
+      })),
+    );
     routes.push(
       ...data.assets.map((asset) => ({
         url: absoluteUrl(assetPath(asset)),

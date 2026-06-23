@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ElementRef, FormEvent, ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { motion, useReducedMotion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { getAccessToken } from "../auth/storage";
@@ -47,6 +48,15 @@ const previewEngagement = {
   viewCount: 640,
   commentCount: 7,
 };
+const cardMotionAnimate = { opacity: 1, y: 0 };
+
+function cardMotionInitial(reduceMotion: boolean | null, y: number) {
+  return reduceMotion ? false : { opacity: 0, y };
+}
+
+function cardMotionTransition(delay: number) {
+  return { duration: 0.16, ease: "easeOut" as const, delay };
+}
 
 const skinTypeLabels: Record<string, string> = {
   Set: "Set",
@@ -360,6 +370,10 @@ function targetFromSkinPart(payload: SkinPartPayload | Record<string, unknown>):
     variants: Array.isArray(data.variants) ? data.variants : [],
     boots: data.slot === "Costume" ? data.boots ?? true : undefined,
   };
+}
+
+function displayTargetFromAsset(asset: WorkshopAsset): VariantTargetForm {
+  return targetFromSkinPart(asset.payload);
 }
 
 function targetsFromSkinSet(payload: SkinSetPayload | Record<string, unknown>): VariantTargetForm[] {
@@ -1034,7 +1048,7 @@ function SkinTargetCard({
   const needsHookTiling = isHookSlot(value.slot);
   const selectedOptions = selectedVariantOptions(value, catalog);
   const isAssetSource = allowAssetSource && (value.source === "asset" || Boolean(value.skinAssetId));
-  const cardTitle = isAssetSource ? `${skinTypeLabel(value.slot)} - Linked Asset` : targetTitle(value, catalog);
+  const cardTitle = isAssetSource ? `${value.linkedAsset?.title ?? skinTypeLabel(value.slot)} - Referenced Skin Part` : targetTitle(value, catalog);
 
   function selectSlot(slot: string) {
     onChange(targetSlotPatch(value, slot));
@@ -1053,7 +1067,8 @@ function SkinTargetCard({
 
   function selectAsset(asset: WorkshopAsset) {
     const slot = skinPartSlot(asset) || value.slot;
-    onChange({ ...targetSlotPatch(value, slot), source: "asset", skinAssetId: asset.id, linkedAsset: asset, textureUrl: "", variants: [], hookTiling: undefined, boots: undefined });
+    const displayTarget = displayTargetFromAsset(asset);
+    onChange({ ...targetSlotPatch(value, slot), ...displayTarget, source: "asset", skinAssetId: asset.id, linkedAsset: asset });
     setAssetOpen(false);
   }
 
@@ -1074,33 +1089,32 @@ function SkinTargetCard({
     >
       {allowAssetSource ? (
         <div className="grid grid-cols-2 gap-2">
-          <Button type="button" variant={!isAssetSource ? undefined : "secondary"} onClick={() => onChange({ ...value, source: "url", skinAssetId: null, linkedAsset: null })}>
+          <Button type="button" variant={!isAssetSource ? undefined : "secondary"} onClick={() => (isAssetSource ? onChange({ ...value, source: "url", skinAssetId: null, linkedAsset: null }) : undefined)}>
             Use URL
           </Button>
-          <Button type="button" variant={isAssetSource ? undefined : "secondary"} onClick={() => onChange({ ...value, source: "asset", textureUrl: "", variants: [] })}>
+          <Button type="button" variant={isAssetSource ? undefined : "secondary"} onClick={() => (!isAssetSource ? onChange({ ...value, source: "asset", textureUrl: "", variants: [] }) : undefined)}>
             Use Asset
           </Button>
         </div>
       ) : null}
 
-      <div className="grid items-stretch gap-4 sm:grid-cols-[minmax(260px,1fr)_minmax(0,1fr)]">
+      <div className={`grid items-stretch gap-4 ${isAssetSource && !value.skinAssetId ? "" : "sm:grid-cols-[minmax(260px,1fr)_minmax(0,1fr)]"}`}>
         {isAssetSource ? (
-          <LinkedAssetPreview value={value} onClick={() => setAssetOpen(true)} />
+          value.skinAssetId ? (
+            <TexturePreviewPanel url={value.textureUrl} label={`${skinTypeLabel(value.slot)} texture`} />
+          ) : (
+            <SelectAssetButton slot={value.slot} onClick={() => setAssetOpen(true)} />
+          )
         ) : (
           <TexturePreviewButton url={value.textureUrl} label={`${skinTypeLabel(value.slot)} texture`} onClick={() => setTextureOpen(true)} />
         )}
-        <div className="grid content-start gap-3">
-          <Button type="button" variant="secondary" className="min-h-16 justify-between gap-3 px-3" onClick={() => setSlotOpen(true)}>
+        <div className={`grid content-start gap-3 ${isAssetSource && !value.skinAssetId ? "hidden" : ""}`}>
+          <Button type="button" variant="secondary" className="min-h-16 justify-between gap-3 px-3" disabled={isAssetSource} onClick={() => setSlotOpen(true)}>
             <span>{skinTypeLabel(value.slot)}</span>
             {skinTypeIcon(value.slot)}
           </Button>
-          {isAssetSource ? (
-            <Button type="button" variant="secondary" className="min-h-16 justify-between gap-3 px-3" onClick={() => setAssetOpen(true)}>
-              <span>{value.skinAssetId ? "Change Asset" : "Select Asset"}</span>
-              <span className="text-xs">Own assets only</span>
-            </Button>
-          ) : needsCompatibility ? (
-            <Button type="button" variant="secondary" className="min-h-16 justify-between gap-3 px-3" onClick={() => openVariantPicker()}>
+          {needsCompatibility ? (
+            <Button type="button" variant="secondary" className="min-h-16 justify-between gap-3 px-3" disabled={isAssetSource} onClick={() => openVariantPicker()}>
               <span>{selectedOptions.length === 1 ? variantDisplayLabel(selectedOptions[0]) : selectedOptions.length ? `${selectedOptions.length} Models` : "Choose Models"}</span>
               <span className="text-xs">{compatibilityOptions.length} available</span>
             </Button>
@@ -1115,12 +1129,12 @@ function SkinTargetCard({
           )}
         </div>
       </div>
-      {!isAssetSource && needsCompatibility && (selectedOptions.length > 0 || isCostumeSlot(value.slot)) ? (
+      {needsCompatibility && (selectedOptions.length > 0 || isCostumeSlot(value.slot)) && (!isAssetSource || value.skinAssetId) ? (
         <div className="flex flex-wrap gap-2">
           {selectedOptions.map((option) => {
             const imageUrl = previewUrl(option.previewUrl);
             return (
-              <Button key={option.id} type="button" variant="ghost" size="sm" className="min-h-8 gap-2 border border-border bg-primary/15 px-2 text-xs font-semibold text-primary" onClick={() => toggleVariant(option.id)}>
+              <Button key={option.id} type="button" variant="ghost" size="sm" className="min-h-8 gap-2 border border-border bg-primary/15 px-2 text-xs font-semibold text-primary" disabled={isAssetSource} onClick={() => toggleVariant(option.id)}>
                 <span className="grid h-7 w-7 place-items-center overflow-hidden bg-muted/50">
                   {imageUrl ? <img className="h-full w-full object-contain" src={imageUrl} alt="" loading="lazy" /> : skinTypeIcon(value.slot)}
                 </span>
@@ -1129,7 +1143,7 @@ function SkinTargetCard({
             );
           })}
           {isCostumeSlot(value.slot) ? (
-            <Button type="button" variant="secondary" size="sm" className="min-h-8 gap-2 border border-border px-2 text-xs font-semibold" onClick={() => openVariantPicker("boots")}>
+            <Button type="button" variant="secondary" size="sm" className="min-h-8 gap-2 border border-border px-2 text-xs font-semibold" disabled={isAssetSource} onClick={() => openVariantPicker("boots")}>
               <Footprints className="h-4 w-4" aria-hidden="true" />
               {bootsLabel(value)}
             </Button>
@@ -1162,26 +1176,44 @@ function SkinTargetCard({
   );
 }
 
-function LinkedAssetPreview({ value, onClick }: { value: VariantTargetForm; onClick: () => void }) {
-  if (value.linkedAsset) {
+function TexturePreviewPanel({ url, label }: { url: string; label: string }) {
+  const [failed, setFailed] = useState(false);
+  const cleanUrl = url.trim();
+
+  useEffect(() => {
+    setFailed(false);
+  }, [cleanUrl]);
+
+  if (!cleanUrl || failed) {
     return (
-      <Button type="button" variant="ghost" className="!h-auto w-full p-0 text-left" onClick={onClick}>
-        <WorkshopAssetCard asset={value.linkedAsset} interactive={false} />
-      </Button>
+      <div className="flex min-h-40 w-full items-center justify-center gap-3 border border-border bg-muted/40 p-4 text-center text-muted-foreground">
+        <ImageIcon className="h-6 w-6 shrink-0" />
+        <span className="font-primary text-base font-semibold uppercase leading-none">No texture preview</span>
+      </div>
     );
   }
 
   return (
-    <Button type="button" variant="ghost" className="flex !h-full min-h-40 w-full flex-col items-center justify-center gap-2 border border-border bg-muted/40 p-4 text-center text-foreground" onClick={onClick}>
-      <LinkIcon className="h-6 w-6 text-primary" aria-hidden="true" />
-      <span className="font-primary text-lg font-semibold uppercase">{value.skinAssetId ? "Linked Asset" : "Select Asset"}</span>
-      {value.skinAssetId ? <span className="max-w-full truncate text-xs text-muted-foreground">{value.skinAssetId}</span> : <span className="text-xs text-muted-foreground">Choose one of your skin parts</span>}
+    <div className="relative min-h-40 overflow-hidden border border-border bg-muted/40">
+      <img className="absolute inset-0 h-full w-full object-cover" src={cleanUrl} alt={label} loading="lazy" onError={() => setFailed(true)} />
+      <div className="absolute inset-x-0 bottom-0 bg-background/80 px-3 py-2 text-xs font-semibold uppercase text-foreground">{label}</div>
+    </div>
+  );
+}
+
+function SelectAssetButton({ slot, onClick }: { slot: string; onClick: () => void }) {
+  return (
+    <Button type="button" variant="ghost" className="group flex !h-full min-h-40 w-full flex-col items-center justify-center gap-2 border border-border bg-muted/40 p-4 text-center text-foreground hover:bg-foreground hover:text-background" onClick={onClick}>
+      <LinkIcon className="h-6 w-6 text-current" aria-hidden="true" />
+      <span className="font-primary text-lg font-semibold uppercase text-current">Select {skinTypeLabel(slot)} Asset</span>
+      <span className="text-xs text-current opacity-75">Choose one of your skin parts</span>
     </Button>
   );
 }
 
 function AssetPickerDialog({ open, onOpenChange, slot, selectedId, onSelect }: { open: boolean; onOpenChange: (open: boolean) => void; slot: string; selectedId?: string | null; onSelect: (asset: WorkshopAsset) => void }) {
   const [query, setQuery] = useState("");
+  const reduceMotion = useReducedMotion();
   const token = getAccessToken();
   const assetsQuery = useQuery({
     queryKey: ["workshop", "asset-picker", slot, query],
@@ -1214,12 +1246,12 @@ function AssetPickerDialog({ open, onOpenChange, slot, selectedId, onSelect }: {
             <div className="border border-border bg-card/40 p-6 text-sm text-muted-foreground">Could not load your assets.</div>
           ) : assetsQuery.data?.assets.length ? (
             <div className="grid max-h-[62vh] gap-4 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
-              {assetsQuery.data.assets.map((asset) => {
+              {assetsQuery.data.assets.map((asset, index) => {
                 const selected = asset.id === selectedId;
                 return (
-                  <Button key={asset.id} type="button" variant={selected ? undefined : "ghost"} className={`!h-auto p-0 text-left ${selected ? "ring-2 ring-primary" : ""}`} onClick={() => onSelect(asset)}>
-                    <WorkshopAssetCard asset={asset} interactive={false} />
-                  </Button>
+                  <motion.div key={asset.id} className={`relative z-0 hover:z-50 focus-within:z-50 ${selected ? "ring-2 ring-primary" : ""}`} initial={cardMotionInitial(reduceMotion, 10)} animate={cardMotionAnimate} transition={cardMotionTransition(Math.min(index, 12) * 0.025)}>
+                    <WorkshopAssetCard asset={asset} onOpen={() => onSelect(asset)} />
+                  </motion.div>
                 );
               })}
             </div>

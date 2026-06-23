@@ -12,6 +12,16 @@ export interface WorkshopUser {
   lastSeenAt: string;
 }
 
+export interface PublicProfile {
+  accountId: string;
+  displayName: string;
+  description?: string | null;
+  avatarKey?: string | null;
+  bannerKey?: string | null;
+  socials: Record<string, string>;
+  createdAt: string;
+}
+
 export type WorkshopAssetType = "skin_part" | "skin_set";
 
 export interface WorkshopMedia {
@@ -99,6 +109,79 @@ export interface AssetListResponse {
   page: number;
   pageSize: number;
   assets: WorkshopAsset[];
+}
+
+export interface CreatorStats {
+  assetCount: number;
+  skinPartCount: number;
+  skinSetCount: number;
+  downloadCount: number;
+  likeCount: number;
+  viewCount: number;
+  commentCount: number;
+}
+
+export interface PublicCreator {
+  creatorName: string;
+  authAccountId: string;
+  displayName: string;
+  profile?: PublicProfile | null;
+  stats: CreatorStats;
+  featuredAssets: WorkshopAsset[];
+  latestAssets: WorkshopAsset[];
+}
+
+export interface DashboardComment {
+  id: string;
+  assetId: string;
+  assetPublicId: string;
+  assetTitle: string;
+  creatorName: string;
+  assetSlug: string;
+  parentCommentId?: string | null;
+  body: string;
+  status: "visible" | "deleted" | "hidden" | string;
+  authorAuthAccountId: string;
+  authorDisplayName: string;
+  createdAt: string;
+}
+
+export interface DashboardCommentListResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  comments: DashboardComment[];
+}
+
+export interface WorkshopNotification {
+  id: string;
+  type: string;
+  actorAuthAccountId?: string | null;
+  assetId?: string | null;
+  assetPublicId?: string | null;
+  assetTitle?: string | null;
+  creatorName?: string | null;
+  assetSlug?: string | null;
+  commentId?: string | null;
+  metadataJson: string;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface NotificationListResponse {
+  total: number;
+  unread: number;
+  page: number;
+  pageSize: number;
+  notifications: WorkshopNotification[];
+}
+
+export interface DashboardResponse {
+  stats: CreatorStats;
+  unreadNotificationCount: number;
+  recentAssets: WorkshopAsset[];
+  recentComments: DashboardComment[];
+  recentNotifications: WorkshopNotification[];
 }
 
 export interface WorkshopVariantOption {
@@ -318,6 +401,41 @@ export async function listAssetUsedBy(id: string, accessToken?: string | null): 
   }
 
   return parseJson<AssetListResponse>(response);
+}
+
+export async function getPublicCreator(creatorName: string, accessToken?: string | null): Promise<PublicCreator> {
+  return workshopJson<PublicCreator>(`/creators/${encodeURIComponent(creatorName)}`, { headers: authHeaders(accessToken) });
+}
+
+export async function getCreatorDashboard(accessToken: string): Promise<DashboardResponse> {
+  return workshopJson<DashboardResponse>("/dashboard", { headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function listDashboardComments(accessToken: string, page = 1, pageSize = 24): Promise<DashboardCommentListResponse> {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  return workshopJson<DashboardCommentListResponse>(`/dashboard/comments?${params.toString()}`, { headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function listNotifications(accessToken: string, page = 1, pageSize = 24, unread?: boolean): Promise<NotificationListResponse> {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (unread) params.set("unread", "true");
+  return workshopJson<NotificationListResponse>(`/notifications?${params.toString()}`, { headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function markNotificationRead(accessToken: string, id: string): Promise<{ read: boolean }> {
+  return workshopJson<{ read: boolean }>(`/notifications/${encodeURIComponent(id)}/read`, { method: "PUT", headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function markAllNotificationsRead(accessToken: string): Promise<{ read: number }> {
+  return workshopJson<{ read: number }>("/notifications/read-all", { method: "PUT", headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function getFeaturedAssets(accessToken: string): Promise<AssetListResponse> {
+  return workshopJson<AssetListResponse>("/me/featured-assets", { headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function setFeaturedAssets(accessToken: string, assetIds: string[]): Promise<AssetListResponse> {
+  return workshopJson<AssetListResponse>("/me/featured-assets", jsonAuthInit("PUT", accessToken, { assetIds }));
 }
 
 export async function getAsset(id: string, accessToken?: string | null): Promise<WorkshopAsset> {

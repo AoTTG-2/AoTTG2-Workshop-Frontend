@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import type { WorkshopAsset, WorkshopMedia } from "./api/workshop";
 
 export const SITE_URL = normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL ?? "https://workshop.aottg2.com");
@@ -27,8 +28,46 @@ export function assetDescription(asset: WorkshopAsset) {
 }
 
 export function assetImage(asset: WorkshopAsset) {
-  const media = asset.media.find((item) => item.kind === "thumbnail") ?? asset.media[0];
+  const media = assetPreviewMedia(asset);
   return media?.url ? absoluteUrl(media.url) : absoluteUrl("/og/workshop.png");
+}
+
+export function assetMetadata(asset: WorkshopAsset, path: string): Metadata {
+  const title = `${asset.title} | AoTTG2 Workshop`;
+  const description = assetDescription(asset);
+  const author = asset.authorDisplayName || asset.creatorName;
+  const image = {
+    url: assetImage(asset),
+    alt: assetPreviewMedia(asset)?.description || asset.title,
+  };
+
+  return {
+    title,
+    description,
+    authors: [{ name: author }],
+    creator: author,
+    publisher: "AoTTG2 Workshop",
+    keywords: asset.tags,
+    alternates: { canonical: path },
+    openGraph: {
+      type: "article",
+      title,
+      description,
+      url: absoluteUrl(path),
+      siteName: "AoTTG2 Workshop",
+      images: [image],
+      authors: [author],
+      publishedTime: asset.createdAt,
+      modifiedTime: asset.updatedAt,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [image],
+      creator: `@${asset.creatorName}`,
+    },
+  };
 }
 
 export function assetJsonLd(asset: WorkshopAsset) {
@@ -54,6 +93,10 @@ export function safeJsonLd(data: unknown) {
 
 export function mediaAlt(media: WorkshopMedia, fallback: string) {
   return media.description || fallback;
+}
+
+function assetPreviewMedia(asset: WorkshopAsset) {
+  return asset.media.find((item) => item.kind.toLowerCase() === "thumbnail") ?? asset.media[0];
 }
 
 function truncate(value: string, max: number) {
