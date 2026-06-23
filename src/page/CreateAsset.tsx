@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, Textarea } from "@aottg2/ui";
-import { Bold, Code, Heading, Italic, Link as LinkIcon, List, ListOrdered, Quote, Strikethrough } from "lucide-react";
+import { Bold, Check, Code, Code2, Eye, Glasses, Heading, Image as ImageIcon, Italic, Link as LinkIcon, List, ListOrdered, Map, Palette, Quote, Search, Shirt, Sparkles, Strikethrough, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ElementRef, FormEvent, ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
@@ -11,24 +11,24 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { getAccessToken } from "../auth/storage";
 import { useAuth } from "../auth/useAuth";
-import { assetPath, createAsset, getVariantCatalog, setCreatorName, type VariantCatalog } from "../lib/api/workshop";
+import { assetPath, createAsset, getVariantCatalog, setCreatorName, type VariantCatalog, type WorkshopVariantOption } from "../lib/api/workshop";
+import { WORKSHOP_STATIC_API_ORIGIN } from "../lib/config";
 import { toast } from "../lib/toast";
+import { SideCard } from "../components/SideCard";
 
 type AssetKind = "skin_part" | "skin_set";
 type WizardStep = "type" | "listing" | "data" | "description";
-type VariantScope = "all" | "specific";
 
 interface VariantTargetForm {
   slot: string;
   textureUrl: string;
-  variantScope: VariantScope;
-  variants: string;
+  variants: string[];
 }
 
 const wizardSteps: { key: WizardStep; label: string }[] = [
   { key: "type", label: "Type" },
+  { key: "data", label: "Texture" },
   { key: "listing", label: "Listing" },
-  { key: "data", label: "Data" },
   { key: "description", label: "Publish" },
 ];
 
@@ -101,6 +101,14 @@ const fallbackCatalog: VariantCatalog = {
     "Back",
     "Boots",
   ],
+  humanCompatibilitySlots: ["Hair", "Costume", "Hat", "Head", "Back"],
+  humanCompatibilityVariants: {
+    Hair: [...Array.from({ length: 35 }, (_, i) => `HairM${i}`), ...Array.from({ length: 33 }, (_, i) => `HairF${i}`)].map(toCatalogOption),
+    Costume: [...Array.from({ length: 12 }, (_, i) => `CostumeM${i}`), ...Array.from({ length: 11 }, (_, i) => `CostumeF${i}`)].map(toCatalogOption),
+    Hat: Array.from({ length: 17 }, (_, i) => `Hat${i}`).map(toCatalogOption),
+    Head: Array.from({ length: 8 }, (_, i) => `Head${i}`).map(toCatalogOption),
+    Back: Array.from({ length: 8 }, (_, i) => `Back${i}`).map(toCatalogOption),
+  },
 };
 
 const httpUrl = z
@@ -138,29 +146,19 @@ const itemSchema = z
   .object({
     slot: z.string().min(1, "Slot is required"),
     textureUrl: httpUrl,
-    variantScope: z.enum(["all", "specific"]),
-    variants: z.string().trim(),
-  })
-  .superRefine(validateVariants);
+    variants: z.array(z.string()),
+  });
 
 const skinPartSchema = commonSchema
   .extend({
     slot: z.string().min(1, "Slot is required"),
     textureUrl: httpUrl,
-    variantScope: z.enum(["all", "specific"]),
-    variants: z.string().trim(),
-  })
-  .superRefine(validateVariants);
+    variants: z.array(z.string()),
+  });
 
 const skinSetSchema = commonSchema.extend({
   items: z.array(itemSchema).min(1, "Add at least one set item"),
 });
-
-function validateVariants(value: { variantScope: VariantScope; variants: string }, ctx: z.RefinementCtx) {
-  if (value.variantScope === "specific" && splitList(value.variants).length === 0) {
-    ctx.addIssue({ code: "custom", path: ["variants"], message: "Choose or enter at least one variant" });
-  }
-}
 
 function splitList(value: string | undefined) {
   return (value ?? "")
@@ -188,23 +186,73 @@ function normalizeSlug(value: string | undefined) {
     .replace(/^-+|-+$/g, "");
 }
 
-function variantOptions(slot: string, catalog: VariantCatalog) {
-  switch (slot) {
-    case "Hair":
-      return [...catalog.hairMale, ...catalog.hairFemale];
-    case "Costume":
-      return [...catalog.costumeMale, ...catalog.costumeFemale];
-    case "Hat":
-      return catalog.hat;
-    case "Head":
-      return catalog.head;
-    case "Back":
-      return catalog.back;
-    case "Boots":
-      return ["0", "1"];
-    default:
-      return [];
+function toCatalogOption(id: string): WorkshopVariantOption {
+  return { id, label: id, previewUrl: `/workshop/catalog/human/previews/${id}.webp` };
+}
+
+function compatibilityVariantOptions(slot: string, catalog: VariantCatalog) {
+  return catalog.humanCompatibilityVariants?.[slot] ?? [];
+}
+
+function isCompatibilitySlot(slot: string, catalog: VariantCatalog) {
+  return catalog.humanCompatibilitySlots?.includes(slot) ?? compatibilityVariantOptions(slot, catalog).length > 0;
+}
+
+function prepareTarget(value: VariantTargetForm, catalog: VariantCatalog) {
+  const data = itemSchema.parse(value);
+  if (!isCompatibilitySlot(data.slot, catalog)) {
+    return { slot: data.slot, textureUrl: data.textureUrl, variantScope: "all" as const };
   }
+
+  const allowed = new Set(compatibilityVariantOptions(data.slot, catalog).map((option) => option.id));
+  const variants = data.variants.filter((variant) => allowed.has(variant));
+  if (variants.length === 0) {
+    throw new Error(`Choose at least one compatible model for ${data.slot}`);
+  }
+
+  return { slot: data.slot, textureUrl: data.textureUrl, variantScope: "specific" as const, variants };
+}
+
+function previewUrl(path: string | null | undefined) {
+  return path ? `${WORKSHOP_STATIC_API_ORIGIN}${path}` : "";
+}
+
+function variantNumber(id: string) {
+  return id.match(/(\d+)$/)?.[1] ?? "";
+}
+
+function variantGroup(id: string) {
+  if (/^[A-Za-z]+M\d+$/.test(id)) return "Male";
+  if (/^[A-Za-z]+F\d+$/.test(id)) return "Female";
+  return "";
+}
+
+function variantDisplayLabel(option: WorkshopVariantOption) {
+  const group = variantGroup(option.id);
+  const number = variantNumber(option.id);
+  if (group && number) return `${group} ${number}`;
+
+  const prefix = option.id.replace(/\d+$/, "");
+  return number ? `${prefix} ${number}` : option.label || option.id;
+}
+
+function selectedPreviewOption(value: VariantTargetForm, catalog: VariantCatalog) {
+  const selected = value.variants[0];
+  return selected ? compatibilityVariantOptions(value.slot, catalog).find((option) => option.id === selected) : undefined;
+}
+
+function slotSummary(value: VariantTargetForm, catalog: VariantCatalog) {
+  if (!isCompatibilitySlot(value.slot, catalog)) return "Texture only";
+  return value.variants.length ? `${value.variants.length} model${value.variants.length === 1 ? "" : "s"}` : "Choose models";
+}
+
+function skinTypeIcon(slot: string) {
+  if (slot === "Set") return <Sparkles className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "Hair") return <UserRound className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "Costume") return <Shirt className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "Eye") return <Eye className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "Glass") return <Glasses className="h-5 w-5" aria-hidden="true" />;
+  return <Palette className="h-5 w-5" aria-hidden="true" />;
 }
 
 function selectError(error: unknown) {
@@ -227,8 +275,8 @@ export function CreateAsset() {
   const [kind, setKind] = useState<AssetKind>("skin_part");
   const [step, setStep] = useState<WizardStep>("type");
   const [common, setCommon] = useState({ title: "", assetSlug: "", shortDescription: "", descriptionMarkdown: "", thumbnailUrl: "", galleryUrls: "", tags: "" });
-  const [part, setPart] = useState<VariantTargetForm>({ slot: "Hair", textureUrl: "", variantScope: "specific", variants: "HairM3" });
-  const [items, setItems] = useState<VariantTargetForm[]>([{ slot: "Costume", textureUrl: "", variantScope: "specific", variants: "CostumeM5" }]);
+  const [part, setPart] = useState<VariantTargetForm>({ slot: "Hair", textureUrl: "", variants: [] });
+  const [items, setItems] = useState<VariantTargetForm[]>([{ slot: "Costume", textureUrl: "", variants: [] }]);
   const [creatorDialogOpen, setCreatorDialogOpen] = useState(false);
   const [creatorNameInput, setCreatorNameInput] = useState("");
   const [creatorNameAccepted, setCreatorNameAccepted] = useState(false);
@@ -237,6 +285,7 @@ export function CreateAsset() {
   const stepIndex = wizardSteps.findIndex((item) => item.key === step);
   const normalizedCreatorName = normalizeSlug(creatorNameInput);
   const canSetCreatorName = Boolean(normalizedCreatorName) && normalizedCreatorName.length <= 32 && creatorNameAccepted && !creatorNameBusy;
+  const humanPartChoices = catalog.humanSkinParts.filter(Boolean);
 
   const mutation = useMutation({
     mutationFn: (asset: unknown) => {
@@ -261,8 +310,8 @@ export function CreateAsset() {
   function validateStep() {
     if (step === "listing") commonSchema.parse(common);
     if (step === "data") {
-      if (kind === "skin_part") itemSchema.parse(part);
-      else z.array(itemSchema).min(1, "Add at least one set item").parse(items);
+      if (kind === "skin_part") prepareTarget(part, catalog);
+      else z.array(itemSchema).min(1, "Add at least one set item").parse(items).forEach((item) => prepareTarget(item, catalog));
     }
     if (step === "description") buildAsset();
   }
@@ -279,6 +328,7 @@ export function CreateAsset() {
   function buildAsset() {
     if (kind === "skin_part") {
       const data = skinPartSchema.parse({ ...common, ...part });
+      const target = prepareTarget(data, catalog);
       const assetSlug = normalizeSlug(data.assetSlug);
       return {
         type: "skin_part",
@@ -289,10 +339,7 @@ export function CreateAsset() {
         media: mediaFromCommon(data),
         payload: {
           category: "human",
-          slot: data.slot,
-          textureUrl: data.textureUrl,
-          variantScope: data.variantScope,
-          ...(data.variantScope === "specific" ? { variants: splitList(data.variants) } : {}),
+          ...target,
         },
         tags: splitList(data.tags),
       };
@@ -309,12 +356,7 @@ export function CreateAsset() {
       media: mediaFromCommon(data),
       payload: {
         category: "human",
-        items: data.items.map((item) => ({
-          slot: item.slot,
-          textureUrl: item.textureUrl,
-          variantScope: item.variantScope,
-          ...(item.variantScope === "specific" ? { variants: splitList(item.variants) } : {}),
-        })),
+        items: data.items.map((item) => prepareTarget(item, catalog)),
       },
       tags: splitList(data.tags),
     };
@@ -383,26 +425,42 @@ export function CreateAsset() {
       <form className="grid gap-8" onSubmit={handleSubmit}>
         <nav className="grid gap-2 sm:grid-cols-4" aria-label="Publish steps">
           {wizardSteps.map((item, index) => (
-            <button
+            <Button
               key={item.key}
               type="button"
-              className={`workshop-control-free flex min-h-11 items-center gap-2 border px-3 text-left text-sm font-semibold uppercase transition-colors ${item.key === step ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"} ${index <= stepIndex ? "hover:text-primary" : "cursor-default opacity-60"}`}
+              variant={item.key === step ? "default" : "ghost"}
+              className={`min-h-11 justify-start border px-3 text-left text-sm font-semibold uppercase ${index > stepIndex ? "cursor-default opacity-60" : ""}`}
               disabled={index > stepIndex}
               onClick={() => setStep(item.key)}
             >
-              <span className="grid h-6 w-6 shrink-0 place-items-center border border-current text-xs">{index + 1}</span>
               {item.label}
-            </button>
+            </Button>
           ))}
         </nav>
 
         {step === "type" ? (
-          <section className="grid gap-4 border-t border-border pt-6">
-            <h2 className="text-sm font-semibold uppercase text-muted-foreground">Asset Type</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <TypeChoice active={kind === "skin_part"} title="Skin Part" body="One texture for one human slot." onClick={() => setKind("skin_part")} />
-              <TypeChoice active={kind === "skin_set"} title="Skin Set" body="Multiple embedded textures in one human set." onClick={() => setKind("skin_set")} />
-            </div>
+          <section className="grid gap-6 border-t border-border pt-6">
+            <SideCard title="Category" variant="secondary" contentClassName="grid auto-rows-fr gap-4 sm:grid-cols-3">
+              <TypeChoice active icon={<Sparkles className="h-5 w-5" aria-hidden="true" />} title="Skins" body="Human texture assets and sets." onClick={() => undefined} />
+              <TypeChoice disabled icon={<Map className="h-5 w-5" aria-hidden="true" />} title="Maps" body="Coming after backend support." onClick={() => undefined} />
+              <TypeChoice disabled icon={<Code2 className="h-5 w-5" aria-hidden="true" />} title="Custom Logics" body="Coming after backend support." onClick={() => undefined} />
+            </SideCard>
+            <SideCard title="Skin Type" variant="secondary" contentClassName="grid auto-rows-fr gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <TypeChoice active={kind === "skin_set"} compact icon={skinTypeIcon("Set")} title="Set" onClick={() => setKind("skin_set")} />
+              {humanPartChoices.map((slot) => (
+                <TypeChoice
+                  key={slot}
+                  active={kind === "skin_part" && part.slot === slot}
+                  compact
+                  icon={skinTypeIcon(slot)}
+                  title={slot}
+                  onClick={() => {
+                    setKind("skin_part");
+                    setPart((current) => ({ ...current, slot, variants: [] }));
+                  }}
+                />
+              ))}
+            </SideCard>
           </section>
         ) : null}
 
@@ -442,9 +500,20 @@ export function CreateAsset() {
             <section className="grid gap-5 border-t border-border pt-6">
               <h2 className="text-sm font-semibold uppercase text-muted-foreground">Skin Set Items</h2>
               {items.map((item, index) => (
-                <div key={index} className="grid gap-4 border-l border-border pl-4">
+                <SideCard
+                  key={index}
+                  title={`Set item ${index + 1}`}
+                  className="border-l-4 border-l-primary"
+                  contentClassName="grid gap-4"
+                >
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-muted-foreground">Set item {index + 1}</h3>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <TargetThumb value={item} catalog={catalog} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground">{item.slot}</p>
+                        <p className="text-xs text-muted-foreground">{slotSummary(item, catalog)}</p>
+                      </div>
+                    </div>
                     {items.length > 1 ? (
                       <Button type="button" variant="ghost" size="sm" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
                         Remove
@@ -452,10 +521,10 @@ export function CreateAsset() {
                     ) : null}
                   </div>
                   <TargetFields value={item} onChange={(nextItem) => updateItem(index, nextItem)} catalog={catalog} texturePlaceholder="https://i.imgur.com/costume.png" />
-                </div>
+                </SideCard>
               ))}
               <div>
-                <Button type="button" variant="secondary" onClick={() => setItems((current) => [...current, { slot: "Hair", textureUrl: "", variantScope: "specific", variants: "HairM3" }])}>
+                <Button type="button" variant="secondary" onClick={() => setItems((current) => [...current, { slot: "Hair", textureUrl: "", variants: [] }])}>
                   Add set item
                 </Button>
               </div>
@@ -538,12 +607,21 @@ export function CreateAsset() {
   );
 }
 
-function TypeChoice({ active, title, body, onClick }: { active: boolean; title: string; body: string; onClick: () => void }) {
+function TypeChoice({ active = false, compact = false, disabled = false, icon, title, body, onClick }: { active?: boolean; compact?: boolean; disabled?: boolean; icon?: ReactNode; title: string; body?: string; onClick: () => void }) {
   return (
-    <button type="button" className={`workshop-control-free grid min-h-36 gap-3 border p-5 text-left transition-colors ${active ? "border-primary bg-primary/10 text-primary" : "border-border bg-card/40 hover:border-primary/60"}`} onClick={onClick}>
-      <span className="font-primary text-2xl font-semibold uppercase leading-none">{title}</span>
-      <span className="text-sm text-muted-foreground">{body}</span>
-    </button>
+    <Button
+      type="button"
+      variant={active ? "default" : "ghost"}
+      className={`group flex !h-auto w-full flex-col !items-start !justify-start gap-2 !overflow-visible !whitespace-normal px-4 py-4 text-left ${compact ? "min-h-[76px]" : "min-h-[104px]"} ${active ? "aottg2-emboss-bg aottg2-cta-primary shadow-[0_3px_0_hsl(var(--primary)/0.45)]" : "bg-[color-mix(in_srgb,hsl(var(--input))_58%,hsl(var(--background)))] shadow-[inset_0_1px_5px_rgb(0_0_0_/_0.28),inset_0_1px_0_rgb(255_255_255_/_0.04)] hover:bg-foreground"} ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <span className={`flex items-center gap-2 whitespace-normal font-primary font-semibold uppercase leading-none ${compact ? "text-xl" : "text-2xl"} ${active ? "text-primary-foreground" : "text-foreground group-hover:text-background"}`}>
+        {icon}
+        {title}
+      </span>
+      {body ? <span className={`block whitespace-normal text-sm leading-5 ${active ? "text-primary-foreground" : "text-foreground group-hover:text-background"}`}>{body}</span> : null}
+    </Button>
   );
 }
 
@@ -619,6 +697,40 @@ function GalleryPreview({ urls, title }: { urls: string[]; title: string }) {
   );
 }
 
+function TexturePreview({ url, label }: { url: string; label: string }) {
+  const [failed, setFailed] = useState(false);
+  const cleanUrl = url.trim();
+
+  useEffect(() => {
+    setFailed(false);
+  }, [cleanUrl]);
+
+  if (!cleanUrl || failed) {
+    return (
+      <div className="grid aspect-square h-20 place-items-center border border-border bg-muted/40 text-muted-foreground">
+        <ImageIcon className="h-5 w-5" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative aspect-square h-20 overflow-hidden border border-border bg-muted/40">
+      <img className="absolute inset-0 h-full w-full object-contain" src={cleanUrl} alt={label} loading="lazy" onError={() => setFailed(true)} />
+    </div>
+  );
+}
+
+function TargetThumb({ value, catalog }: { value: VariantTargetForm; catalog: VariantCatalog }) {
+  const option = selectedPreviewOption(value, catalog);
+  const imageUrl = previewUrl(option?.previewUrl);
+
+  return (
+    <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden border border-border bg-muted/40 text-muted-foreground">
+      {imageUrl ? <img className="h-full w-full object-contain" src={imageUrl} alt={value.slot} loading="lazy" /> : <ImageIcon className="h-5 w-5" />}
+    </div>
+  );
+}
+
 function Tag({ children }: { children: ReactNode }) {
   return <span className="inline-flex min-h-7 items-center border border-border bg-muted/40 px-2 text-xs font-semibold uppercase text-muted-foreground">{children}</span>;
 }
@@ -633,7 +745,7 @@ function ReviewSummary({ kind, common, part, items }: { kind: AssetKind; common:
         <SummaryRow label="Short Description" value={common.shortDescription.trim() || "None"} />
         <SummaryRow label="Media" value={`${mediaUrls(common).length} URL${mediaUrls(common).length === 1 ? "" : "s"}`} />
         <SummaryRow label="Tags" value={splitList(common.tags).join(", ") || "None"} />
-        <SummaryRow label="Asset Data" value={kind === "skin_part" ? `${part.slot} - ${part.variantScope}` : `${items.length} set item${items.length === 1 ? "" : "s"}`} />
+        <SummaryRow label="Asset Data" value={kind === "skin_part" ? `${part.slot}${part.variants.length ? ` - ${part.variants.length} model${part.variants.length === 1 ? "" : "s"}` : ""}` : `${items.length} set item${items.length === 1 ? "" : "s"}`} />
       </div>
     </aside>
   );
@@ -712,71 +824,217 @@ function TargetFields({
   catalog: VariantCatalog;
   texturePlaceholder: string;
 }) {
-  return (
-    <>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Slot">
-          <select className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={value.slot} onChange={(event) => onChange({ ...value, slot: event.target.value })}>
-            {catalog.humanSkinParts.map((slot) => (
-              <option key={slot} value={slot}>
-                {slot}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Texture URL">
-          <Input className="h-10 text-sm" placeholder={texturePlaceholder} value={value.textureUrl} onChange={(event) => onChange({ ...value, textureUrl: event.target.value })} />
-        </Field>
-      </div>
-      <VariantFields value={value} onChange={onChange} options={variantOptions(value.slot, catalog)} />
-    </>
-  );
-}
+  const [slotOpen, setSlotOpen] = useState(false);
+  const [variantOpen, setVariantOpen] = useState(false);
+  const compatibilityOptions = compatibilityVariantOptions(value.slot, catalog);
+  const needsCompatibility = isCompatibilitySlot(value.slot, catalog);
 
-function VariantFields({ value, onChange, options }: { value: VariantTargetForm; onChange: (value: VariantTargetForm) => void; options: string[] }) {
-  const selected = splitList(value.variants);
-
-  function addVariant(variant: string) {
-    if (!variant || selected.includes(variant)) return;
-    onChange({ ...value, variants: [...selected, variant].join(", ") });
-  }
-
-  function removeVariant(variant: string) {
-    onChange({ ...value, variants: selected.filter((item) => item !== variant).join(", ") });
+  function selectSlot(slot: string) {
+    onChange({ ...value, slot, variants: [] });
+    setSlotOpen(false);
+    if (isCompatibilitySlot(slot, catalog)) setVariantOpen(true);
   }
 
   return (
     <div className="grid gap-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Variant Scope">
-          <select className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={value.variantScope} onChange={(event) => onChange({ ...value, variantScope: event.target.value as VariantScope })}>
-            <option value="all">All</option>
-            <option value="specific">Specific</option>
-          </select>
+      <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_180px]">
+        <Field label="Skin Item">
+          <Button type="button" variant="secondary" className="h-10 justify-between gap-3 px-3" onClick={() => setSlotOpen(true)}>
+            <span>{value.slot}</span>
+            <span className="text-xs text-muted-foreground">{slotSummary(value, catalog)}</span>
+          </Button>
         </Field>
-        <Field label="Choose Variant">
-          <select className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" disabled={value.variantScope === "all" || options.length === 0} value="" onChange={(event) => addVariant(event.target.value)}>
-            <option value="">{options.length ? "Select one" : "No preset variants"}</option>
-            {options.map((variant) => (
-              <option key={variant} value={variant}>
-                {variant}
-              </option>
-            ))}
-          </select>
+        <Field label="Texture URL">
+          <Input className="h-10 text-sm" placeholder={texturePlaceholder} value={value.textureUrl} onChange={(event) => onChange({ ...value, textureUrl: event.target.value })} />
         </Field>
+        <div className="grid gap-2">
+          <span className="text-sm font-medium">Texture Preview</span>
+          <TexturePreview url={value.textureUrl} label={`${value.slot} texture`} />
+        </div>
       </div>
-      <Field label="Selected / Custom Variants">
-        <Input className="h-10 text-sm" placeholder="Pick above or type custom, comma-separated" value={value.variants} disabled={value.variantScope === "all"} onChange={(event) => onChange({ ...value, variants: event.target.value })} />
-      </Field>
-      {value.variantScope === "specific" && selected.length > 0 ? (
+      {needsCompatibility ? <VariantFields slot={value.slot} value={value} onChange={onChange} options={compatibilityOptions} open={variantOpen} onOpenChange={setVariantOpen} /> : null}
+      <SlotPickerDialog slot={value.slot} catalog={catalog} open={slotOpen} onOpenChange={setSlotOpen} onSelect={selectSlot} />
+    </div>
+  );
+}
+
+function SlotPickerDialog({
+  slot,
+  catalog,
+  open,
+  onOpenChange,
+  onSelect,
+}: {
+  slot: string;
+  catalog: VariantCatalog;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (slot: string) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Choose Skin Item</DialogTitle>
+          <DialogDescription>Select the texture slot first. Model selection opens next when this slot needs it.</DialogDescription>
+        </DialogHeader>
+        <div className="grid max-h-[60vh] gap-3 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-4">
+          {catalog.humanSkinParts.map((item) => {
+            const active = item === slot;
+            return (
+              <Button key={item} type="button" variant={active ? "default" : "ghost"} className="h-auto min-h-20 justify-start border p-4 text-left" onClick={() => onSelect(item)}>
+                <span className="grid gap-1">
+                  <span className="font-primary text-xl font-semibold uppercase leading-none">{item}</span>
+                  <span className={`text-xs ${active ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{isCompatibilitySlot(item, catalog) ? "Opens model picker" : "Texture URL only"}</span>
+                </span>
+              </Button>
+            );
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function VariantFields({
+  slot,
+  value,
+  onChange,
+  options,
+  open,
+  onOpenChange,
+}: {
+  slot: string;
+  value: VariantTargetForm;
+  onChange: (value: VariantTargetForm) => void;
+  options: WorkshopVariantOption[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const selected = value.variants;
+
+  function toggleVariant(variant: string) {
+    onChange({ ...value, variants: selected.includes(variant) ? selected.filter((item) => item !== variant) : [...selected, variant] });
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="button" variant="secondary" onClick={() => onOpenChange(true)}>
+          Choose Compatible Models
+        </Button>
+        <span className="text-sm text-muted-foreground">{selected.length ? `${selected.length} selected` : "None selected"}</span>
+      </div>
+      {selected.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {selected.map((variant) => (
-            <button key={variant} type="button" className="min-h-10 rounded-full bg-primary/15 px-3 text-xs font-semibold text-primary transition-transform active:scale-[0.96]" onClick={() => removeVariant(variant)}>
+            <Button key={variant} type="button" variant="ghost" size="sm" className="min-h-10 rounded-full bg-primary/15 px-3 text-xs font-semibold text-primary" onClick={() => toggleVariant(variant)}>
               {variant} ×
-            </button>
+            </Button>
           ))}
         </div>
       ) : null}
+      <VariantPickerDialog slot={slot} options={options} selected={selected} open={open} onOpenChange={onOpenChange} onToggle={toggleVariant} />
     </div>
+  );
+}
+
+function VariantPickerDialog({
+  slot,
+  options,
+  selected,
+  open,
+  onOpenChange,
+  onToggle,
+}: {
+  slot: string;
+  options: WorkshopVariantOption[];
+  selected: string[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onToggle: (variant: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [group, setGroup] = useState("All");
+  const hasGenderGroups = options.some((option) => variantGroup(option.id));
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredOptions = options.filter((option) => {
+    const label = variantDisplayLabel(option);
+    const matchesQuery = !normalizedQuery || option.id.toLowerCase().includes(normalizedQuery) || label.toLowerCase().includes(normalizedQuery) || variantNumber(option.id) === normalizedQuery;
+    const matchesGroup = group === "All" || variantGroup(option.id) === group;
+    return matchesQuery && matchesGroup;
+  });
+
+  useEffect(() => {
+    if (open) {
+      setQuery("");
+      setGroup("All");
+    }
+  }, [open, slot]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>{slot} Compatible Models</DialogTitle>
+          <DialogDescription>Choose every model this texture fits.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <div className="flex flex-wrap gap-2">
+            <label className="relative min-w-52 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input className="h-10 pl-9 text-sm" placeholder="Search HairM5, Male 5, 5" value={query} onChange={(event) => setQuery(event.target.value)} />
+              <span className="sr-only">Search variants</span>
+            </label>
+            {hasGenderGroups
+              ? ["All", "Male", "Female"].map((item) => (
+                  <Button key={item} type="button" variant={group === item ? undefined : "secondary"} onClick={() => setGroup(item)}>
+                    {item}
+                  </Button>
+                ))
+              : null}
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto pr-1">
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              {filteredOptions.map((option) => {
+                const label = variantDisplayLabel(option);
+                const imageUrl = previewUrl(option.previewUrl);
+                const checked = selected.includes(option.id);
+                return (
+                  <Button
+                    key={option.id}
+                    type="button"
+                    variant={checked ? "default" : "ghost"}
+                    className="group relative grid h-auto gap-2 border p-2 text-left"
+                    onClick={() => onToggle(option.id)}
+                  >
+                    <span className="relative aspect-square overflow-hidden bg-muted/50">
+                      {imageUrl ? <img className="absolute inset-0 h-full w-full object-contain" src={imageUrl} alt={label} loading="lazy" /> : null}
+                      <span className={`absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full border text-xs ${checked ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background/80 text-transparent"}`}>
+                        <Check className="h-4 w-4" />
+                      </span>
+                    </span>
+                    <span className={checked ? "text-sm font-semibold text-primary-foreground" : "text-sm font-semibold text-foreground"}>{label}</span>
+                    <span className={checked ? "text-xs text-primary-foreground/80" : "text-xs text-muted-foreground"}>{option.id}</span>
+                    {imageUrl ? (
+                      <span className="pointer-events-none absolute left-1/2 top-2 z-20 hidden w-56 -translate-x-1/2 -translate-y-full border border-border bg-popover p-2 shadow-xl group-hover:block group-focus-visible:block">
+                        <img className="aspect-square w-full object-contain" src={imageUrl} alt="" loading="lazy" />
+                        <span className="mt-1 block text-center text-xs font-semibold text-popover-foreground">{label}</span>
+                      </span>
+                    ) : null}
+                  </Button>
+                );
+              })}
+            </div>
+            {filteredOptions.length === 0 ? <div className="border border-border bg-card/40 p-6 text-sm text-muted-foreground">No models match.</div> : null}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

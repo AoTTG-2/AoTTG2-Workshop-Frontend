@@ -16,3 +16,5 @@ export const WORKSHOP_API_BASE_URL = `${
 export const WORKSHOP_CONTENT_API_BASE_URL = `${
   normalizeWorkshopApiBase(process.env.NEXT_PUBLIC_WORKSHOP_API_BASE_URL ?? localWorkshopApi)
 }/v1/workshop`;
+
+export const WORKSHOP_STATIC_API_ORIGIN = normalizeWorkshopApiBase(process.env.NEXT_PUBLIC_WORKSHOP_API_BASE_URL ?? localWorkshopApi);

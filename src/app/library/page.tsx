@@ -40,6 +40,7 @@ function parseAssetQuery(params: Record<string, string | string[] | undefined>):
     tag: single(params.tag) ?? "",
     category: single(params.category) ?? "",
     slot: single(params.slot) ?? "",
+    sort: single(params.sort) ?? "relevance",
     page: Math.max(1, Number(single(params.page) ?? "1") || 1),
     pageSize,
   };

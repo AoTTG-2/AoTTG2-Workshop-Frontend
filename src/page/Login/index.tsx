@@ -19,7 +19,7 @@ export default function Login() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      router.replace("/dashboard");
+      router.replace("/");
     }
   }, [isAuthenticated, isLoading, router]);
 
@@ -31,7 +31,7 @@ export default function Login() {
     try {
       const result = await login(email, password);
       if (result.ok) {
-        router.push("/dashboard");
+        router.push("/");
       } else {
         setError(result.error ?? "Login failed. Please try again.");
       }

@@ -89,7 +89,7 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
   return (
     <header className="fixed top-0 z-[1000] w-full overflow-visible">
       <div className="aottg2-texture relative z-[1000] flex h-14 w-full items-center justify-between px-4 shadow-lg lg:h-16 lg:px-8">
-        <button type="button" className="workshop-control-free flex min-h-10 min-w-10 shrink-0 items-center transition-transform duration-150 ease-out active:scale-[0.96]" aria-label="AoTTG2 Workshop home" onClick={() => go("/library")}>
+        <button type="button" className="workshop-control-free flex min-h-10 min-w-10 shrink-0 items-center transition-transform duration-150 ease-out active:scale-[0.96]" aria-label="AoTTG2 Workshop home" onClick={() => go("/")}>
           <span className="aottg2-text-logo font-primary text-lg leading-none tracking-wide sm:text-xl lg:text-2xl">
             <span className="aottg2-text-logo-part text-foreground" data-text="AoTTG">AoTTG</span>
             <span className="aottg2-text-logo-part aottg2-textured-text text-primary" data-text="WORKSHOP">WORKSHOP</span>

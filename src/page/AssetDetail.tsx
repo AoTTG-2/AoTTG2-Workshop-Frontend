@@ -1,13 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Button, CommentBox, CommentSection, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, renderCommentMarkdown, type CommentItem } from "@aottg2/ui";
-import { motion, useReducedMotion } from "motion/react";
+import { Button, CommentBox, CommentSection, Spinner, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, renderCommentMarkdown, type CommentItem } from "@aottg2/ui";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Copy, Download, Eye, Flag, Link as LinkIcon, MessageCircle, MoreHorizontal, Star, ThumbsUp, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Download, Eye, Flag, Link as LinkIcon, MessageCircle, MoreHorizontal, Star, ThumbsUp, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "../auth/storage";
@@ -110,12 +110,17 @@ export function AssetDetail({ id = "", creatorName = "", assetSlug = "", initial
   return <AssetDetailContent asset={asset} onRefresh={() => refetchAsset()} />;
 }
 
-function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefresh: () => Promise<unknown> }) {
+function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: WorkshopAsset; onRefresh: () => Promise<unknown> }) {
+  const [displayAsset, setDisplayAsset] = useState(sourceAsset);
   const { isAuthenticated, profile, workshopUser } = useAuth();
   const router = useRouter();
   const reduceMotion = useReducedMotion();
+  const asset = displayAsset;
   const media = mediaForGallery(asset.media);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [galleryDirection, setGalleryDirection] = useState(1);
+  const [likeBurst, setLikeBurst] = useState(false);
+  const [favoriteBurst, setFavoriteBurst] = useState(false);
   const activeMedia = media[activeIndex];
   const textureUrls = collectTextureUrls(asset);
   const category = assetCategory(asset);
@@ -125,7 +130,25 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
   const publicAssetUrl = `${typeof window === "undefined" ? "" : window.location.origin}${assetPath(asset)}`;
   const accountId = workshopUser?.authAccountId ?? profile?.accountId;
   const permissionSource = workshopUser ?? profile;
+  const isOwnAsset = Boolean(accountId && accountId === asset.ownerAuthAccountId);
   const canDeleteAsset = isAuthenticated && (accountId === asset.ownerAuthAccountId || canModerateAssets(permissionSource));
+
+  useEffect(() => setDisplayAsset(sourceAsset), [sourceAsset]);
+
+  useEffect(() => {
+    if (activeIndex >= media.length) setActiveIndex(0);
+  }, [activeIndex, media.length]);
+
+  function selectGalleryImage(index: number) {
+    if (index === activeIndex) return;
+    setGalleryDirection(index > activeIndex ? 1 : -1);
+    setActiveIndex(index);
+  }
+
+  function moveGallery(offset: number) {
+    setGalleryDirection(offset > 0 ? 1 : -1);
+    setActiveIndex((current) => (current + offset + media.length) % media.length);
+  }
 
   async function copyText(label: string, value: string) {
     try {
@@ -156,8 +179,22 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
       toast.info("Sign in to thank assets.", { description: "Thanks are saved to your account." });
       return;
     }
-    await setAssetLike(asset.id, !liked, token);
-    await onRefresh();
+    if (isOwnAsset) {
+      toast.info("You can't thank your own asset.", { description: "Thanks are for other creators' assets." });
+      return;
+    }
+    const nextLiked = !liked;
+    replayReaction(setLikeBurst);
+    const previousAsset = asset;
+    setDisplayAsset((current) => optimisticEngagement(current, "likeCount", "liked", nextLiked));
+    try {
+      const result = await setAssetLike(asset.publicId || asset.id, nextLiked, token);
+      setDisplayAsset((current) => ({ ...current, engagement: result.engagement, viewerEngagement: result.viewerEngagement ?? current.viewerEngagement }));
+      toast.success(nextLiked ? `Liked ${asset.title}` : `Removed like from ${asset.title}`, { description: nextLiked ? "Thanks sent." : "Thanks removed." });
+    } catch (error) {
+      setDisplayAsset(previousAsset);
+      toast.error("Could not update thank", { description: error instanceof Error ? error.message : "Try again." });
+    }
   }
 
   async function toggleFavorite() {
@@ -166,8 +203,18 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
       toast.info("Sign in to favorite assets.", { description: "Favorites are saved to your account." });
       return;
     }
-    await setAssetFavorite(asset.id, !favorited, token);
-    await onRefresh();
+    const nextFavorited = !favorited;
+    replayReaction(setFavoriteBurst);
+    const previousAsset = asset;
+    setDisplayAsset((current) => optimisticEngagement(current, "favoriteCount", "favorited", nextFavorited));
+    try {
+      const result = await setAssetFavorite(asset.publicId || asset.id, nextFavorited, token);
+      setDisplayAsset((current) => ({ ...current, engagement: result.engagement, viewerEngagement: result.viewerEngagement ?? current.viewerEngagement }));
+      toast.success(nextFavorited ? `Favourited ${asset.title}` : `Removed favourite from ${asset.title}`, { description: nextFavorited ? "Saved to favourites." : "Removed from favourites." });
+    } catch (error) {
+      setDisplayAsset(previousAsset);
+      toast.error("Could not update favourite", { description: error instanceof Error ? error.message : "Try again." });
+    }
   }
 
   async function deleteAsset() {
@@ -188,11 +235,13 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
-      <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" href="/library">
-        Back to library
-      </Link>
+      <motion.div initial={motionInitial(reduceMotion, 6)} animate={motionAnimate} transition={motionTransition(0)}>
+        <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" href="/library">
+          Back to library
+        </Link>
+      </motion.div>
 
-      <motion.header className="mt-5 border-b border-border pb-5" initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18, ease: "easeOut" }}>
+      <motion.header className="mt-5 border-b border-border pb-5" initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.03)}>
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
             <h1 className="font-primary text-balance text-4xl font-semibold uppercase leading-none tracking-tight">{asset.title}</h1>
@@ -212,18 +261,18 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
               </Button>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button type="button" className={`workshop-control-free group ml-3 inline-flex items-center gap-2 px-2 py-1 text-lg font-semibold transition-[color,filter] hover:text-primary hover:drop-shadow-[0_0_8px_currentColor] ${liked ? "text-primary drop-shadow-[0_0_8px_currentColor]" : "text-muted-foreground"}`} aria-label={liked ? "Remove thank" : "Thank"} onClick={() => void toggleLike()}>
-                    <ThumbsUp className="h-7 w-7 fill-none transition-colors" aria-hidden="true" />
+                  <motion.button type="button" className={`workshop-control-free workshop-reaction-button group ml-3 inline-flex items-center gap-2 px-2 py-1 text-lg font-semibold hover:text-primary hover:drop-shadow-[0_0_8px_currentColor] ${liked ? "text-primary drop-shadow-[0_0_8px_currentColor]" : "text-muted-foreground"}`} aria-label={liked ? "Remove thank" : "Thank"} whileTap={reactionTap(reduceMotion)} animate={reactionBurst(likeBurst, reduceMotion)} transition={reactionTransition} onClick={() => void toggleLike()} onAnimationComplete={() => setLikeBurst(false)}>
+                    <ThumbsUp className="workshop-reaction-icon h-7 w-7 fill-none transition-colors" aria-hidden="true" />
                     {formatCount(asset.engagement?.likeCount ?? 0)}
-                  </button>
+                  </motion.button>
                 </TooltipTrigger>
                 <TooltipContent>{liked ? "Remove thank" : "Thank"}</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button type="button" className={`workshop-control-free group inline-flex items-center px-2 py-1 transition-colors hover:text-yellow-400 ${favorited ? "text-yellow-400" : "text-muted-foreground"}`} aria-label={favorited ? "Unfavorite" : "Favorite"} onClick={() => void toggleFavorite()}>
-                    <Star className={`h-7 w-7 transition-colors ${favorited ? "fill-current" : "fill-none group-hover:fill-current"}`} aria-hidden="true" />
-                  </button>
+                  <motion.button type="button" className={`workshop-control-free workshop-reaction-button group inline-flex items-center px-2 py-1 hover:text-yellow-400 hover:drop-shadow-[0_0_8px_currentColor] ${favorited ? "text-yellow-400 drop-shadow-[0_0_8px_currentColor]" : "text-muted-foreground"}`} aria-label={favorited ? "Unfavorite" : "Favorite"} whileTap={reactionTap(reduceMotion)} animate={reactionBurst(favoriteBurst, reduceMotion)} transition={reactionTransition} onClick={() => void toggleFavorite()} onAnimationComplete={() => setFavoriteBurst(false)}>
+                    <Star className={`workshop-reaction-icon h-7 w-7 transition-colors ${favorited ? "fill-current" : "fill-none group-hover:fill-current"}`} aria-hidden="true" />
+                  </motion.button>
                 </TooltipTrigger>
                 <TooltipContent>{favorited ? "Unfavorite" : "Favorite"}</TooltipContent>
               </Tooltip>
@@ -244,19 +293,29 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
       </motion.header>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <motion.section className="min-w-0 space-y-5" initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: "easeOut", delay: reduceMotion ? 0 : 0.03 }}>
-          <section className="border border-border bg-card/50 p-3">
-            <GalleryImage media={activeMedia} title={asset.title} />
+        <motion.section className="min-w-0 space-y-5" initial={motionInitial(reduceMotion, 10)} animate={motionAnimate} transition={motionTransition(0.06)}>
+          <motion.section className="workshop-gallery-card border border-border bg-card/50 p-3" initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.09)}>
+            <GalleryImage media={activeMedia} title={asset.title} direction={galleryDirection} reduceMotion={reduceMotion} />
             {media.length > 1 ? (
-              <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
-                {media.map((item, index) => (
-                  <GalleryThumb key={`${item.url}-${index}`} item={item} title={asset.title} active={index === activeIndex} onClick={() => setActiveIndex(index)} />
-                ))}
+              <div className="workshop-gallery-rail mt-3">
+                <GalleryNavButton label="Previous image" onClick={() => moveGallery(-1)}>
+                  <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+                </GalleryNavButton>
+                <div className="workshop-gallery-thumbs">
+                  {media.map((item, index) => (
+                    <motion.div key={`${item.url}-${index}`} initial={motionInitial(reduceMotion, 6)} animate={motionAnimate} transition={motionTransition(0.12 + Math.min(index, 8) * 0.02)}>
+                      <GalleryThumb item={item} title={asset.title} active={index === activeIndex} onClick={() => selectGalleryImage(index)} />
+                    </motion.div>
+                  ))}
+                </div>
+                <GalleryNavButton label="Next image" onClick={() => moveGallery(1)}>
+                  <ChevronRight className="h-5 w-5" aria-hidden="true" />
+                </GalleryNavButton>
               </div>
             ) : null}
-          </section>
+          </motion.section>
 
-          <section className="border border-border bg-card/50 p-5">
+          <motion.section className="border border-border bg-card/50 p-5" initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.13)}>
             {asset.descriptionMarkdown ? (
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                 {asset.descriptionMarkdown}
@@ -264,11 +323,12 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
             ) : (
               <p className="text-sm text-muted-foreground">No description yet.</p>
             )}
-          </section>
+          </motion.section>
         </motion.section>
 
-        <motion.aside className="grid content-start gap-4" initial={reduceMotion ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: "easeOut", delay: reduceMotion ? 0 : 0.06 }}>
-          <SideCard title="Tags" variant="secondary">
+        <motion.aside className="grid content-start gap-4" initial={motionInitial(reduceMotion, 10)} animate={motionAnimate} transition={motionTransition(0.08)}>
+          <motion.div initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.11)}>
+            <SideCard title="Tags" variant="secondary">
             <div className="flex flex-wrap gap-2">
               <AssetTag variant="category" size="md">
                 {formatLabel(category)}
@@ -285,31 +345,38 @@ function AssetDetailContent({ asset, onRefresh }: { asset: WorkshopAsset; onRefr
                 </AssetTag>
               )}
             </div>
-          </SideCard>
+            </SideCard>
+          </motion.div>
 
-          <SideCard title="Creator" variant="secondary">
-            <div className="text-sm font-semibold text-foreground">{asset.authorDisplayName}</div>
-            <div className="mt-1 text-xs text-muted-foreground">Owner</div>
-          </SideCard>
+          <motion.div initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.14)}>
+            <SideCard title="Creator" variant="secondary">
+              <div className="text-sm font-semibold text-foreground">{asset.authorDisplayName}</div>
+              <div className="mt-1 text-xs text-muted-foreground">Owner</div>
+            </SideCard>
+          </motion.div>
 
-          <SideCard title="Details" variant="secondary">
-            <dl className="grid gap-2 text-sm">
-              <SummaryRow label="Type" value={formatLabel(asset.type)} />
-              <SummaryRow label="Category" value={formatLabel(category)} />
-              <SummaryRow label="Summary" value={summary} />
-              <SummaryRow label="Published" value={formatDate(asset.createdAt)} />
-              <SummaryRow label="Updated" value={formatDate(asset.updatedAt)} />
-            </dl>
-          </SideCard>
+          <motion.div initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.17)}>
+            <SideCard title="Details" variant="secondary">
+              <dl className="grid gap-2 text-sm">
+                <SummaryRow label="Type" value={formatLabel(asset.type)} />
+                <SummaryRow label="Category" value={formatLabel(category)} />
+                <SummaryRow label="Summary" value={summary} />
+                <SummaryRow label="Published" value={formatDate(asset.createdAt)} />
+                <SummaryRow label="Updated" value={formatDate(asset.updatedAt)} />
+              </dl>
+            </SideCard>
+          </motion.div>
 
-          <SideCard title="Payload" variant="secondary">
-            <AssetSummary asset={asset} />
-            {textureUrls.length > 0 ? (
-              <Button className="mt-3 w-full" type="button" variant="ghost" onClick={() => copyText("texture URLs", textureUrls.join("\n"))}>
-                Copy Texture URLs
-              </Button>
-            ) : null}
-          </SideCard>
+          <motion.div initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.2)}>
+            <SideCard title="Payload" variant="secondary">
+              <AssetSummary asset={asset} />
+              {textureUrls.length > 0 ? (
+                <Button className="mt-3 w-full" type="button" variant="ghost" onClick={() => copyText("texture URLs", textureUrls.join("\n"))}>
+                  Copy Texture URLs
+                </Button>
+              ) : null}
+            </SideCard>
+          </motion.div>
         </motion.aside>
       </div>
 
@@ -476,7 +543,7 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
   const comments = commentsQuery.data?.comments.map((comment) => toItem(comment)) ?? [];
 
   return (
-    <motion.section className="mt-5 border-t border-border pt-5" initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18, ease: "easeOut", delay: reduceMotion ? 0 : 0.08 }}>
+    <motion.section className="mt-5 border-t border-border pt-5" initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.1)}>
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-primary text-2xl uppercase leading-none text-foreground">Comments</h2>
@@ -485,18 +552,21 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
         {!isAuthenticated ? <span className="text-sm text-muted-foreground">Sign in to comment or report.</span> : null}
       </div>
 
-      <CommentBox
-        value={body}
-        onChange={setBody}
-        onSubmit={() => void submitComment()}
-        submitLabel="Comment"
-        placeholder="Write a comment..."
-        disabled={busy || !isAuthenticated}
-        textareaProps={{ maxLength: 1000 }}
-      />
+      <motion.div initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.13)}>
+        <CommentBox
+          value={body}
+          onChange={setBody}
+          onSubmit={() => void submitComment()}
+          submitLabel="Comment"
+          placeholder="Write a comment..."
+          disabled={busy || !isAuthenticated}
+          textareaProps={{ maxLength: 1000 }}
+        />
+      </motion.div>
 
-      <div className="mt-4">
+      <motion.div className="mt-4" initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.16)}>
         <CommentSection
+          className="workshop-comment-stagger"
           comments={comments}
           empty={commentsQuery.isLoading ? "Loading comments..." : commentsQuery.isError ? "Comments could not be loaded." : "No comments yet."}
           renderBody={(comment) => (
@@ -521,7 +591,7 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
             </>
           )}
         />
-      </div>
+      </motion.div>
     </motion.section>
   );
 }
@@ -581,7 +651,7 @@ function SummaryRow({ label, value }: { label: string; value?: string | null }) 
   );
 }
 
-function GalleryImage({ media, title }: { media?: WorkshopMedia; title: string }) {
+function GalleryImage({ media, title, direction, reduceMotion }: { media?: WorkshopMedia; title: string; direction: number; reduceMotion: boolean | null }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -599,9 +669,23 @@ function GalleryImage({ media, title }: { media?: WorkshopMedia; title: string }
   }
 
   return (
-    <div className="relative aspect-video overflow-hidden bg-muted/50">
-      {!loaded ? <div className="absolute inset-0 animate-pulse bg-muted" aria-hidden="true" /> : null}
-      <img className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} src={media.url} alt={media.description || title} onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
+    <div className="workshop-gallery-image relative aspect-video overflow-hidden bg-muted/50">
+      {!loaded ? <ThumbnailLoading /> : null}
+      <AnimatePresence mode="wait" custom={direction}>
+        <motion.img
+          key={media.url}
+          className="absolute inset-0 h-full w-full object-contain"
+          src={media.url}
+          alt={media.description || title}
+          custom={direction}
+          initial={reduceMotion ? false : { opacity: 0, x: direction * 24, scale: 0.985 }}
+          animate={{ opacity: loaded ? 1 : 0, x: 0, scale: 1 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: direction * -20, scale: 0.99 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+        />
+      </AnimatePresence>
     </div>
   );
 }
@@ -614,10 +698,28 @@ function GalleryThumb({ item, title, active, onClick }: { item: WorkshopMedia; t
   }, [item.url]);
 
   return (
-    <button type="button" className={`workshop-control-free relative aspect-video overflow-hidden border bg-muted/50 ${active ? "border-primary" : "border-border"}`} onClick={onClick}>
-      {!loaded ? <div className="absolute inset-0 animate-pulse bg-muted" aria-hidden="true" /> : null}
-      <img className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} src={item.url} alt={item.description || title} loading="lazy" onLoad={() => setLoaded(true)} onError={() => setLoaded(true)} />
+    <button type="button" className={`workshop-control-free workshop-gallery-thumb relative aspect-video overflow-hidden bg-muted/50 ${active ? "is-active" : ""}`} aria-current={active ? "true" : undefined} onClick={onClick}>
+      {!loaded ? <div className="absolute inset-0 grid place-items-center bg-muted/50"><Spinner size="sm" variant="primary" label="Loading thumbnail" /></div> : null}
+      <img className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} src={item.url} alt={item.description || title} loading="lazy" onLoad={() => setLoaded(true)} onError={() => setLoaded(true)} />
     </button>
+  );
+}
+
+function GalleryNavButton({ children, label, onClick }: { children: ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button type="button" className="workshop-control-free workshop-gallery-nav" aria-label={label} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
+function ThumbnailLoading() {
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-muted/50">
+      <div className="flex animate-pulse items-center gap-2 font-primary text-xs font-semibold uppercase text-muted-foreground">
+        <Spinner size="sm" variant="primary" label="Loading thumbnail" />
+      </div>
+    </div>
   );
 }
 
@@ -687,4 +789,41 @@ function formatDate(value: string) {
 
 function formatCount(value: number) {
   return new Intl.NumberFormat(undefined, { notation: "compact" }).format(value);
+}
+
+function optimisticEngagement(asset: WorkshopAsset, countKey: "likeCount" | "favoriteCount", viewerKey: "liked" | "favorited", enabled: boolean): WorkshopAsset {
+  const engagement = asset.engagement ?? { likeCount: 0, favoriteCount: 0, viewCount: 0, downloadCount: 0, commentCount: 0 };
+  const wasEnabled = Boolean(asset.viewerEngagement?.[viewerKey]);
+  const delta = enabled === wasEnabled ? 0 : enabled ? 1 : -1;
+  return {
+    ...asset,
+    engagement: { ...engagement, [countKey]: Math.max(0, engagement[countKey] + delta) },
+    viewerEngagement: { liked: Boolean(asset.viewerEngagement?.liked), favorited: Boolean(asset.viewerEngagement?.favorited), [viewerKey]: enabled },
+  };
+}
+
+const motionAnimate = { opacity: 1, y: 0 };
+
+function motionInitial(reduceMotion: boolean | null, y: number) {
+  return reduceMotion ? false : { opacity: 0, y };
+}
+
+function motionTransition(delay: number) {
+  return { duration: 0.18, ease: "easeOut" as const, delay };
+}
+
+const reactionTransition = { duration: 0.46, ease: "easeOut" as const };
+
+function reactionTap(reduceMotion: boolean | null) {
+  return reduceMotion ? undefined : { scale: 0.82, rotate: -4 };
+}
+
+function reactionBurst(active: boolean, reduceMotion: boolean | null) {
+  if (reduceMotion || !active) return { scale: 1, rotate: 0 };
+  return { scale: [1, 0.82, 1.18, 0.96, 1.04, 1], rotate: [0, -7, 7, -4, 3, 0] };
+}
+
+function replayReaction(setBurst: (value: boolean) => void) {
+  setBurst(false);
+  window.requestAnimationFrame(() => setBurst(true));
 }

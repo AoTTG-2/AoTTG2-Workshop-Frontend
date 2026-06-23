@@ -86,6 +86,7 @@ export interface AssetListQuery {
   tag?: string;
   category?: string;
   slot?: string;
+  sort?: string;
   page?: number;
   pageSize?: number;
 }
@@ -97,6 +98,12 @@ export interface AssetListResponse {
   assets: WorkshopAsset[];
 }
 
+export interface WorkshopVariantOption {
+  id: string;
+  label: string;
+  previewUrl?: string | null;
+}
+
 export interface VariantCatalog {
   hairMale: string[];
   hairFemale: string[];
@@ -106,6 +113,8 @@ export interface VariantCatalog {
   head: string[];
   back: string[];
   humanSkinParts: string[];
+  humanCompatibilitySlots?: string[];
+  humanCompatibilityVariants?: Record<string, WorkshopVariantOption[]>;
 }
 
 export interface WorkshopComment {
@@ -280,6 +289,7 @@ export async function listAssets(query: AssetListQuery = {}): Promise<AssetListR
   if (query.tag?.trim()) params.set("tag", query.tag.trim());
   if (query.category?.trim()) params.set("category", query.category.trim());
   if (query.slot?.trim()) params.set("slot", query.slot.trim());
+  if (query.sort?.trim()) params.set("sort", query.sort.trim());
   if (query.page && query.page > 1) params.set("page", String(query.page));
   if (query.pageSize) params.set("pageSize", String(query.pageSize));
 
