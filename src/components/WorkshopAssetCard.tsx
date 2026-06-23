@@ -142,7 +142,8 @@ function assetCategory(asset: WorkshopAsset) {
 function summarizeAsset(asset: WorkshopAsset) {
   if (asset.type === "skin_part" && isSkinPartPayload(asset.payload)) {
     const variants = asset.payload.variantScope === "specific" && asset.payload.variants?.length ? `: ${asset.payload.variants.join(", ")}` : "";
-    return `${asset.payload.slot ?? "Skin part"}${variants}`;
+    const boots = asset.payload.slot === "Costume" ? ` - Boots ${asset.payload.boots === false ? "Off" : "On"}` : "";
+    return `${asset.payload.slot ?? "Skin part"}${variants}${boots}`;
   }
 
   if (asset.type === "skin_set" && isSkinSetPayload(asset.payload)) {

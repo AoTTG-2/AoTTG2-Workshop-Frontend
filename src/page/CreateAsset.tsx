@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, Textarea } from "@aottg2/ui";
-import { Backpack, Badge, Bold, Cable, Cloud, Code, Code2, Cog, Crown, Eye, Flag, Glasses, Hand, Heading, Image as ImageIcon, Italic, Link as LinkIcon, List, ListOrdered, Map, Palette, Quote, Rocket, Search, Shield, Shirt, Smile, Sparkles, Strikethrough, UserRound, Zap } from "lucide-react";
+import { Button, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, Spinner, Textarea } from "@aottg2/ui";
+import { Backpack, Badge, Bold, Cable, Cloud, Code, Code2, Cog, Crown, Eye, Flag, Footprints, Glasses, Hand, Heading, Image as ImageIcon, Italic, Link as LinkIcon, List, ListOrdered, Map, Palette, Quote, Rocket, Search, Shield, Shirt, Smile, Sparkles, Strikethrough, UserRound, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ElementRef, FormEvent, ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
@@ -11,7 +11,8 @@ import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { getAccessToken } from "../auth/storage";
 import { useAuth } from "../auth/useAuth";
-import { assetPath, createAsset, getVariantCatalog, setCreatorName, type VariantCatalog, type WorkshopAsset, type WorkshopVariantOption } from "../lib/api/workshop";
+import { canModerateAssets } from "../auth/workshopPermissions";
+import { assetPath, createAsset, getVariantCatalog, listAssets, setCreatorName, updateAsset, type SkinPartPayload, type SkinSetPayload, type VariantCatalog, type WorkshopAsset, type WorkshopVariantOption } from "../lib/api/workshop";
 import { WORKSHOP_STATIC_API_ORIGIN } from "../lib/config";
 import { toast } from "../lib/toast";
 import { SideCard } from "../components/SideCard";
@@ -22,9 +23,13 @@ type WizardStep = "type" | "listing" | "data" | "description";
 
 interface VariantTargetForm {
   slot: string;
+  source?: "url" | "asset";
+  skinAssetId?: string | null;
+  linkedAsset?: WorkshopAsset | null;
   textureUrl: string;
   variants: string[];
   hookTiling?: string;
+  boots?: boolean;
 }
 
 const wizardSteps: { key: WizardStep; label: string }[] = [
@@ -33,6 +38,7 @@ const wizardSteps: { key: WizardStep; label: string }[] = [
   { key: "listing", label: "Listing" },
   { key: "description", label: "Publish" },
 ];
+const editWizardSteps = wizardSteps.filter((step) => step.key !== "type");
 const previewCreatedAt = new Date().toISOString();
 const previewEngagement = {
   downloadCount: 152,
@@ -130,7 +136,6 @@ const fallbackCatalog: VariantCatalog = {
     "Hat",
     "Head",
     "Back",
-    "Boots",
   ],
   humanCompatibilitySlots: ["Hair", "Costume", "Hat", "Head", "Back"],
   humanCompatibilityVariants: {
@@ -179,6 +184,7 @@ const itemSchema = z
     textureUrl: httpUrl,
     variants: z.array(z.string()),
     hookTiling: z.string().trim().optional(),
+    boots: z.boolean().optional(),
   });
 
 const skinPartSchema = commonSchema
@@ -187,11 +193,8 @@ const skinPartSchema = commonSchema
     textureUrl: httpUrl,
     variants: z.array(z.string()),
     hookTiling: z.string().trim().optional(),
+    boots: z.boolean().optional(),
   });
-
-const skinSetSchema = commonSchema.extend({
-  items: z.array(itemSchema).min(1, "Add at least one set item"),
-});
 
 function splitList(value: string | undefined) {
   return (value ?? "")
@@ -235,6 +238,14 @@ function isHookSlot(slot: string) {
   return slot === "HookL" || slot === "HookR";
 }
 
+function isCostumeSlot(slot: string) {
+  return slot === "Costume";
+}
+
+function targetSlotPatch(value: VariantTargetForm, slot: string) {
+  return { ...value, slot, skinAssetId: null, linkedAsset: null, variants: [], hookTiling: isHookSlot(slot) ? value.hookTiling || "1" : undefined, boots: isCostumeSlot(slot) ? value.boots ?? true : undefined };
+}
+
 function hookTilingSlot(slot: string) {
   return slot === "HookL" ? "HookLTiling" : "HookRTiling";
 }
@@ -246,6 +257,10 @@ function hookTilingPayload(value: { slot: string; hookTiling?: string }) {
     throw new Error(`${skinTypeLabel(value.slot)} tiling must be greater than 0`);
   }
   return { tilingSlot: hookTilingSlot(value.slot), tiling };
+}
+
+function bootsPayload(value: { slot: string; boots?: boolean }) {
+  return isCostumeSlot(value.slot) ? { boots: value.boots ?? true } : {};
 }
 
 function prepareTarget(value: VariantTargetForm, catalog: VariantCatalog) {
@@ -260,7 +275,17 @@ function prepareTarget(value: VariantTargetForm, catalog: VariantCatalog) {
     throw new Error(`Choose at least one compatible model for ${skinTypeLabel(data.slot)}`);
   }
 
-  return { slot: data.slot, textureUrl: data.textureUrl, variantScope: "specific" as const, variants };
+  return { slot: data.slot, textureUrl: data.textureUrl, variantScope: "specific" as const, variants, ...bootsPayload(data) };
+}
+
+function prepareSetItem(value: VariantTargetForm, catalog: VariantCatalog) {
+  if (value.source === "asset" || value.skinAssetId) {
+    if (!value.slot) throw new Error("Slot is required");
+    if (!value.skinAssetId) throw new Error(`Choose a ${skinTypeLabel(value.slot)} asset`);
+    return { slot: value.slot, skinAssetId: value.skinAssetId, textureUrl: null, variantScope: null, variants: null };
+  }
+
+  return prepareTarget(value, catalog);
 }
 
 function previewUrl(path: string | null | undefined) {
@@ -300,6 +325,63 @@ function targetTitle(value: VariantTargetForm, catalog: VariantCatalog) {
   return `${label} - ${selected.length} Models`;
 }
 
+function bootsLabel(value: { slot?: string; boots?: boolean | null }) {
+  return value.slot === "Costume" ? `Boots ${value.boots === false ? "Off" : "On"}` : "";
+}
+
+function skinPartSlot(asset: WorkshopAsset) {
+  return asset.type === "skin_part" && "slot" in asset.payload && typeof asset.payload.slot === "string" ? asset.payload.slot : "";
+}
+
+function isEditableAsset(asset: WorkshopAsset | null | undefined): asset is WorkshopAsset & { type: AssetKind } {
+  return asset?.type === "skin_part" || asset?.type === "skin_set";
+}
+
+function commonFromAsset(asset: WorkshopAsset | null | undefined) {
+  const thumbnail = asset?.media.find((item) => item.kind === "thumbnail")?.url ?? "";
+  const galleryUrls = asset?.media.filter((item) => item.kind === "gallery").map((item) => item.url).join("\n") ?? "";
+  return {
+    title: asset?.title ?? "",
+    assetSlug: asset?.assetSlug ?? "",
+    shortDescription: asset?.shortDescription ?? "",
+    descriptionMarkdown: asset?.descriptionMarkdown ?? "",
+    thumbnailUrl: thumbnail,
+    galleryUrls,
+    tags: asset?.tags.join(", ") ?? "",
+  };
+}
+
+function targetFromSkinPart(payload: SkinPartPayload | Record<string, unknown>): VariantTargetForm {
+  const data = payload as SkinPartPayload;
+  return {
+    source: "url",
+    slot: data.slot || "Hair",
+    textureUrl: data.textureUrl || "",
+    variants: Array.isArray(data.variants) ? data.variants : [],
+    boots: data.slot === "Costume" ? data.boots ?? true : undefined,
+  };
+}
+
+function targetsFromSkinSet(payload: SkinSetPayload | Record<string, unknown>): VariantTargetForm[] {
+  const items = (payload as SkinSetPayload).items;
+  if (!Array.isArray(items) || items.length === 0) return [{ slot: "Costume", textureUrl: "", variants: [], boots: true }];
+  return items.map((item) => ({
+    source: item.skinAssetId ? "asset" : "url",
+    slot: item.slot || "Hair",
+    skinAssetId: item.skinAssetId ?? null,
+    textureUrl: item.textureUrl || "",
+    variants: Array.isArray(item.variants) ? item.variants : [],
+    boots: item.slot === "Costume" ? item.boots ?? true : undefined,
+  }));
+}
+
+function updatePayloadFromAssetForm(asset: unknown) {
+  const patch = { ...(asset as Record<string, unknown>) };
+  delete patch.type;
+  delete patch.assetSlug;
+  return patch;
+}
+
 function skinTypeLabel(slot: string) {
   return skinTypeLabels[slot] ?? slot;
 }
@@ -335,41 +417,53 @@ function selectError(error: unknown) {
   return "Create asset failed";
 }
 
-export function CreateAsset() {
+export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "create" | "edit"; initialAsset?: WorkshopAsset | null } = {}) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { profile, refreshProfile, workshopUser } = useAuth();
+  const { isAuthenticated, isLoading, profile, refreshProfile, workshopUser } = useAuth();
   const { data: loadedCatalog } = useQuery({ queryKey: ["workshop", "variants"], queryFn: getVariantCatalog, staleTime: 60 * 60 * 1000 });
   const catalog = loadedCatalog ?? fallbackCatalog;
+  const isEdit = mode === "edit";
+  const steps = isEdit ? editWizardSteps : wizardSteps;
+  const editableAsset = isEditableAsset(initialAsset) ? initialAsset : null;
   const authorName = profile?.displayName ?? "You";
-  const [kind, setKind] = useState<AssetKind>("skin_part");
-  const [step, setStep] = useState<WizardStep>("type");
-  const [common, setCommon] = useState({ title: "", assetSlug: "", shortDescription: "", descriptionMarkdown: "", thumbnailUrl: "", galleryUrls: "", tags: "" });
-  const [part, setPart] = useState<VariantTargetForm>({ slot: "Hair", textureUrl: "", variants: [] });
-  const [items, setItems] = useState<VariantTargetForm[]>([{ slot: "Costume", textureUrl: "", variants: [] }]);
+  const [kind, setKind] = useState<AssetKind>(() => (editableAsset?.type === "skin_set" ? "skin_set" : "skin_part"));
+  const [step, setStep] = useState<WizardStep>(() => (isEdit ? "listing" : "type"));
+  const [common, setCommon] = useState(() => commonFromAsset(editableAsset));
+  const [part, setPart] = useState<VariantTargetForm>(() => (editableAsset?.type === "skin_part" ? targetFromSkinPart(editableAsset.payload) : { slot: "Hair", textureUrl: "", variants: [] }));
+  const [items, setItems] = useState<VariantTargetForm[]>(() => (editableAsset?.type === "skin_set" ? targetsFromSkinSet(editableAsset.payload) : [{ slot: "Costume", textureUrl: "", variants: [], boots: true }]));
   const [creatorDialogOpen, setCreatorDialogOpen] = useState(false);
   const [creatorNameInput, setCreatorNameInput] = useState("");
   const [creatorNameAccepted, setCreatorNameAccepted] = useState(false);
   const [creatorNameBusy, setCreatorNameBusy] = useState(false);
   const [pendingAsset, setPendingAsset] = useState<unknown>(null);
-  const stepIndex = wizardSteps.findIndex((item) => item.key === step);
+  const stepIndex = Math.max(steps.findIndex((item) => item.key === step), 0);
   const normalizedCreatorName = normalizeSlug(creatorNameInput);
   const canSetCreatorName = Boolean(normalizedCreatorName) && normalizedCreatorName.length <= 32 && creatorNameAccepted && !creatorNameBusy;
   const humanPartChoices = catalog.humanSkinParts.filter((slot) => slot && !pairedTilingSlots.has(slot));
+  const accountId = workshopUser?.authAccountId ?? profile?.accountId;
+  const permissionSource = workshopUser ?? profile;
+  const canEditAsset = !isEdit || Boolean(editableAsset && isAuthenticated && (accountId === editableAsset.ownerAuthAccountId || canModerateAssets(permissionSource)));
+  const cancelPath = editableAsset ? assetPath(editableAsset) : "/library";
 
   const mutation = useMutation({
     mutationFn: (asset: unknown) => {
       const token = getAccessToken();
       if (!token) throw new Error("Not logged in");
+      if (isEdit) {
+        if (!editableAsset) throw new Error("This asset type cannot be edited yet.");
+        return updateAsset(token, editableAsset.publicId || editableAsset.id, asset);
+      }
       return createAsset(token, asset);
     },
     onSuccess: (asset) => {
       void queryClient.invalidateQueries({ queryKey: ["workshop", "assets"] });
-      toast.success("Asset created", { description: "Your asset was published." });
+      void queryClient.invalidateQueries({ queryKey: ["workshop", "asset"] });
+      toast.success(isEdit ? "Asset updated" : "Asset created", { description: isEdit ? "Your changes were saved." : "Your asset was published." });
       router.push(assetPath(asset));
     },
     onError: (nextError) => {
-      toast.error("Could not create asset", { description: selectError(nextError), id: "create-asset-error" });
+      toast.error(isEdit ? "Could not update asset" : "Could not create asset", { description: selectError(nextError), id: "create-asset-error" });
     },
   });
 
@@ -381,7 +475,10 @@ export function CreateAsset() {
     if (step === "listing") commonSchema.parse(common);
     if (step === "data") {
       if (kind === "skin_part") prepareTarget(part, catalog);
-      else z.array(itemSchema).min(1, "Add at least one set item").parse(items).forEach((item) => prepareTarget(item, catalog));
+      else {
+        if (items.length === 0) throw new Error("Add at least one set item");
+        items.forEach((item) => prepareSetItem(item, catalog));
+      }
     }
     if (step === "description") buildAsset();
   }
@@ -389,7 +486,7 @@ export function CreateAsset() {
   function goNext() {
     try {
       validateStep();
-      setStep(wizardSteps[Math.min(stepIndex + 1, wizardSteps.length - 1)].key);
+      setStep(steps[Math.min(stepIndex + 1, steps.length - 1)].key);
     } catch (nextError) {
       toast.error("Could not continue", { description: selectError(nextError), id: "create-asset-error" });
     }
@@ -415,7 +512,8 @@ export function CreateAsset() {
       };
     }
 
-    const data = skinSetSchema.parse({ ...common, items });
+    const data = commonSchema.parse(common);
+    if (items.length === 0) throw new Error("Add at least one set item");
     const assetSlug = normalizeSlug(data.assetSlug);
     return {
       type: "skin_set",
@@ -426,7 +524,7 @@ export function CreateAsset() {
       media: mediaFromCommon(data),
       payload: {
         category: "human",
-        items: data.items.map((item) => prepareTarget(item, catalog)),
+        items: items.map((item) => prepareSetItem(item, catalog)),
       },
       tags: splitList(data.tags),
     };
@@ -434,13 +532,18 @@ export function CreateAsset() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (stepIndex < wizardSteps.length - 1) {
+    if (stepIndex < steps.length - 1) {
       goNext();
       return;
     }
 
     try {
       const asset = buildAsset();
+      if (isEdit) {
+        mutation.mutate(updatePayloadFromAssetForm(asset));
+        return;
+      }
+
       if (!workshopUser?.creatorName) {
         setPendingAsset(asset);
         setCreatorDialogOpen(true);
@@ -449,7 +552,7 @@ export function CreateAsset() {
 
       mutation.mutate(asset);
     } catch (nextError) {
-      toast.error("Could not create asset", { description: selectError(nextError), id: "create-asset-error" });
+      toast.error(isEdit ? "Could not update asset" : "Could not create asset", { description: selectError(nextError), id: "create-asset-error" });
     }
   }
 
@@ -485,16 +588,50 @@ export function CreateAsset() {
     if (!open) setPendingAsset(null);
   }
 
+  if (isEdit && !editableAsset) {
+    return (
+      <main className="mx-auto grid min-h-[calc(100vh-120px)] w-full max-w-3xl place-items-center px-6 py-8">
+        <SideCard title="Editing Unavailable" variant="secondary">
+          <p className="text-sm text-muted-foreground">This asset type cannot be edited in the Workshop form yet.</p>
+          <Button type="button" className="mt-4" onClick={() => router.push("/library")}>
+            Back to library
+          </Button>
+        </SideCard>
+      </main>
+    );
+  }
+
+  if (isEdit && isLoading) {
+    return (
+      <main className="grid min-h-[calc(100vh-120px)] place-items-center">
+        <Spinner size="lg" variant="primary" label="Checking access" />
+      </main>
+    );
+  }
+
+  if (isEdit && !canEditAsset) {
+    return (
+      <main className="mx-auto grid min-h-[calc(100vh-120px)] w-full max-w-3xl place-items-center px-6 py-8">
+        <SideCard title="No Edit Access" variant="secondary">
+          <p className="text-sm text-muted-foreground">Only the creator or a Workshop moderator can edit this asset.</p>
+          <Button type="button" className="mt-4" onClick={() => router.push(cancelPath)}>
+            Back to asset
+          </Button>
+        </SideCard>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
       <header className="mb-8">
-        <h1 className="font-primary text-balance text-3xl font-semibold uppercase leading-none tracking-tight">Publish Asset</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Create a URL-backed skin part or embedded-texture skin set.</p>
+        <h1 className="font-primary text-balance text-3xl font-semibold uppercase leading-none tracking-tight">{isEdit ? "Edit Asset" : "Publish Asset"}</h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{isEdit ? "Update the current listing, media URLs, and texture data." : "Create a URL-backed skin part or embedded-texture skin set."}</p>
       </header>
 
       <form className="grid gap-8" onSubmit={handleSubmit}>
-        <nav className="grid gap-2 sm:grid-cols-4" aria-label="Publish steps">
-          {wizardSteps.map((item, index) => (
+        <nav className={`grid gap-2 ${isEdit ? "sm:grid-cols-3" : "sm:grid-cols-4"}`} aria-label={isEdit ? "Edit steps" : "Publish steps"}>
+          {steps.map((item, index) => (
             <Button
               key={item.key}
               type="button"
@@ -534,7 +671,7 @@ export function CreateAsset() {
                   title={skinTypeLabel(slot)}
                   onClick={() => {
                     setKind("skin_part");
-                    setPart((current) => ({ ...current, slot, variants: [], hookTiling: isHookSlot(slot) ? current.hookTiling || "1" : undefined }));
+                    setPart((current) => targetSlotPatch(current, slot));
                   }}
                 />
               ))}
@@ -549,8 +686,8 @@ export function CreateAsset() {
               <Field label="Title">
                 <Input className="h-10 text-sm" value={common.title} onChange={(event) => setCommon({ ...common, title: event.target.value })} />
               </Field>
-              <Field label="Custom URL Slug (Optional)">
-                <Input className="h-10 text-sm" placeholder={normalizeSlug(common.title) || "red-levi-hair"} value={common.assetSlug} onChange={(event) => setCommon({ ...common, assetSlug: event.target.value })} />
+              <Field label={isEdit ? "URL Slug" : "Custom URL Slug (Optional)"}>
+                <Input className="h-10 text-sm" disabled={isEdit} placeholder={normalizeSlug(common.title) || "red-levi-hair"} value={common.assetSlug} onChange={(event) => setCommon({ ...common, assetSlug: event.target.value })} />
               </Field>
               <Field label="Short Description">
                 <Textarea maxLength={144} value={common.shortDescription} onChange={(event) => setCommon({ ...common, shortDescription: event.target.value })} />
@@ -585,12 +722,13 @@ export function CreateAsset() {
                     onChange={(nextItem) => updateItem(index, nextItem)}
                     catalog={catalog}
                     texturePlaceholder="https://i.imgur.com/costume.png"
+                    allowAssetSource
                     onRemove={items.length > 1 ? () => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index)) : undefined}
                   />
                 ))}
               </div>
               <div>
-                <Button type="button" variant="secondary" onClick={() => setItems((current) => [...current, { slot: "Hair", textureUrl: "", variants: [] }])}>
+                <Button type="button" variant="secondary" onClick={() => setItems((current) => [...current, { source: "url", slot: "Hair", textureUrl: "", variants: [] }])}>
                   Add set item
                 </Button>
               </div>
@@ -609,7 +747,7 @@ export function CreateAsset() {
                   onChange={(event) => setCommon({ ...common, galleryUrls: event.target.value })}
                 />
               </Field>
-              <GalleryPreview urls={mediaUrls(common)} title={common.title.trim() || "Untitled Asset"} />
+              <GalleryPreview urls={splitList(common.galleryUrls)} title={common.title.trim() || "Untitled Asset"} />
               <MarkdownEditor value={common.descriptionMarkdown} onChange={(descriptionMarkdown) => setCommon({ ...common, descriptionMarkdown })} />
               <div className="border border-border bg-card/50 p-4 text-sm leading-6 text-foreground">
                 {common.descriptionMarkdown.trim() ? (
@@ -626,16 +764,16 @@ export function CreateAsset() {
         ) : null}
 
         <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-6">
-          <Button type="button" variant="ghost" onClick={() => router.push("/library")}>
+          <Button type="button" variant="ghost" onClick={() => router.push(cancelPath)}>
             Cancel
           </Button>
           {stepIndex > 0 ? (
-            <Button type="button" variant="secondary" onClick={() => setStep(wizardSteps[Math.max(stepIndex - 1, 0)].key)}>
+            <Button type="button" variant="secondary" onClick={() => setStep(steps[Math.max(stepIndex - 1, 0)].key)}>
               Back
             </Button>
           ) : null}
           <Button type="submit" disabled={mutation.isPending}>
-            {stepIndex < wizardSteps.length - 1 ? "Next" : mutation.isPending ? "Creating…" : "Publish Asset"}
+            {stepIndex < steps.length - 1 ? "Next" : mutation.isPending ? (isEdit ? "Saving..." : "Creating...") : isEdit ? "Save Changes" : "Publish Asset"}
           </Button>
         </div>
       </form>
@@ -802,7 +940,7 @@ function ReviewSummary({ kind, common, part, items }: { kind: AssetKind; common:
         <SummaryRow label="Short Description" value={common.shortDescription.trim() || "None"} />
         <SummaryRow label="Media" value={`${mediaUrls(common).length} URL${mediaUrls(common).length === 1 ? "" : "s"}`} />
         <SummaryRow label="Tags" value={splitList(common.tags).join(", ") || "None"} />
-        <SummaryRow label="Asset Data" value={kind === "skin_part" ? `${skinTypeLabel(part.slot)}${part.variants.length ? ` - ${part.variants.length} model${part.variants.length === 1 ? "" : "s"}` : ""}` : `${items.length} set item${items.length === 1 ? "" : "s"}`} />
+        <SummaryRow label="Asset Data" value={kind === "skin_part" ? `${skinTypeLabel(part.slot)}${part.variants.length ? ` - ${part.variants.length} model${part.variants.length === 1 ? "" : "s"}` : ""}${bootsLabel(part) ? ` - ${bootsLabel(part)}` : ""}` : `${items.length} set item${items.length === 1 ? "" : "s"}`} />
       </div>
     </aside>
   );
@@ -875,38 +1013,55 @@ function SkinTargetCard({
   onChange,
   catalog,
   texturePlaceholder,
+  allowAssetSource = false,
   onRemove,
 }: {
   value: VariantTargetForm;
   onChange: (value: VariantTargetForm) => void;
   catalog: VariantCatalog;
   texturePlaceholder: string;
+  allowAssetSource?: boolean;
   onRemove?: () => void;
 }) {
   const [slotOpen, setSlotOpen] = useState(false);
   const [variantOpen, setVariantOpen] = useState(false);
+  const [variantInitialPhase, setVariantInitialPhase] = useState<"models" | "boots">("models");
   const [textureOpen, setTextureOpen] = useState(false);
+  const [assetOpen, setAssetOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
   const compatibilityOptions = compatibilityVariantOptions(value.slot, catalog);
   const needsCompatibility = isCompatibilitySlot(value.slot, catalog);
   const needsHookTiling = isHookSlot(value.slot);
   const selectedOptions = selectedVariantOptions(value, catalog);
+  const isAssetSource = allowAssetSource && (value.source === "asset" || Boolean(value.skinAssetId));
+  const cardTitle = isAssetSource ? `${skinTypeLabel(value.slot)} - Linked Asset` : targetTitle(value, catalog);
 
   function selectSlot(slot: string) {
-    onChange({ ...value, slot, variants: [], hookTiling: isHookSlot(slot) ? value.hookTiling || "1" : undefined });
+    onChange(targetSlotPatch(value, slot));
     setSlotOpen(false);
-    if (isCompatibilitySlot(slot, catalog)) setVariantOpen(true);
+    if (isCompatibilitySlot(slot, catalog)) openVariantPicker();
   }
 
   function toggleVariant(variant: string) {
     onChange({ ...value, variants: value.variants.includes(variant) ? value.variants.filter((item) => item !== variant) : [...value.variants, variant] });
   }
 
+  function openVariantPicker(phase: "models" | "boots" = "models") {
+    setVariantInitialPhase(phase);
+    setVariantOpen(true);
+  }
+
+  function selectAsset(asset: WorkshopAsset) {
+    const slot = skinPartSlot(asset) || value.slot;
+    onChange({ ...targetSlotPatch(value, slot), source: "asset", skinAssetId: asset.id, linkedAsset: asset, textureUrl: "", variants: [], hookTiling: undefined, boots: undefined });
+    setAssetOpen(false);
+  }
+
   return (
     <SideCard
       title={
         <span className="flex h-4 items-center justify-between gap-3">
-          <span className="min-w-0 truncate">{targetTitle(value, catalog)}</span>
+          <span className="min-w-0 truncate">{cardTitle}</span>
           {onRemove ? (
             <Button type="button" variant="ghost" className="!h-4 !min-h-4 w-4 shrink-0 p-0 font-primary text-sm leading-none text-primary-foreground hover:bg-transparent hover:text-primary-foreground/80" onClick={() => setRemoveOpen(true)}>
               X
@@ -917,15 +1072,35 @@ function SkinTargetCard({
       className="border-l-4 border-l-primary"
       contentClassName="grid gap-4"
     >
+      {allowAssetSource ? (
+        <div className="grid grid-cols-2 gap-2">
+          <Button type="button" variant={!isAssetSource ? undefined : "secondary"} onClick={() => onChange({ ...value, source: "url", skinAssetId: null, linkedAsset: null })}>
+            Use URL
+          </Button>
+          <Button type="button" variant={isAssetSource ? undefined : "secondary"} onClick={() => onChange({ ...value, source: "asset", textureUrl: "", variants: [] })}>
+            Use Asset
+          </Button>
+        </div>
+      ) : null}
+
       <div className="grid items-stretch gap-4 sm:grid-cols-[minmax(260px,1fr)_minmax(0,1fr)]">
-        <TexturePreviewButton url={value.textureUrl} label={`${skinTypeLabel(value.slot)} texture`} onClick={() => setTextureOpen(true)} />
+        {isAssetSource ? (
+          <LinkedAssetPreview value={value} onClick={() => setAssetOpen(true)} />
+        ) : (
+          <TexturePreviewButton url={value.textureUrl} label={`${skinTypeLabel(value.slot)} texture`} onClick={() => setTextureOpen(true)} />
+        )}
         <div className="grid content-start gap-3">
           <Button type="button" variant="secondary" className="min-h-16 justify-between gap-3 px-3" onClick={() => setSlotOpen(true)}>
             <span>{skinTypeLabel(value.slot)}</span>
             {skinTypeIcon(value.slot)}
           </Button>
-          {needsCompatibility ? (
-            <Button type="button" variant="secondary" className="min-h-16 justify-between gap-3 px-3" onClick={() => setVariantOpen(true)}>
+          {isAssetSource ? (
+            <Button type="button" variant="secondary" className="min-h-16 justify-between gap-3 px-3" onClick={() => setAssetOpen(true)}>
+              <span>{value.skinAssetId ? "Change Asset" : "Select Asset"}</span>
+              <span className="text-xs">Own assets only</span>
+            </Button>
+          ) : needsCompatibility ? (
+            <Button type="button" variant="secondary" className="min-h-16 justify-between gap-3 px-3" onClick={() => openVariantPicker()}>
               <span>{selectedOptions.length === 1 ? variantDisplayLabel(selectedOptions[0]) : selectedOptions.length ? `${selectedOptions.length} Models` : "Choose Models"}</span>
               <span className="text-xs">{compatibilityOptions.length} available</span>
             </Button>
@@ -940,7 +1115,7 @@ function SkinTargetCard({
           )}
         </div>
       </div>
-      {needsCompatibility && selectedOptions.length > 0 ? (
+      {!isAssetSource && needsCompatibility && (selectedOptions.length > 0 || isCostumeSlot(value.slot)) ? (
         <div className="flex flex-wrap gap-2">
           {selectedOptions.map((option) => {
             const imageUrl = previewUrl(option.previewUrl);
@@ -953,6 +1128,12 @@ function SkinTargetCard({
               </Button>
             );
           })}
+          {isCostumeSlot(value.slot) ? (
+            <Button type="button" variant="secondary" size="sm" className="min-h-8 gap-2 border border-border px-2 text-xs font-semibold" onClick={() => openVariantPicker("boots")}>
+              <Footprints className="h-4 w-4" aria-hidden="true" />
+              {bootsLabel(value)}
+            </Button>
+          ) : null}
         </div>
       ) : null}
       {onRemove ? (
@@ -960,7 +1141,7 @@ function SkinTargetCard({
           <DialogContent variant="destructive">
             <DialogHeader>
               <DialogTitle>Remove Set Item</DialogTitle>
-              <DialogDescription>Remove {targetTitle(value, catalog)} from this skin set.</DialogDescription>
+              <DialogDescription>Remove {cardTitle} from this skin set.</DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setRemoveOpen(false)}>
@@ -973,10 +1154,81 @@ function SkinTargetCard({
           </DialogContent>
         </Dialog>
       ) : null}
-      <TextureUrlDialog open={textureOpen} onOpenChange={setTextureOpen} value={value.textureUrl} label={skinTypeLabel(value.slot)} placeholder={texturePlaceholder} onSave={(textureUrl) => onChange({ ...value, textureUrl })} />
+      <TextureUrlDialog open={textureOpen} onOpenChange={setTextureOpen} value={value.textureUrl} label={skinTypeLabel(value.slot)} placeholder={texturePlaceholder} onSave={(textureUrl) => onChange({ ...value, source: "url", textureUrl, skinAssetId: null, linkedAsset: null })} />
+      {allowAssetSource ? <AssetPickerDialog open={assetOpen} onOpenChange={setAssetOpen} slot={value.slot} selectedId={value.skinAssetId} onSelect={selectAsset} /> : null}
       <SlotPickerDialog slot={value.slot} catalog={catalog} open={slotOpen} onOpenChange={setSlotOpen} onSelect={selectSlot} />
-      {needsCompatibility ? <VariantPickerDialog slot={value.slot} options={compatibilityOptions} selected={value.variants} open={variantOpen} onOpenChange={setVariantOpen} onToggle={toggleVariant} /> : null}
+      {!isAssetSource && needsCompatibility ? <VariantPickerDialog slot={value.slot} options={compatibilityOptions} selected={value.variants} boots={value.boots ?? true} initialPhase={variantInitialPhase} open={variantOpen} onBootsChange={(boots) => onChange({ ...value, boots })} onOpenChange={setVariantOpen} onToggle={toggleVariant} /> : null}
     </SideCard>
+  );
+}
+
+function LinkedAssetPreview({ value, onClick }: { value: VariantTargetForm; onClick: () => void }) {
+  if (value.linkedAsset) {
+    return (
+      <Button type="button" variant="ghost" className="!h-auto w-full p-0 text-left" onClick={onClick}>
+        <WorkshopAssetCard asset={value.linkedAsset} interactive={false} />
+      </Button>
+    );
+  }
+
+  return (
+    <Button type="button" variant="ghost" className="flex !h-full min-h-40 w-full flex-col items-center justify-center gap-2 border border-border bg-muted/40 p-4 text-center text-foreground" onClick={onClick}>
+      <LinkIcon className="h-6 w-6 text-primary" aria-hidden="true" />
+      <span className="font-primary text-lg font-semibold uppercase">{value.skinAssetId ? "Linked Asset" : "Select Asset"}</span>
+      {value.skinAssetId ? <span className="max-w-full truncate text-xs text-muted-foreground">{value.skinAssetId}</span> : <span className="text-xs text-muted-foreground">Choose one of your skin parts</span>}
+    </Button>
+  );
+}
+
+function AssetPickerDialog({ open, onOpenChange, slot, selectedId, onSelect }: { open: boolean; onOpenChange: (open: boolean) => void; slot: string; selectedId?: string | null; onSelect: (asset: WorkshopAsset) => void }) {
+  const [query, setQuery] = useState("");
+  const token = getAccessToken();
+  const assetsQuery = useQuery({
+    queryKey: ["workshop", "asset-picker", slot, query],
+    queryFn: () => listAssets({ mine: true, type: "skin_part", category: "human", slot, q: query, pageSize: 24 }, token),
+    enabled: open,
+  });
+
+  useEffect(() => {
+    if (open) setQuery("");
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>Select {skinTypeLabel(slot)} Asset</DialogTitle>
+          <DialogDescription>Choose one of your published skin parts for this set item.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <label className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input className="h-10 pl-9 text-sm" placeholder="Search your assets" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <span className="sr-only">Search assets</span>
+          </label>
+          {assetsQuery.isLoading ? (
+            <div className="grid min-h-48 place-items-center border border-border bg-card/40">
+              <Spinner size="sm" variant="primary" label="Loading assets" />
+            </div>
+          ) : assetsQuery.isError ? (
+            <div className="border border-border bg-card/40 p-6 text-sm text-muted-foreground">Could not load your assets.</div>
+          ) : assetsQuery.data?.assets.length ? (
+            <div className="grid max-h-[62vh] gap-4 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
+              {assetsQuery.data.assets.map((asset) => {
+                const selected = asset.id === selectedId;
+                return (
+                  <Button key={asset.id} type="button" variant={selected ? undefined : "ghost"} className={`!h-auto p-0 text-left ${selected ? "ring-2 ring-primary" : ""}`} onClick={() => onSelect(asset)}>
+                    <WorkshopAssetCard asset={asset} interactive={false} />
+                  </Button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="border border-border bg-card/40 p-6 text-sm text-muted-foreground">No matching skin parts yet.</div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1073,20 +1325,28 @@ function VariantPickerDialog({
   slot,
   options,
   selected,
+  boots,
+  initialPhase,
   open,
+  onBootsChange,
   onOpenChange,
   onToggle,
 }: {
   slot: string;
   options: WorkshopVariantOption[];
   selected: string[];
+  boots: boolean;
+  initialPhase: "models" | "boots";
   open: boolean;
+  onBootsChange: (boots: boolean) => void;
   onOpenChange: (open: boolean) => void;
   onToggle: (variant: string) => void;
 }) {
+  const [phase, setPhase] = useState<"models" | "boots">("models");
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState("All");
   const hasGenderGroups = options.some((option) => variantGroup(option.id));
+  const hasBootsStep = isCostumeSlot(slot);
   const normalizedQuery = query.trim().toLowerCase();
   const filteredOptions = options.filter((option) => {
     const label = variantDisplayLabel(option);
@@ -1097,62 +1357,82 @@ function VariantPickerDialog({
 
   useEffect(() => {
     if (open) {
+      setPhase(initialPhase);
       setQuery("");
       setGroup("All");
     }
-  }, [open, slot]);
+  }, [initialPhase, open, slot]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className={phase === "boots" ? "max-w-md" : "max-w-5xl"}>
         <DialogHeader>
-          <DialogTitle>{skinTypeLabel(slot)} Compatible Models</DialogTitle>
-          <DialogDescription>Choose every model this texture fits.</DialogDescription>
+          <DialogTitle>{phase === "boots" ? "Costume Boots" : `${skinTypeLabel(slot)} Compatible Models`}</DialogTitle>
+          <DialogDescription>{phase === "boots" ? "Set the costume boots option." : "Choose every model this texture fits."}</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4">
-          <div className="flex flex-wrap gap-2">
-            <label className="relative min-w-52 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input className="h-10 pl-9 text-sm" placeholder="Search HairM5, Male 5, 5" value={query} onChange={(event) => setQuery(event.target.value)} />
-              <span className="sr-only">Search variants</span>
-            </label>
-            {hasGenderGroups
-              ? ["All", "Male", "Female"].map((item) => (
-                  <Button key={item} type="button" variant={group === item ? undefined : "secondary"} onClick={() => setGroup(item)}>
-                    {item}
-                  </Button>
-                ))
-              : null}
+        {phase === "boots" ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TypeChoice active={boots} icon={<Footprints className="h-5 w-5" aria-hidden="true" />} title="Boots On" onClick={() => onBootsChange(true)} />
+            <TypeChoice active={!boots} icon={<Footprints className="h-5 w-5" aria-hidden="true" />} title="Boots Off" onClick={() => onBootsChange(false)} />
           </div>
-          <div className="max-h-[60vh] overflow-y-auto pr-1">
-            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              {filteredOptions.map((option) => {
-                const label = variantDisplayLabel(option);
-                const imageUrl = previewUrl(option.previewUrl);
-                const checked = selected.includes(option.id);
-                return (
-                  <Button
-                    key={option.id}
-                    type="button"
-                    variant={checked ? "default" : "ghost"}
-                    className={`group grid h-auto min-h-44 gap-2 border p-2 text-center ${checked ? "aottg2-emboss-bg aottg2-cta-primary shadow-[0_3px_0_hsl(var(--primary)/0.45)]" : "bg-[color-mix(in_srgb,hsl(var(--input))_58%,hsl(var(--background)))] shadow-[inset_0_1px_5px_rgb(0_0_0_/_0.28),inset_0_1px_0_rgb(255_255_255_/_0.04)] hover:bg-foreground"}`}
-                    onClick={() => onToggle(option.id)}
-                  >
-                    <span className="grid aspect-square h-28 w-full place-items-center overflow-hidden bg-muted/50">
-                      {imageUrl ? <img className="max-h-full max-w-full object-contain" src={imageUrl} alt={label} loading="lazy" /> : null}
-                    </span>
-                    <span className={`font-primary text-lg font-semibold uppercase leading-none ${checked ? "text-primary-foreground" : "text-foreground group-hover:text-background"}`}>{label}</span>
-                  </Button>
-                );
-              })}
+        ) : (
+          <div className="grid gap-4">
+            <div className="flex flex-wrap gap-2">
+              <label className="relative min-w-52 flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input className="h-10 pl-9 text-sm" placeholder="Search HairM5, Male 5, 5" value={query} onChange={(event) => setQuery(event.target.value)} />
+                <span className="sr-only">Search variants</span>
+              </label>
+              {hasGenderGroups
+                ? ["All", "Male", "Female"].map((item) => (
+                    <Button key={item} type="button" variant={group === item ? undefined : "secondary"} onClick={() => setGroup(item)}>
+                      {item}
+                    </Button>
+                  ))
+                : null}
             </div>
-            {filteredOptions.length === 0 ? <div className="border border-border bg-card/40 p-6 text-sm text-muted-foreground">No models match.</div> : null}
+            <div className="max-h-[60vh] overflow-y-auto pr-1">
+              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                {filteredOptions.map((option) => {
+                  const label = variantDisplayLabel(option);
+                  const imageUrl = previewUrl(option.previewUrl);
+                  const checked = selected.includes(option.id);
+                  return (
+                    <Button
+                      key={option.id}
+                      type="button"
+                      variant={checked ? "default" : "ghost"}
+                      className={`group grid h-auto min-h-44 gap-2 border p-2 text-center ${checked ? "aottg2-emboss-bg aottg2-cta-primary shadow-[0_3px_0_hsl(var(--primary)/0.45)]" : "bg-[color-mix(in_srgb,hsl(var(--input))_58%,hsl(var(--background)))] shadow-[inset_0_1px_5px_rgb(0_0_0_/_0.28),inset_0_1px_0_rgb(255_255_255_/_0.04)] hover:bg-foreground"}`}
+                      onClick={() => onToggle(option.id)}
+                    >
+                      <span className="grid aspect-square h-28 w-full place-items-center overflow-hidden bg-muted/50">
+                        {imageUrl ? <img className="max-h-full max-w-full object-contain" src={imageUrl} alt={label} loading="lazy" /> : null}
+                      </span>
+                      <span className={`font-primary text-lg font-semibold uppercase leading-none ${checked ? "text-primary-foreground" : "text-foreground group-hover:text-background"}`}>{label}</span>
+                    </Button>
+                  );
+                })}
+              </div>
+              {filteredOptions.length === 0 ? <div className="border border-border bg-card/40 p-6 text-sm text-muted-foreground">No models match.</div> : null}
+            </div>
           </div>
-        </div>
+        )}
         <DialogFooter>
-          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
-            Done
-          </Button>
+          {phase === "boots" ? (
+            <Button type="button" variant="ghost" onClick={() => setPhase("models")}>
+              Back
+            </Button>
+          ) : null}
+          {phase === "boots" || !hasBootsStep ? (
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+              Done
+            </Button>
+          ) : null}
+          {phase === "models" && hasBootsStep ? (
+            <Button type="button" onClick={() => setPhase("boots")}>
+              Next
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -26,6 +26,7 @@ export interface SkinPartPayload {
   textureUrl?: string;
   variantScope?: "all" | "specific" | string;
   variants?: string[];
+  boots?: boolean | null;
 }
 
 export interface SkinSetItem {
@@ -34,6 +35,7 @@ export interface SkinSetItem {
   textureUrl?: string | null;
   variantScope?: "all" | "specific" | string | null;
   variants?: string[] | null;
+  boots?: boolean | null;
 }
 
 export interface SkinSetPayload {
@@ -87,6 +89,7 @@ export interface AssetListQuery {
   category?: string;
   slot?: string;
   sort?: string;
+  mine?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -282,7 +285,7 @@ export async function getVariantCatalog(): Promise<VariantCatalog> {
   return parseJson<VariantCatalog>(response);
 }
 
-export async function listAssets(query: AssetListQuery = {}): Promise<AssetListResponse> {
+export async function listAssets(query: AssetListQuery = {}, accessToken?: string | null): Promise<AssetListResponse> {
   const params = new URLSearchParams();
   if (query.q?.trim()) params.set("q", query.q.trim());
   if (query.type) params.set("type", query.type);
@@ -290,13 +293,28 @@ export async function listAssets(query: AssetListQuery = {}): Promise<AssetListR
   if (query.category?.trim()) params.set("category", query.category.trim());
   if (query.slot?.trim()) params.set("slot", query.slot.trim());
   if (query.sort?.trim()) params.set("sort", query.sort.trim());
+  if (query.mine) params.set("mine", "true");
   if (query.page && query.page > 1) params.set("page", String(query.page));
   if (query.pageSize) params.set("pageSize", String(query.pageSize));
 
-  const response = await fetch(`${WORKSHOP_CONTENT_API_BASE_URL}/assets${params.size ? `?${params.toString()}` : ""}`);
+  const response = await fetch(`${WORKSHOP_CONTENT_API_BASE_URL}/assets${params.size ? `?${params.toString()}` : ""}`, {
+    headers: authHeaders(accessToken),
+  });
 
   if (!response.ok) {
     throw new Error("Failed to load assets");
+  }
+
+  return parseJson<AssetListResponse>(response);
+}
+
+export async function listAssetUsedBy(id: string, accessToken?: string | null): Promise<AssetListResponse> {
+  const response = await fetch(`${WORKSHOP_CONTENT_API_BASE_URL}/assets/${encodeURIComponent(id)}/used-by`, {
+    headers: authHeaders(accessToken),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to load linked sets");
   }
 
   return parseJson<AssetListResponse>(response);
@@ -444,4 +462,8 @@ export async function createAsset(accessToken: string, asset: unknown): Promise<
   }
 
   return parseJson<WorkshopAsset>(response);
+}
+
+export async function updateAsset(accessToken: string, id: string, asset: unknown): Promise<WorkshopAsset> {
+  return workshopJson<WorkshopAsset>(`/assets/${encodeURIComponent(id)}`, jsonAuthInit("PATCH", accessToken, asset));
 }

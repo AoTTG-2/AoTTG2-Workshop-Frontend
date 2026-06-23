@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ChevronLeft, ChevronRight, Copy, Download, Eye, Flag, Link as LinkIcon, MessageCircle, MoreHorizontal, Star, ThumbsUp, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Download, Eye, Flag, Link as LinkIcon, MessageCircle, MoreHorizontal, Pencil, Star, ThumbsUp, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "../auth/storage";
@@ -15,7 +15,7 @@ import { useAuth } from "../auth/useAuth";
 import { canModerateAssets, canModerateComments } from "../auth/workshopPermissions";
 import { AssetTag, AssetTagLink } from "../components/AssetTag";
 import { SideCard } from "../components/SideCard";
-import { assetPath, createAssetComment, deleteWorkshopAsset, deleteWorkshopComment, getAsset, getAssetBySeoPath, hideModerationComment, listAssetComments, replyToAssetComment, reportWorkshopComment, setAssetFavorite, setAssetLike, trackAssetDownload, trackAssetView, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopComment, type WorkshopMedia } from "../lib/api/workshop";
+import { assetPath, createAssetComment, deleteWorkshopAsset, deleteWorkshopComment, getAsset, getAssetBySeoPath, hideModerationComment, listAssetComments, listAssetUsedBy, replyToAssetComment, reportWorkshopComment, setAssetFavorite, setAssetLike, trackAssetDownload, trackAssetView, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopComment, type WorkshopMedia } from "../lib/api/workshop";
 import { toast } from "../lib/toast";
 
 const markdownComponents: Components = {
@@ -131,7 +131,14 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
   const accountId = workshopUser?.authAccountId ?? profile?.accountId;
   const permissionSource = workshopUser ?? profile;
   const isOwnAsset = Boolean(accountId && accountId === asset.ownerAuthAccountId);
-  const canDeleteAsset = isAuthenticated && (accountId === asset.ownerAuthAccountId || canModerateAssets(permissionSource));
+  const canEditAsset = isAuthenticated && (isOwnAsset || canModerateAssets(permissionSource));
+  const canDeleteAsset = canEditAsset;
+  const usedByQuery = useQuery({
+    queryKey: ["workshop", "asset-used-by", asset.publicId || asset.id],
+    queryFn: () => listAssetUsedBy(asset.publicId || asset.id, getAccessToken()),
+    enabled: asset.type === "skin_part",
+  });
+  const usedByAssets = usedByQuery.data?.assets ?? [];
 
   useEffect(() => setDisplayAsset(sourceAsset), [sourceAsset]);
 
@@ -283,6 +290,7 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
                 <div className="absolute right-0 top-11 z-20 grid w-44 border border-border bg-popover p-1 text-popover-foreground shadow-md">
                   <MenuAction icon={<Copy className="h-4 w-4" />} label="Copy ID" onClick={() => copyText("asset id", asset.publicId)} />
                   <MenuAction icon={<LinkIcon className="h-4 w-4" />} label="Copy Link" onClick={() => copyText("asset link", publicAssetUrl)} />
+                  {canEditAsset ? <MenuAction icon={<Pencil className="h-4 w-4" />} label="Edit Asset" onClick={() => router.push(`${assetPath(asset)}/edit`)} /> : null}
                   <MenuAction icon={<Flag className="h-4 w-4" />} label="Report" onClick={() => comingSoon("Report")} />
                   {canDeleteAsset ? <MenuAction destructive icon={<Trash2 className="h-4 w-4" />} label="Delete Asset" onClick={deleteAsset} /> : null}
                 </div>
@@ -366,6 +374,12 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
               </dl>
             </SideCard>
           </motion.div>
+
+          {usedByAssets.length > 0 ? (
+            <motion.div initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.19)}>
+              <UsedBySetsCard assets={usedByAssets} />
+            </motion.div>
+          ) : null}
 
           <motion.div initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.2)}>
             <SideCard title="Payload" variant="secondary">
@@ -621,6 +635,7 @@ function AssetSummary({ asset }: { asset: WorkshopAsset }) {
         <SummaryRow label="Slot" value={asset.payload.slot} />
         <SummaryRow label="Scope" value={asset.payload.variantScope} />
         <SummaryRow label="Variants" value={asset.payload.variants?.join(", ")} />
+        {asset.payload.slot === "Costume" ? <SummaryRow label="Boots" value={asset.payload.boots === false ? "Off" : "On"} /> : null}
       </dl>
     );
   }
@@ -631,7 +646,7 @@ function AssetSummary({ asset }: { asset: WorkshopAsset }) {
         {(asset.payload.items ?? []).map((item, index) => (
           <div key={`${item.slot}-${index}`} className="border-l border-border pl-3 text-muted-foreground">
             <div className="font-semibold text-foreground">Item {index + 1}: {item.slot ?? "Unknown slot"}</div>
-            <div className="break-words">{summarizeSetItem(item)}</div>
+            <SetItemSummary item={item} />
           </div>
         ))}
       </div>
@@ -639,6 +654,37 @@ function AssetSummary({ asset }: { asset: WorkshopAsset }) {
   }
 
   return <pre className="overflow-auto bg-muted p-3 text-xs text-foreground">{JSON.stringify(asset.payload, null, 2)}</pre>;
+}
+
+function UsedBySetsCard({ assets }: { assets: WorkshopAsset[] }) {
+  return (
+    <SideCard title="Used In Sets" variant="secondary">
+      <div className="grid gap-2">
+        {assets.map((asset) => (
+          <Link key={asset.id} className="group border border-border bg-muted/30 p-3 hover:border-primary/70 hover:bg-muted/50" href={assetPath(asset)}>
+            <span className="block truncate font-primary text-sm font-semibold uppercase text-foreground group-hover:text-primary">{asset.title}</span>
+            <span className="mt-1 block text-xs text-muted-foreground">by {asset.authorDisplayName}</span>
+          </Link>
+        ))}
+      </div>
+    </SideCard>
+  );
+}
+
+function SetItemSummary({ item }: { item: SkinSetItem }) {
+  const details = summarizeSetItemDetails(item);
+  return (
+    <div className="break-words">
+      {item.skinAssetId ? (
+        <Link className="font-semibold text-primary hover:underline" href={`/library/${encodeURIComponent(item.skinAssetId)}`}>
+          Linked skin part
+        </Link>
+      ) : (
+        <span>{item.textureUrl || "no texture"}</span>
+      )}
+      {details ? <span>{details}</span> : null}
+    </div>
+  );
 }
 
 function SummaryRow({ label, value }: { label: string; value?: string | null }) {
@@ -742,7 +788,8 @@ function assetCategory(asset: WorkshopAsset) {
 function summarizeAsset(asset: WorkshopAsset) {
   if (asset.type === "skin_part" && isSkinPartPayload(asset.payload)) {
     const variants = asset.payload.variantScope === "specific" && asset.payload.variants?.length ? `: ${asset.payload.variants.join(", ")}` : "";
-    return `${asset.payload.slot ?? "Skin part"}${variants}`;
+    const boots = asset.payload.slot === "Costume" ? ` - Boots ${asset.payload.boots === false ? "Off" : "On"}` : "";
+    return `${asset.payload.slot ?? "Skin part"}${variants}${boots}`;
   }
 
   if (asset.type === "skin_set" && isSkinSetPayload(asset.payload)) {
@@ -765,10 +812,10 @@ function collectTextureUrls(asset: WorkshopAsset) {
   return [];
 }
 
-function summarizeSetItem(item: SkinSetItem) {
-  const source = item.skinAssetId ? `references ${item.skinAssetId}` : item.textureUrl ? item.textureUrl : "no texture";
+function summarizeSetItemDetails(item: SkinSetItem) {
   const variants = item.variantScope === "specific" && item.variants?.length ? ` - ${item.variants.join(", ")}` : "";
-  return `${source}${variants}`;
+  const boots = item.slot === "Costume" ? ` - Boots ${item.boots === false ? "Off" : "On"}` : "";
+  return `${variants}${boots}`;
 }
 
 function isSkinPartPayload(payload: WorkshopAsset["payload"]): payload is SkinPartPayload {
