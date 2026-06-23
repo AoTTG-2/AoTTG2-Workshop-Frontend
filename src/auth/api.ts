@@ -1,6 +1,12 @@
 import { clearTokens, getRefreshToken, setTokens } from "./storage";
-import type { ApiResult, AuthResponse, ErrorResponse, ProfileResponse } from "./types";
+import type { ApiResult, AuthResponse, ErrorResponse, ProfilePresetCatalog, ProfileResponse } from "./types";
 import { AUTH_API_BASE_URL } from "../lib/config";
+
+const AUTH_API_ORIGIN = AUTH_API_BASE_URL.replace(/\/v1$/i, "");
+
+export function authAssetUrl(path: string) {
+  return path.startsWith("http") ? path : `${AUTH_API_ORIGIN}${path}`;
+}
 
 async function parseJson<T>(response: Response): Promise<T> {
   try {
@@ -72,4 +78,6 @@ export const authApi = {
     request<AuthResponse & ErrorResponse>(`/auth/oauth/session?code=${encodeURIComponent(code)}`, {}, false),
 
   getProfile: () => request<ProfileResponse>("/me"),
+
+  getProfilePresets: () => request<ProfilePresetCatalog & ErrorResponse>("/profile-presets"),
 };

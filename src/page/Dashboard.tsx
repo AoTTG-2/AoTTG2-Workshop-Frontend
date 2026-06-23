@@ -53,9 +53,9 @@ export function DashboardShell() {
   const unread = dashboardQuery.data?.unreadNotificationCount ?? 0;
 
   return (
-    <main className="min-h-[calc(100vh-80px)] px-4 py-6 lg:px-8">
-      <div className="mx-auto grid w-full max-w-7xl gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <Sidebar className="h-fit">
+    <main className="relative min-h-[calc(100vh-3.5rem)] bg-background lg:min-h-[calc(100vh-4rem)]">
+      <div className="flex min-h-[calc(100vh-3.5rem)] flex-col lg:block lg:min-h-[calc(100vh-4rem)]">
+        <Sidebar className="shrink-0 bg-card shadow-none lg:fixed lg:left-0 lg:top-16 lg:h-[calc(100vh-4rem)] lg:w-64 lg:pl-3">
           <SidebarHeader className="gap-2">
             <div className="font-primary text-lg font-semibold uppercase">Creator Dashboard</div>
             {profilePath ? (
@@ -76,7 +76,7 @@ export function DashboardShell() {
           </SidebarSection>
         </Sidebar>
 
-        <section className="min-w-0">
+        <section className="min-w-0 space-y-5 px-4 py-6 lg:ml-64 lg:px-8">
           {dashboardQuery.isLoading ? (
             <div className="grid min-h-96 place-items-center border border-border bg-card/40">
               <Spinner variant="primary" label="Loading dashboard" />

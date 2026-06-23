@@ -2,6 +2,10 @@ export interface ProfileResponse {
   accountId: string;
   email: string;
   displayName: string;
+  description?: string | null;
+  avatarKey?: string | null;
+  bannerKey?: string | null;
+  socials?: Record<string, string>;
   photonUserId?: string;
   emailVerified: boolean;
   roles: string[];
@@ -32,6 +36,17 @@ export interface AuthResponse {
   accessTokenExpiresAt?: string;
   photonTokenExpiresAt?: string;
   profile: ProfileResponse;
+}
+
+export interface ProfilePreset {
+  key: string;
+  label: string;
+  imageUrl: string;
+}
+
+export interface ProfilePresetCatalog {
+  avatars: ProfilePreset[];
+  banners: ProfilePreset[];
 }
 
 export interface ErrorResponse {

@@ -1,12 +1,15 @@
 "use client";
 
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@aottg2/ui";
+import { useQuery } from "@tanstack/react-query";
 import { Gauge, LogIn, LogOut, Moon, Sun, UserCircle } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { websiteLogoutUrl } from "./auth/loginRedirect";
+import { getAccessToken } from "./auth/storage";
 import { useAuth } from "./auth/useAuth";
+import { listNotifications } from "./lib/api/workshop";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -64,6 +67,14 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
   const accountLabel = isAuthenticated ? profile?.displayName ?? "ACCOUNT" : "LOGIN";
   const libraryActive = pathname === "/library" || pathname === "/";
   const accountActive = pathname === "/dashboard" || pathname === "/login";
+  const accessToken = isAuthenticated ? getAccessToken() : null;
+  const unreadQuery = useQuery({
+    queryKey: ["workshop", "notifications", "nav", profile?.accountId],
+    queryFn: () => listNotifications(accessToken!, 1, 1, true),
+    enabled: Boolean(accessToken),
+    refetchInterval: 60_000,
+  });
+  const hasUnreadNotifications = (unreadQuery.data?.unread ?? 0) > 0;
 
   function closeFocusedMenu() {
     const activeElement = document.activeElement as { blur?: () => void } | null;
@@ -110,6 +121,7 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
           <AccountMenu
             accountActive={accountActive}
             accountLabel={accountLabel}
+            hasUnreadNotifications={hasUnreadNotifications}
             isAuthenticated={isAuthenticated}
             theme={theme}
             nextTheme={nextTheme}
@@ -127,7 +139,7 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
       {mobileOpen ? (
         <nav id="mobile-navigation" className="grid bg-background font-primary text-foreground shadow-[0_18px_30px_rgb(0_0_0_/_0.24)] md:hidden" aria-label="Mobile navigation">
           <MobileNavButton active={libraryActive} onClick={() => go("/library")}>Library</MobileNavButton>
-          <MobileNavButton active={accountActive} onClick={goDashboardOrLogin}>{isAuthenticated ? "Dashboard" : "Login"}</MobileNavButton>
+          <MobileNavButton active={accountActive} showDot={hasUnreadNotifications} onClick={goDashboardOrLogin}>{isAuthenticated ? "Dashboard" : "Login"}</MobileNavButton>
           <MobileNavButton onClick={switchTheme}>Switch to {nextTheme === "dark" ? "Dark" : "Light"} Mode</MobileNavButton>
           {isAuthenticated ? <MobileNavButton onClick={handleLogout}>Logout</MobileNavButton> : null}
         </nav>
@@ -139,6 +151,7 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
 interface AccountMenuProps {
   accountActive: boolean;
   accountLabel: string;
+  hasUnreadNotifications: boolean;
   isAuthenticated: boolean;
   theme: "light" | "dark";
   nextTheme: "light" | "dark";
@@ -147,7 +160,7 @@ interface AccountMenuProps {
   onToggleTheme: () => void;
 }
 
-function AccountMenu({ accountActive, accountLabel, isAuthenticated, theme, nextTheme, onDashboardOrLogin, onLogout, onToggleTheme }: AccountMenuProps) {
+function AccountMenu({ accountActive, accountLabel, hasUnreadNotifications, isAuthenticated, theme, nextTheme, onDashboardOrLogin, onLogout, onToggleTheme }: AccountMenuProps) {
   const nextThemeLabel = nextTheme === "dark" ? "Switch to Dark Mode" : "Switch to Light Mode";
 
   return (
@@ -155,10 +168,11 @@ function AccountMenu({ accountActive, accountLabel, isAuthenticated, theme, next
       <button
         type="button"
         aria-haspopup="menu"
-        className={`workshop-control-free inline-flex max-w-[12rem] cursor-pointer items-center gap-2 transition-colors duration-150 ease-out hover:text-primary focus:text-primary focus:outline-none ${accountActive ? "text-primary" : ""}`}
+        className={`workshop-control-free relative inline-flex max-w-[12rem] cursor-pointer items-center gap-2 transition-colors duration-150 ease-out hover:text-primary focus:text-primary focus:outline-none ${accountActive ? "text-primary" : ""}`}
       >
         <span className="h-4 w-4 shrink-0" aria-hidden="true"><UserCircle className="h-4 w-4" /></span>
         <span className="truncate">{accountLabel}</span>
+        {hasUnreadNotifications ? <span className="absolute -right-2 -top-1 h-2.5 w-2.5 rounded-full bg-destructive ring-2 ring-background" aria-hidden="true" /> : null}
       </button>
       <div className="invisible fixed right-4 top-11 z-[1100] w-56 pt-1 opacity-0 transition-[opacity,visibility] duration-150 ease-out group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 lg:right-8">
         <div role="menu" className={`aottg2-theme aottg2-palette-workshop aottg2-menu-content overflow-hidden rounded-none bg-popover p-1 text-popover-foreground shadow-md ${theme}`}>
@@ -210,10 +224,13 @@ function MenuItem({ children, onClick }: { children: ReactNode; onClick: () => v
   );
 }
 
-function MobileNavButton({ active, children, onClick }: { active?: boolean; children: ReactNode; onClick: () => void | Promise<void> }) {
+function MobileNavButton({ active, children, onClick, showDot }: { active?: boolean; children: ReactNode; onClick: () => void | Promise<void>; showDot?: boolean }) {
   return (
     <button type="button" className={`workshop-control-free w-full p-4 text-left transition-colors duration-150 ease-out hover:bg-muted ${active ? "text-primary" : ""}`} onClick={onClick}>
-      {children}
+      <span className="relative inline-flex items-center gap-2">
+        {children}
+        {showDot ? <span className="h-2.5 w-2.5 rounded-full bg-destructive" aria-hidden="true" /> : null}
+      </span>
     </button>
   );
 }
