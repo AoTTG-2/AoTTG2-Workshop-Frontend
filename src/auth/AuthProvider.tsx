@@ -50,14 +50,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setProfile(data);
 
     try {
-      const workshopSynced = await syncWorkshopUser();
-      if (!workshopSynced) {
-        clearTokens();
-        setProfile(null);
-        setWorkshopUser(null);
-      }
+      await syncWorkshopUser();
     } catch {
-      // non-auth errors should not block startup
+      // Workshop profile sync should not invalidate a valid auth-service session.
       setWorkshopUser(null);
     }
   }, [syncWorkshopUser]);
