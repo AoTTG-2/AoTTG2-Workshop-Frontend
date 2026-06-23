@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
+    "dev:prod-auth": "NEXT_PUBLIC_AUTH_API_BASE_URL=https://aottg2.com NEXT_PUBLIC_AUTH_FRONTEND_BASE_URL=https://aottg2.com NEXT_PUBLIC_WORKSHOP_API_BASE_URL=http://localhost:5011 NEXT_PUBLIC_SITE_URL=http://localhost:5173 next dev -p 5173",
     "build": "next build",
     "optimize:viewer-assets": "node scripts/optimize-viewer-assets.mjs",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
