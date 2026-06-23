@@ -5,7 +5,6 @@ export interface AuthContextValue {
   workshopUser: WorkshopUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   acceptSession: (auth: { accessToken: string; refreshToken: string; profile: ProfileResponse }) => void;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;

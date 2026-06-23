@@ -2,12 +2,17 @@ const normalizeApiBase = (value: string) => value.trim().replace(/\/+$/, "").rep
 const normalizeWorkshopApiBase = (value: string) => normalizeApiBase(value).replace(/\/workshop$/i, "");
 
 const localAuthApi = "http://localhost:5010";
+const localAuthFrontend = "http://localhost:5173";
 const productionAuthApi = "https://aottg2.com";
 const localWorkshopApi = "http://localhost:5011";
 
 export const AUTH_API_BASE_URL = `${
   normalizeApiBase(process.env.NEXT_PUBLIC_AUTH_API_BASE_URL ?? (process.env.NODE_ENV === "production" ? productionAuthApi : localAuthApi))
 }/v1`;
+
+export const AUTH_FRONTEND_LOGIN_URL = `${
+  normalizeApiBase(process.env.NEXT_PUBLIC_AUTH_FRONTEND_BASE_URL ?? (process.env.NODE_ENV === "production" ? productionAuthApi : localAuthFrontend))
+}/login`;
 
 export const WORKSHOP_API_BASE_URL = `${
   normalizeApiBase(process.env.NEXT_PUBLIC_WORKSHOP_API_BASE_URL ?? localWorkshopApi)

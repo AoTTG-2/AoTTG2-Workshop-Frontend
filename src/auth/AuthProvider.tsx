@@ -106,24 +106,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [hydrateSession]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { ok, data } = await authApi.login(email, password);
-    if (!ok || !data.accessToken || !data.refreshToken) {
-      return { ok: false, error: "Login failed. Please try again." };
-    }
-
-    setTokens(data.accessToken, data.refreshToken);
-    setProfile(data.profile);
-
-    try {
-      await syncWorkshopUser();
-    } catch {
-      // keep local auth state; workshop sync can be retried with refreshProfile
-    }
-
-    return { ok: true };
-  }, [syncWorkshopUser]);
-
   const acceptSession = useCallback((auth: AuthResponse) => {
     setTokens(auth.accessToken, auth.refreshToken);
     setProfile(auth.profile);
@@ -150,12 +132,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       workshopUser,
       isAuthenticated: profile !== null,
       isLoading,
-      login,
       acceptSession,
       logout,
       refreshProfile,
     }),
-    [profile, workshopUser, isLoading, login, acceptSession, logout, refreshProfile],
+    [profile, workshopUser, isLoading, acceptSession, logout, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

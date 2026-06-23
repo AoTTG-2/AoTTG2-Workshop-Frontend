@@ -9,11 +9,16 @@ import { useAuth } from "./auth/useAuth";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) router.replace("/login");
-  }, [isAuthenticated, isLoading, router]);
+    if (!isLoading && !isAuthenticated) {
+      const query = window.location.search.replace(/^\?/, "");
+      const next = `${pathname}${query ? `?${query}` : ""}`;
+      router.replace(`/login?next=${encodeURIComponent(next)}`);
+    }
+  }, [isAuthenticated, isLoading, pathname, router]);
 
   if (isLoading || !isAuthenticated) {
     return (

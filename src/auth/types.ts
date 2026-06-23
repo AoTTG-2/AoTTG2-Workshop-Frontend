@@ -1,5 +1,3 @@
-export type OAuthProvider = "discord" | "google";
-
 export interface ProfileResponse {
   accountId: string;
   email: string;
@@ -37,12 +35,6 @@ export interface AuthResponse {
 }
 
 export interface ErrorResponse {
-  error?: string;
-}
-
-export interface OAuthStartResponse {
-  authorizationUrl: string;
-  state: string;
   error?: string;
 }
 

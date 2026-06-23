@@ -95,7 +95,7 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
   const totalPages = Math.max(1, Math.ceil((query.data?.total ?? 0) / pageSize));
 
   function handleAddAsset() {
-    router.push(isAuthenticated ? "/library/publish" : "/login");
+    router.push(isAuthenticated ? "/library/publish" : "/login?next=%2Flibrary%2Fpublish");
   }
 
   function updateParams(next: { q?: string; type?: string; tag?: string; category?: string; slot?: string; sort?: string; page?: number }) {

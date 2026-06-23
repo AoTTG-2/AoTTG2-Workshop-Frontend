@@ -1,5 +1,5 @@
 import { clearTokens, getRefreshToken, setTokens } from "./storage";
-import type { ApiResult, AuthResponse, OAuthProvider, OAuthStartResponse, ProfileResponse } from "./types";
+import type { ApiResult, AuthResponse, ErrorResponse, ProfileResponse } from "./types";
 import { AUTH_API_BASE_URL } from "../lib/config";
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -62,20 +62,14 @@ async function request<T = unknown>(
 }
 
 export const authApi = {
-  login: (email: string, password: string) =>
-    request<AuthResponse>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }, false),
-
   logout: (refreshToken: string) =>
     request<{ ok?: boolean }>("/auth/logout", {
       method: "POST",
       body: JSON.stringify({ refreshToken }),
     }, false),
 
-  oauthStart: (provider: OAuthProvider) =>
-    request<OAuthStartResponse>(`/auth/oauth/${provider}/start`),
+  oauthSession: (code: string) =>
+    request<AuthResponse & ErrorResponse>(`/auth/oauth/session?code=${encodeURIComponent(code)}`, {}, false),
 
   getProfile: () => request<ProfileResponse>("/me"),
 };
