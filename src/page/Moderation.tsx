@@ -1,22 +1,24 @@
 "use client";
 
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, Sidebar, SidebarHeader, SidebarItem, SidebarSection, Spinner, Textarea } from "@aottg2/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, DataTable, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, EmptyState, FilterBar, Input, Label, SearchInput, Sidebar, SidebarHeader, SidebarItem, SidebarSection, Spinner, Textarea } from "@aottg2/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Archive, EyeOff, FileWarning, MessageCircle, RotateCcw, ShieldAlert, Trash2, UserRound } from "lucide-react";
+import { Archive, EyeOff, FileText, FileWarning, MessageCircle, RotateCcw, ShieldAlert, Trash2, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { canAccessWorkshopModeration, canModerateAssets, canModerateComments, canResolveReports } from "../auth/workshopPermissions";
+import { canAccessWorkshopModeration, canModerateAssets, canModerateComments, canReadWorkshopAudit, canResolveReports } from "../auth/workshopPermissions";
 import { getAccessToken } from "../auth/storage";
 import { useAuth } from "../auth/useAuth";
-import { deleteWorkshopAsset, dismissModerationReport, hideModerationAsset, hideModerationComment, listModerationAssets, listModerationComments, listModerationReports, resolveModerationReport, restoreModerationAsset, restoreModerationComment, type WorkshopAsset, type WorkshopComment, type WorkshopReport } from "../lib/api/workshop";
+import { deleteWorkshopAsset, dismissModerationReport, hideModerationAsset, hideModerationComment, listModerationAssets, listModerationAuditEvents, listModerationComments, listModerationReports, resolveModerationReport, restoreModerationAsset, restoreModerationComment, type WorkshopAsset, type WorkshopAuditEvent, type WorkshopComment, type WorkshopReport } from "../lib/api/workshop";
 import { queryClient } from "../lib/queryClient";
 import { toast } from "../lib/toast";
 
 type ReportStatus = "open" | "resolved" | "dismissed";
 type ReportType = "all" | "asset" | "comment" | "account";
-type View = "reports" | "assets-hidden" | "assets-deleted" | "comments-hidden";
+type View = "reports" | "assets-hidden" | "assets-deleted" | "comments-hidden" | "audits";
+type AuditViewMode = "readable" | "technical";
 type ReportAction = "hide-asset" | "delete-asset" | "hide-comment";
 const pageSize = 15;
+const auditPageSize = 50;
 
 const statusFilters: { id: ReportStatus; label: string }[] = [
   { id: "open", label: "Open" },
@@ -31,6 +33,21 @@ const typeFilters: { id: ReportType; label: string; icon: ReactNode }[] = [
   { id: "account", label: "Accounts", icon: <UserRound className="h-4 w-4" /> },
 ];
 
+function firstAllowedView(reports: boolean, assets: boolean, comments: boolean, audits: boolean): View {
+  if (reports) return "reports";
+  if (assets) return "assets-hidden";
+  if (comments) return "comments-hidden";
+  if (audits) return "audits";
+  return "reports";
+}
+
+function viewAllowed(view: View, reports: boolean, assets: boolean, comments: boolean, audits: boolean) {
+  if (view === "reports") return reports;
+  if (view === "assets-hidden" || view === "assets-deleted") return assets;
+  if (view === "comments-hidden") return comments;
+  return audits;
+}
+
 export function ModerationShell() {
   const { profile, workshopUser, isLoading } = useAuth();
   const permissionSource = workshopUser ?? profile;
@@ -41,39 +58,58 @@ export function ModerationShell() {
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [auditEventType, setAuditEventType] = useState("");
+  const [auditViewMode, setAuditViewMode] = useState<AuditViewMode>("readable");
   const canAccess = canAccessWorkshopModeration(permissionSource);
+  const canReadReports = canResolveReports(permissionSource);
+  const canReadAssets = canModerateAssets(permissionSource);
+  const canReadComments = canModerateComments(permissionSource);
+  const canReadAudits = canReadWorkshopAudit(permissionSource);
 
   const reportsQuery = useQuery({
     queryKey: ["workshop", "moderation", "reports", status, type, page],
     queryFn: () => listModerationReports(token!, status, type === "all" ? undefined : type, page, pageSize),
-    enabled: Boolean(token && canAccess && view === "reports"),
+    enabled: Boolean(token && canReadReports && view === "reports"),
   });
   const openReportsQuery = useQuery({
     queryKey: ["workshop", "moderation", "reports", "open-dot"],
     queryFn: () => listModerationReports(token!, "open", undefined, 1, 1),
-    enabled: Boolean(token && canAccess),
+    enabled: Boolean(token && canReadReports),
   });
   const assetsQuery = useQuery({
     queryKey: ["workshop", "moderation", "assets", view, page],
     queryFn: () => listModerationAssets(token!, view === "assets-deleted" ? "deleted" : "hidden", page, pageSize),
-    enabled: Boolean(token && canAccess && (view === "assets-hidden" || view === "assets-deleted")),
+    enabled: Boolean(token && canReadAssets && (view === "assets-hidden" || view === "assets-deleted")),
   });
   const commentsQuery = useQuery({
     queryKey: ["workshop", "moderation", "comments", "hidden", page],
     queryFn: () => listModerationComments(token!, "hidden", page, pageSize),
-    enabled: Boolean(token && canAccess && view === "comments-hidden"),
+    enabled: Boolean(token && canReadComments && view === "comments-hidden"),
+  });
+  const auditsQuery = useQuery({
+    queryKey: ["workshop", "moderation", "audit-events", auditEventType, page],
+    queryFn: () => listModerationAuditEvents(token!, auditEventType, page, auditPageSize),
+    enabled: Boolean(token && canReadAudits && view === "audits"),
   });
 
   const reports = useMemo(() => reportsQuery.data?.reports ?? [], [reportsQuery.data?.reports]);
   const assets = useMemo(() => assetsQuery.data?.assets ?? [], [assetsQuery.data?.assets]);
   const comments = useMemo(() => commentsQuery.data?.comments ?? [], [commentsQuery.data?.comments]);
+  const auditEvents = useMemo(() => auditsQuery.data?.events ?? [], [auditsQuery.data?.events]);
   const hasOpenReports = (openReportsQuery.data?.total ?? 0) > 0;
   const selectedReport = useMemo(() => reports.find((item) => item.id === selectedId) ?? reports[0] ?? null, [reports, selectedId]);
   const selectedAsset = useMemo(() => assets.find((item) => item.id === selectedId) ?? assets[0] ?? null, [assets, selectedId]);
   const selectedComment = useMemo(() => comments.find((item) => item.id === selectedId) ?? comments[0] ?? null, [comments, selectedId]);
 
   useEffect(() => {
-    const first = view === "reports" ? reports[0]?.id : view === "comments-hidden" ? comments[0]?.id : assets[0]?.id;
+    if (!canAccess || viewAllowed(view, canReadReports, canReadAssets, canReadComments, canReadAudits)) return;
+    setView(firstAllowedView(canReadReports, canReadAssets, canReadComments, canReadAudits));
+    setPage(1);
+    setSelectedId(null);
+  }, [canAccess, canReadAssets, canReadAudits, canReadComments, canReadReports, view]);
+
+  useEffect(() => {
+    const first = view === "reports" ? reports[0]?.id : view === "comments-hidden" ? comments[0]?.id : view === "audits" ? null : assets[0]?.id;
     if (!selectedId && first) setSelectedId(first);
   }, [assets, comments, reports, selectedId, view]);
 
@@ -81,6 +117,7 @@ export function ModerationShell() {
   if (!canAccess) return <EmptyPanel title="Moderation unavailable" text="Workshop moderation permissions are required." />;
 
   function showReports(nextStatus = status, nextType = type) {
+    if (!canReadReports) return;
     setView("reports");
     setStatus(nextStatus);
     setType(nextType);
@@ -89,6 +126,9 @@ export function ModerationShell() {
   }
 
   function showInventory(nextView: View) {
+    if ((nextView === "assets-hidden" || nextView === "assets-deleted") && !canReadAssets) return;
+    if (nextView === "comments-hidden" && !canReadComments) return;
+    if (nextView === "audits" && !canReadAudits) return;
     setView(nextView);
     setPage(1);
     setSelectedId(null);
@@ -106,32 +146,51 @@ export function ModerationShell() {
           <SidebarHeader>
             <div className="font-primary text-lg font-semibold uppercase">Moderation</div>
           </SidebarHeader>
+          {canReadReports ? (
+            <>
+              <SidebarSection>
+                {statusFilters.map((item) => (
+                  <SidebarItem key={item.id} active={view === "reports" && status === item.id} icon={<Archive className="h-4 w-4" />} onClick={() => showReports(item.id, type)}>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span>{item.label}</span>
+                      {item.id === "open" && hasOpenReports ? <NotificationDot /> : null}
+                    </span>
+                  </SidebarItem>
+                ))}
+              </SidebarSection>
+              <SidebarSection>
+                {typeFilters.map((item) => (
+                  <SidebarItem key={item.id} active={view === "reports" && type === item.id} icon={item.icon} onClick={() => showReports(status, item.id)}>
+                    {item.label}
+                  </SidebarItem>
+                ))}
+              </SidebarSection>
+            </>
+          ) : null}
           <SidebarSection>
-            {statusFilters.map((item) => (
-              <SidebarItem key={item.id} active={view === "reports" && status === item.id} icon={<Archive className="h-4 w-4" />} onClick={() => showReports(item.id, type)}>
-                <span className="flex min-w-0 items-center gap-2">
-                  <span>{item.label}</span>
-                  {item.id === "open" && hasOpenReports ? <NotificationDot /> : null}
-                </span>
-              </SidebarItem>
-            ))}
-          </SidebarSection>
-          <SidebarSection>
-            {typeFilters.map((item) => (
-              <SidebarItem key={item.id} active={view === "reports" && type === item.id} icon={item.icon} onClick={() => showReports(status, item.id)}>
-                {item.label}
-              </SidebarItem>
-            ))}
-          </SidebarSection>
-          <SidebarSection>
-            <SidebarItem active={view === "assets-hidden"} icon={<EyeOff className="h-4 w-4" />} onClick={() => showInventory("assets-hidden")}>Hidden Assets</SidebarItem>
-            <SidebarItem active={view === "assets-deleted"} icon={<Trash2 className="h-4 w-4" />} onClick={() => showInventory("assets-deleted")}>Deleted Assets</SidebarItem>
-            <SidebarItem active={view === "comments-hidden"} icon={<MessageCircle className="h-4 w-4" />} onClick={() => showInventory("comments-hidden")}>Hidden Comments</SidebarItem>
+            {canReadAssets ? <SidebarItem active={view === "assets-hidden"} icon={<EyeOff className="h-4 w-4" />} onClick={() => showInventory("assets-hidden")}>Hidden Assets</SidebarItem> : null}
+            {canReadAssets ? <SidebarItem active={view === "assets-deleted"} icon={<Trash2 className="h-4 w-4" />} onClick={() => showInventory("assets-deleted")}>Deleted Assets</SidebarItem> : null}
+            {canReadComments ? <SidebarItem active={view === "comments-hidden"} icon={<MessageCircle className="h-4 w-4" />} onClick={() => showInventory("comments-hidden")}>Hidden Comments</SidebarItem> : null}
+            {canReadAudits ? <SidebarItem active={view === "audits"} icon={<FileText className="h-4 w-4" />} onClick={() => showInventory("audits")}>Audit Logs</SidebarItem> : null}
           </SidebarSection>
         </Sidebar>
 
-        <section className="grid min-w-0 gap-4 px-4 py-6 lg:ml-64 lg:grid-cols-[minmax(280px,420px)_minmax(0,1fr)] lg:px-8">
-          {view === "reports" ? (
+        <section className={`grid min-w-0 gap-4 px-4 py-6 lg:ml-64 lg:px-8 ${view === "audits" ? "" : "lg:grid-cols-[minmax(280px,420px)_minmax(0,1fr)]"}`}>
+          {view === "audits" ? (
+            <AuditLogView
+              events={auditEvents}
+              error={auditsQuery.isError}
+              eventType={auditEventType}
+              loading={auditsQuery.isLoading}
+              mode={auditViewMode}
+              page={page}
+              total={auditsQuery.data?.total ?? 0}
+              onEventType={setAuditEventType}
+              onMode={setAuditViewMode}
+              onPage={goPage}
+              onRefresh={() => void auditsQuery.refetch()}
+            />
+          ) : view === "reports" ? (
             <>
               <div className="grid content-start gap-3">
                 <ReportList reports={reports} selectedId={selectedReport?.id ?? null} loading={reportsQuery.isLoading} error={reportsQuery.isError} onSelect={setSelectedId} />
@@ -177,6 +236,88 @@ function ReportList({ reports, selectedId, loading, error, onSelect }: { reports
           </div>
         </button>
       ))}
+    </div>
+  );
+}
+
+function AuditLogView({
+  events,
+  error,
+  eventType,
+  loading,
+  mode,
+  page,
+  total,
+  onEventType,
+  onMode,
+  onPage,
+  onRefresh,
+}: {
+  events: WorkshopAuditEvent[];
+  error: boolean;
+  eventType: string;
+  loading: boolean;
+  mode: AuditViewMode;
+  page: number;
+  total: number;
+  onEventType: (value: string) => void;
+  onMode: (value: AuditViewMode) => void;
+  onPage: (page: number) => void;
+  onRefresh: () => void;
+}) {
+  const columns = mode === "readable" ? [
+    {
+      key: "created",
+      header: "Timestamp",
+      cell: (event: WorkshopAuditEvent) => <span className="whitespace-nowrap tabular-nums">{formatDate(event.createdAt)}</span>,
+    },
+    {
+      key: "activity",
+      header: "Activity",
+      cell: (event: WorkshopAuditEvent) => <div className="text-sm text-foreground">{renderAuditActivity(event)}</div>,
+    },
+  ] : [
+    { key: "created", header: "Created", cell: (event: WorkshopAuditEvent) => formatDate(event.createdAt) },
+    { key: "event", header: "Event", cell: (event: WorkshopAuditEvent) => <Badge variant="outline">{event.eventType}</Badge> },
+    { key: "actor", header: "Actor", cell: (event: WorkshopAuditEvent) => <span className="font-mono text-xs">{event.actorAuthAccountId ?? "system"}</span> },
+    { key: "target", header: "Target", cell: (event: WorkshopAuditEvent) => <span className="font-mono text-xs">{event.targetKind}:{event.targetId}</span> },
+    { key: "metadata", header: "Metadata", cell: (event: WorkshopAuditEvent) => <span className="break-all font-mono text-xs text-muted-foreground">{event.metadataJson ?? "-"}</span> },
+  ];
+
+  return (
+    <div className="grid gap-4">
+      <Card className="border-border bg-card text-card-foreground">
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <CardTitle>Audit logs</CardTitle>
+            <Badge variant="secondary">{total} total</Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <FilterBar className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
+            <SearchInput value={eventType} onChange={(event: { target: { value: string } }) => { onEventType(event.target.value); onPage(1); }} onClear={() => { onEventType(""); onPage(1); }} placeholder="Filter event type" className="max-w-none" />
+            <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto md:pr-2">
+              <Button type="button" variant={mode === "readable" ? "default" : "secondary"} onClick={() => onMode("readable")}>Readable</Button>
+              <Button type="button" variant={mode === "technical" ? "default" : "secondary"} onClick={() => onMode("technical")}>Technical</Button>
+              <Button type="button" variant="secondary" onClick={onRefresh}>Refresh</Button>
+            </div>
+          </FilterBar>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border bg-card text-card-foreground">
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex min-h-48 items-center justify-center p-6"><Spinner label="Loading audit logs" /></div>
+          ) : error ? (
+            <EmptyState title="Could not load audit logs" description="Try again or check your Workshop audit permission." action={<Button type="button" onClick={onRefresh}>Try again</Button>} />
+          ) : (
+            <DataTable className="admin-data-table" columns={columns} data={events} getRowKey={(event) => event.id} emptyTitle="No audit events" emptyDescription="Try another event type filter." />
+          )}
+        </CardContent>
+      </Card>
+
+      <PageControls total={total} page={page} pageSize={auditPageSize} onPage={onPage} />
     </div>
   );
 }
@@ -444,8 +585,8 @@ function listItemClass(active: boolean) {
   return `grid !h-auto !min-h-24 content-start gap-2 overflow-hidden border p-3 text-left transition-colors hover:border-primary hover:bg-card ${active ? "border-primary bg-card" : "border-border bg-card/40"}`;
 }
 
-function PageControls({ total, page, onPage }: { total: number; page: number; onPage: (page: number) => void }) {
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+function PageControls({ total, page, onPage, pageSize: size = pageSize }: { total: number; page: number; onPage: (page: number) => void; pageSize?: number }) {
+  const totalPages = Math.max(1, Math.ceil(total / size));
   if (totalPages <= 1) return null;
   return (
     <div className="flex items-center justify-between gap-3 border border-border bg-card/40 p-3">
@@ -472,6 +613,33 @@ function targetTitle(report: WorkshopReport) {
 
 function snapshotSummary(snapshot: Record<string, unknown>) {
   return snapshotValue(snapshot, "title") || snapshotValue(snapshot, "assetTitle") || snapshotValue(snapshot, "body") || snapshotValue(snapshot, "displayName") || snapshotValue(snapshot, "creatorName") || "No snapshot";
+}
+
+function renderAuditActivity(event: WorkshopAuditEvent) {
+  const metadata = parseSnapshot(event.metadataJson ?? undefined);
+  const actor = event.actorAuthAccountId ?? "system";
+  const target = snapshotSummary(metadata) || `${event.targetKind} ${event.targetId}`;
+  const action = auditActionLabel(event.eventType);
+
+  return (
+    <span className="flex flex-wrap gap-1.5">
+      <span className="font-medium">{actor}</span>
+      <span className="text-muted-foreground">{action}</span>
+      <span>{target}</span>
+    </span>
+  );
+}
+
+function auditActionLabel(eventType: string) {
+  if (eventType === "workshop.asset_hidden") return "hid";
+  if (eventType === "workshop.asset_restored") return "restored";
+  if (eventType === "workshop.asset_deleted") return "deleted";
+  if (eventType === "workshop.asset_updated") return "updated";
+  if (eventType === "workshop.comment_hidden") return "hid comment on";
+  if (eventType === "workshop.comment_restored") return "restored comment on";
+  if (eventType === "workshop.report_resolved") return "resolved report for";
+  if (eventType === "workshop.report_dismissed") return "dismissed report for";
+  return eventType;
 }
 
 function actorLabel(displayName?: string | null, fallback?: string) {

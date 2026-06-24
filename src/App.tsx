@@ -9,8 +9,8 @@ import type { ReactNode } from "react";
 import { websiteLogoutUrl } from "./auth/loginRedirect";
 import { getAccessToken } from "./auth/storage";
 import { useAuth } from "./auth/useAuth";
-import { canAccessWorkshopModeration } from "./auth/workshopPermissions";
-import { listNotifications, setCreatorName } from "./lib/api/workshop";
+import { canAccessWorkshopModeration, canResolveReports } from "./auth/workshopPermissions";
+import { listModerationReports, listNotifications, setCreatorName } from "./lib/api/workshop";
 import { toast } from "./lib/toast";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
@@ -72,7 +72,9 @@ function TopBar() {
   const creatorsActive = pathname === "/creators";
   const moderationActive = pathname === "/moderation";
   const accountActive = pathname === "/dashboard" || pathname === "/login";
-  const canAccessModeration = canAccessWorkshopModeration(workshopUser ?? profile);
+  const permissionSource = workshopUser ?? profile;
+  const canAccessModeration = canAccessWorkshopModeration(permissionSource);
+  const canReadReports = canResolveReports(permissionSource);
   const accessToken = isAuthenticated ? getAccessToken() : null;
   const unreadQuery = useQuery({
     queryKey: ["workshop", "notifications", "nav", profile?.accountId],
@@ -80,7 +82,14 @@ function TopBar() {
     enabled: Boolean(accessToken),
     refetchInterval: 60_000,
   });
+  const openReportsQuery = useQuery({
+    queryKey: ["workshop", "moderation", "reports", "nav-dot"],
+    queryFn: () => listModerationReports(accessToken!, "open", undefined, 1, 1),
+    enabled: Boolean(accessToken && canReadReports),
+    refetchInterval: 60_000,
+  });
   const hasUnreadNotifications = (unreadQuery.data?.unread ?? 0) > 0;
+  const hasOpenReports = (openReportsQuery.data?.total ?? 0) > 0;
   const normalizedCreatorName = normalizeSlug(creatorNameInput);
   const canSetCreatorName = Boolean(normalizedCreatorName) && normalizedCreatorName.length <= 32 && creatorNameAccepted && !creatorNameBusy;
 
@@ -168,8 +177,11 @@ function TopBar() {
           </button>
           {canAccessModeration ? (
             <button type="button" className={`workshop-control-free inline-flex items-center gap-2 transition-colors duration-150 ease-out hover:text-primary ${moderationActive ? "text-primary" : ""}`} onClick={() => go("/moderation")}>
-              <ShieldAlert className="h-4 w-4" aria-hidden="true" />
-              MODERATION
+              <span className="relative inline-flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+                MODERATION
+                {hasOpenReports ? <NotificationDot /> : null}
+              </span>
             </button>
           ) : null}
           <AccountMenu
@@ -193,7 +205,7 @@ function TopBar() {
         <nav id="mobile-navigation" className="grid bg-background font-primary text-foreground shadow-[0_18px_30px_rgb(0_0_0_/_0.24)] md:hidden" aria-label="Mobile navigation">
           <MobileNavButton active={libraryActive} onClick={() => go("/library")}>Library</MobileNavButton>
           <MobileNavButton active={creatorsActive} onClick={() => go("/creators")}>Creators</MobileNavButton>
-          {canAccessModeration ? <MobileNavButton active={moderationActive} onClick={() => go("/moderation")}>Moderation</MobileNavButton> : null}
+          {canAccessModeration ? <MobileNavButton active={moderationActive} showDot={hasOpenReports} onClick={() => go("/moderation")}>Moderation</MobileNavButton> : null}
           {!isLoading && isAuthenticated ? <MobileNavButton onClick={goProfileOrLogin}>Profile</MobileNavButton> : null}
           <MobileNavButton active={accountActive} disabled={isLoading} showDot={hasUnreadNotifications} onClick={goDashboardOrLogin}>{isLoading ? "Account" : isAuthenticated ? "Dashboard" : "Login"}</MobileNavButton>
           {!isLoading && isAuthenticated ? <MobileNavButton onClick={handleLogout}>Logout</MobileNavButton> : null}

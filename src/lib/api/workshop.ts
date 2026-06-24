@@ -298,6 +298,23 @@ export interface ReportListResponse {
   reports: WorkshopReport[];
 }
 
+export interface WorkshopAuditEvent {
+  id: string;
+  eventType: string;
+  actorAuthAccountId?: string | null;
+  targetKind: string;
+  targetId: string;
+  metadataJson?: string | null;
+  createdAt: string;
+}
+
+export interface WorkshopAuditEventListResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  events: WorkshopAuditEvent[];
+}
+
 interface ApiError {
   error?: string;
   title?: string;
@@ -651,6 +668,12 @@ export async function restoreModerationAsset(assetId: string, accessToken: strin
 export async function listModerationComments(accessToken: string, status: "reported" | "hidden" = "reported", page = 1, pageSize = 24): Promise<CommentListResponse> {
   const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
   return workshopJson<CommentListResponse>(`/moderation/comments?${params.toString()}`, { headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function listModerationAuditEvents(accessToken: string, eventType = "", page = 1, pageSize = 50): Promise<WorkshopAuditEventListResponse> {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (eventType.trim()) params.set("eventType", eventType.trim());
+  return workshopJson<WorkshopAuditEventListResponse>(`/moderation/audit-events?${params.toString()}`, { headers: { authorization: `Bearer ${accessToken}` } });
 }
 
 export async function hideModerationComment(commentId: string, accessToken: string): Promise<WorkshopComment> {
