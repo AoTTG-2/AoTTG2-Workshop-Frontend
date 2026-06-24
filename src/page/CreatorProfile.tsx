@@ -11,6 +11,7 @@ import type { ProfilePreset } from "../auth/types";
 import { useAuth } from "../auth/useAuth";
 import { ReportDialog } from "../components/ReportDialog";
 import { WorkshopAssetCard } from "../components/WorkshopAssetCard";
+import { AUTH_FRONTEND_PROFILE_URL } from "../lib/config";
 import { assetPath, reportWorkshopAccount, type PublicCreator, type WorkshopAsset } from "../lib/api/workshop";
 import { toast } from "../lib/toast";
 
@@ -76,12 +77,16 @@ export function CreatorProfile({ creator }: { creator: PublicCreator }) {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                {!isOwnProfile ? (
+                {isOwnProfile ? (
+                  <Button type="button" variant="secondary" onClick={() => { window.location.href = AUTH_FRONTEND_PROFILE_URL; }}>
+                    Edit Profile
+                  </Button>
+                ) : (
                   <Button type="button" variant="secondary" onClick={() => setReportOpen(true)}>
                     <Flag className="h-4 w-4" aria-hidden="true" />
                     Report
                   </Button>
-                ) : null}
+                )}
                 <Button type="button" onClick={() => router.push("/library")}>Browse Library</Button>
               </div>
             </div>

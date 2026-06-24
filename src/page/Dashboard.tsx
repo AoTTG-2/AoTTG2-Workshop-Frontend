@@ -1,13 +1,12 @@
 "use client";
 
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, CommentBox, Sidebar, SidebarHeader, SidebarItem, SidebarSection, Spinner, StatCard, renderCommentMarkdown } from "@aottg2/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, CommentBox, Sidebar, SidebarHeader, SidebarItem, SidebarSection, Spinner, StatCard, renderCommentMarkdown } from "@aottg2/ui";
 import { Bell, Eye, FolderOpen, MessageCircle, Pin, ThumbsUp, Download } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { getAccessToken } from "../auth/storage";
-import { useAuth } from "../auth/useAuth";
 import { WorkshopAssetCard } from "../components/WorkshopAssetCard";
 import { queryClient } from "../lib/queryClient";
 import {
@@ -38,8 +37,6 @@ const tabs: { id: DashboardTab; label: string; icon: ReactNode }[] = [
 ];
 
 export function DashboardShell() {
-  const router = useRouter();
-  const { workshopUser } = useAuth();
   const [tab, setTab] = useState<DashboardTab>("overview");
   const token = getAccessToken();
 
@@ -49,7 +46,6 @@ export function DashboardShell() {
     enabled: Boolean(token),
   });
 
-  const profilePath = workshopUser?.creatorName ? `/${encodeURIComponent(workshopUser.creatorName)}` : null;
   const unread = dashboardQuery.data?.unreadNotificationCount ?? 0;
 
   return (
@@ -58,18 +54,13 @@ export function DashboardShell() {
         <Sidebar className="shrink-0 bg-card shadow-none lg:fixed lg:left-0 lg:top-16 lg:h-[calc(100vh-4rem)] lg:w-64 lg:pl-3">
           <SidebarHeader className="gap-2">
             <div className="font-primary text-lg font-semibold uppercase">Creator Dashboard</div>
-            {profilePath ? (
-              <Button type="button" variant="secondary" size="sm" onClick={() => router.push(profilePath)}>
-                Public Profile
-              </Button>
-            ) : null}
           </SidebarHeader>
           <SidebarSection>
             {tabs.map((item) => (
               <SidebarItem key={item.id} active={tab === item.id} icon={item.icon} onClick={() => setTab(item.id)}>
                 <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
                   <span>{item.label}</span>
-                  {item.id === "notifications" && unread > 0 ? <Badge variant="secondary">{formatCount(unread)}</Badge> : null}
+                  {item.id === "notifications" && unread > 0 ? <NotificationDot /> : null}
                 </span>
               </SidebarItem>
             ))}
@@ -106,15 +97,6 @@ function OverviewPanel({ data, onTab }: { data: Awaited<ReturnType<typeof getCre
         <StatCard label="Downloads" value={formatCount(data.stats.downloadCount)} icon={<Download className="h-5 w-5" />} />
         <StatCard label="Thanks" value={formatCount(data.stats.likeCount)} icon={<ThumbsUp className="h-5 w-5" />} />
         <StatCard label="Comments" value={formatCount(data.stats.commentCount)} icon={<MessageCircle className="h-5 w-5" />} />
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-2">
-        <DashboardSection title="Recent Comments" action={<Button variant="secondary" size="sm" onClick={() => onTab("comments")}>View All</Button>}>
-          <CommentRows comments={data.recentComments} compact />
-        </DashboardSection>
-        <DashboardSection title="Recent Notifications" action={<Button variant="secondary" size="sm" onClick={() => onTab("notifications")}>View All</Button>}>
-          <NotificationRows notifications={data.recentNotifications} compact />
-        </DashboardSection>
       </div>
 
       <DashboardSection title="Recent Assets" action={<Button variant="secondary" size="sm" onClick={() => onTab("assets")}>Manage</Button>}>
@@ -332,9 +314,11 @@ function NotificationRow({ notification, compact }: { notification: WorkshopNoti
   return (
     <div className={`grid gap-2 border border-border bg-card/50 p-4 ${notification.readAt ? "opacity-70" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-primary text-sm font-semibold uppercase">{notificationLabel(notification.type)}</div>
+        <div className="flex items-center gap-2 font-primary text-sm font-semibold uppercase">
+          {!notification.readAt ? <NotificationDot /> : null}
+          {notificationLabel(notification.type)}
+        </div>
         <div className="flex items-center gap-2">
-          {!notification.readAt ? <Badge>Unread</Badge> : null}
           <span className="text-xs text-muted-foreground">{formatDate(notification.createdAt)}</span>
         </div>
       </div>
@@ -396,6 +380,10 @@ function EmptyPanel({ title, text }: { title: string; text: string }) {
       <p className="text-sm text-muted-foreground">{text}</p>
     </div>
   );
+}
+
+function NotificationDot() {
+  return <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-destructive" aria-hidden="true" />;
 }
 
 async function invalidateDashboard() {

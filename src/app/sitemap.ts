@@ -13,7 +13,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const creatorNames = [...new Set(data.assets.map((asset) => asset.creatorName).filter(Boolean))];
     routes.push(
       ...creatorNames.map((creatorName) => ({
-        url: absoluteUrl(`/creator/${encodeURIComponent(creatorName)}`),
+        url: absoluteUrl(`/${encodeURIComponent(creatorName)}`),
         changeFrequency: "weekly" as const,
         priority: 0.7,
       })),

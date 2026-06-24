@@ -16,6 +16,7 @@ type ReportStatus = "open" | "resolved" | "dismissed";
 type ReportType = "all" | "asset" | "comment" | "account";
 type View = "reports" | "assets-hidden" | "assets-deleted" | "comments-hidden";
 type ReportAction = "hide-asset" | "delete-asset" | "hide-comment";
+const pageSize = 15;
 
 const statusFilters: { id: ReportStatus; label: string }[] = [
   { id: "open", label: "Open" },
@@ -37,23 +38,24 @@ export function ModerationShell() {
   const [view, setView] = useState<View>("reports");
   const [status, setStatus] = useState<ReportStatus>("open");
   const [type, setType] = useState<ReportType>("all");
+  const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const canAccess = canAccessWorkshopModeration(permissionSource);
 
   const reportsQuery = useQuery({
-    queryKey: ["workshop", "moderation", "reports", status, type],
-    queryFn: () => listModerationReports(token!, status, type === "all" ? undefined : type, 1, 48),
+    queryKey: ["workshop", "moderation", "reports", status, type, page],
+    queryFn: () => listModerationReports(token!, status, type === "all" ? undefined : type, page, pageSize),
     enabled: Boolean(token && canAccess && view === "reports"),
   });
   const assetsQuery = useQuery({
-    queryKey: ["workshop", "moderation", "assets", view],
-    queryFn: () => listModerationAssets(token!, view === "assets-deleted" ? "deleted" : "hidden", 1, 48),
+    queryKey: ["workshop", "moderation", "assets", view, page],
+    queryFn: () => listModerationAssets(token!, view === "assets-deleted" ? "deleted" : "hidden", page, pageSize),
     enabled: Boolean(token && canAccess && (view === "assets-hidden" || view === "assets-deleted")),
   });
   const commentsQuery = useQuery({
-    queryKey: ["workshop", "moderation", "comments", "hidden"],
-    queryFn: () => listModerationComments(token!, "hidden", 1, 48),
+    queryKey: ["workshop", "moderation", "comments", "hidden", page],
+    queryFn: () => listModerationComments(token!, "hidden", page, pageSize),
     enabled: Boolean(token && canAccess && view === "comments-hidden"),
   });
 
@@ -76,11 +78,18 @@ export function ModerationShell() {
     setView("reports");
     setStatus(nextStatus);
     setType(nextType);
+    setPage(1);
     setSelectedId(null);
   }
 
   function showInventory(nextView: View) {
     setView(nextView);
+    setPage(1);
+    setSelectedId(null);
+  }
+
+  function goPage(nextPage: number) {
+    setPage(nextPage);
     setSelectedId(null);
   }
 
@@ -115,17 +124,26 @@ export function ModerationShell() {
         <section className="grid min-w-0 gap-4 px-4 py-6 lg:ml-64 lg:grid-cols-[minmax(280px,420px)_minmax(0,1fr)] lg:px-8">
           {view === "reports" ? (
             <>
-              <ReportList reports={reports} selectedId={selectedReport?.id ?? null} loading={reportsQuery.isLoading} error={reportsQuery.isError} onSelect={setSelectedId} />
+              <div className="grid content-start gap-3">
+                <ReportList reports={reports} selectedId={selectedReport?.id ?? null} loading={reportsQuery.isLoading} error={reportsQuery.isError} onSelect={setSelectedId} />
+                <PageControls total={reportsQuery.data?.total ?? 0} page={page} onPage={goPage} />
+              </div>
               <ReportDetail report={selectedReport} note={note} onNote={setNote} onDone={() => { setNote(""); void invalidateModeration(); }} />
             </>
           ) : view === "comments-hidden" ? (
             <>
-              <CommentList comments={comments} selectedId={selectedComment?.id ?? null} loading={commentsQuery.isLoading} error={commentsQuery.isError} onSelect={setSelectedId} />
+              <div className="grid content-start gap-3">
+                <CommentList comments={comments} selectedId={selectedComment?.id ?? null} loading={commentsQuery.isLoading} error={commentsQuery.isError} onSelect={setSelectedId} />
+                <PageControls total={commentsQuery.data?.total ?? 0} page={page} onPage={goPage} />
+              </div>
               <CommentDetail comment={selectedComment} onDone={() => void invalidateModeration()} />
             </>
           ) : (
             <>
-              <AssetList assets={assets} selectedId={selectedAsset?.id ?? null} loading={assetsQuery.isLoading} error={assetsQuery.isError} onSelect={setSelectedId} />
+              <div className="grid content-start gap-3">
+                <AssetList assets={assets} selectedId={selectedAsset?.id ?? null} loading={assetsQuery.isLoading} error={assetsQuery.isError} onSelect={setSelectedId} />
+                <PageControls total={assetsQuery.data?.total ?? 0} page={page} onPage={goPage} />
+              </div>
               <AssetDetail asset={selectedAsset} deleted={view === "assets-deleted"} onDone={() => void invalidateModeration()} />
             </>
           )}
@@ -408,6 +426,20 @@ function EmptyPanel({ title, text }: { title: string; text: string }) {
 
 function listItemClass(active: boolean) {
   return `grid !h-auto !min-h-24 content-start gap-2 overflow-hidden border p-3 text-left transition-colors hover:border-primary hover:bg-card ${active ? "border-primary bg-card" : "border-border bg-card/40"}`;
+}
+
+function PageControls({ total, page, onPage }: { total: number; page: number; onPage: (page: number) => void }) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-between gap-3 border border-border bg-card/40 p-3">
+      <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
+      <div className="flex gap-2">
+        <Button size="sm" variant="ghost" disabled={page <= 1} onClick={() => onPage(page - 1)}>Previous</Button>
+        <Button size="sm" variant="ghost" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>Next</Button>
+      </div>
+    </div>
+  );
 }
 
 async function invalidateModeration() {

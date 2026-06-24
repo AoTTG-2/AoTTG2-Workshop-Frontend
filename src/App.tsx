@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@aottg2/ui";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label } from "@aottg2/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Gauge, LogIn, LogOut, Moon, ShieldAlert, Sun, UserCircle } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -10,7 +10,8 @@ import { websiteLogoutUrl } from "./auth/loginRedirect";
 import { getAccessToken } from "./auth/storage";
 import { useAuth } from "./auth/useAuth";
 import { canAccessWorkshopModeration } from "./auth/workshopPermissions";
-import { listNotifications } from "./lib/api/workshop";
+import { listNotifications, setCreatorName } from "./lib/api/workshop";
+import { toast } from "./lib/toast";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -60,10 +61,14 @@ export function AppShell({ children, theme, onToggleTheme }: AppShellProps) {
 }
 
 function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggleTheme">) {
-  const { isAuthenticated, profile, workshopUser, logout } = useAuth();
+  const { isAuthenticated, profile, workshopUser, logout, refreshProfile } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [creatorDialogOpen, setCreatorDialogOpen] = useState(false);
+  const [creatorNameInput, setCreatorNameInput] = useState("");
+  const [creatorNameAccepted, setCreatorNameAccepted] = useState(false);
+  const [creatorNameBusy, setCreatorNameBusy] = useState(false);
   const nextTheme = theme === "dark" ? "light" : "dark";
   const accountLabel = isAuthenticated ? profile?.displayName ?? "ACCOUNT" : "LOGIN";
   const libraryActive = pathname === "/library" || pathname === "/";
@@ -78,6 +83,8 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
     refetchInterval: 60_000,
   });
   const hasUnreadNotifications = (unreadQuery.data?.unread ?? 0) > 0;
+  const normalizedCreatorName = normalizeSlug(creatorNameInput);
+  const canSetCreatorName = Boolean(normalizedCreatorName) && normalizedCreatorName.length <= 32 && creatorNameAccepted && !creatorNameBusy;
 
   function closeFocusedMenu() {
     const activeElement = document.activeElement as { blur?: () => void } | null;
@@ -92,6 +99,43 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
   function goDashboardOrLogin() {
     closeFocusedMenu();
     go(isAuthenticated ? "/dashboard" : "/login");
+  }
+
+  function goProfileOrLogin() {
+    closeFocusedMenu();
+    if (!isAuthenticated) {
+      go("/login");
+      return;
+    }
+    if (workshopUser?.creatorName) {
+      go(`/${encodeURIComponent(workshopUser.creatorName)}`);
+      return;
+    }
+    setMobileOpen(false);
+    setCreatorDialogOpen(true);
+  }
+
+  async function confirmCreatorName() {
+    const token = getAccessToken();
+    if (!token) {
+      toast.error("Could not set creator name", { description: "Sign in again before opening your profile." });
+      return;
+    }
+    if (!canSetCreatorName) return;
+
+    try {
+      setCreatorNameBusy(true);
+      await setCreatorName(token, normalizedCreatorName);
+      await refreshProfile();
+      setCreatorDialogOpen(false);
+      setCreatorNameAccepted(false);
+      setCreatorNameInput("");
+      go(`/${encodeURIComponent(normalizedCreatorName)}`);
+    } catch (error) {
+      toast.error("Could not set creator name", { description: error instanceof Error ? error.message : "Try another creator name." });
+    } finally {
+      setCreatorNameBusy(false);
+    }
   }
 
   async function handleLogout() {
@@ -135,6 +179,7 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
             theme={theme}
             nextTheme={nextTheme}
             onDashboardOrLogin={goDashboardOrLogin}
+            onProfileOrLogin={goProfileOrLogin}
             onLogout={handleLogout}
             onToggleTheme={switchTheme}
           />
@@ -149,11 +194,35 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
         <nav id="mobile-navigation" className="grid bg-background font-primary text-foreground shadow-[0_18px_30px_rgb(0_0_0_/_0.24)] md:hidden" aria-label="Mobile navigation">
           <MobileNavButton active={libraryActive} onClick={() => go("/library")}>Library</MobileNavButton>
           {canAccessModeration ? <MobileNavButton active={moderationActive} onClick={() => go("/moderation")}>Moderation</MobileNavButton> : null}
+          {isAuthenticated ? <MobileNavButton onClick={goProfileOrLogin}>Profile</MobileNavButton> : null}
           <MobileNavButton active={accountActive} showDot={hasUnreadNotifications} onClick={goDashboardOrLogin}>{isAuthenticated ? "Dashboard" : "Login"}</MobileNavButton>
           <MobileNavButton onClick={switchTheme}>Switch to {nextTheme === "dark" ? "Dark" : "Light"} Mode</MobileNavButton>
           {isAuthenticated ? <MobileNavButton onClick={handleLogout}>Logout</MobileNavButton> : null}
         </nav>
       ) : null}
+      <Dialog open={creatorDialogOpen} onOpenChange={(open) => { if (open || workshopUser?.creatorName) setCreatorDialogOpen(open); }}>
+        <DialogContent variant="destructive">
+          <DialogHeader>
+            <DialogTitle>Set Creator Name Forever</DialogTitle>
+            <DialogDescription>Choose carefully. Your creator name can only be set once because it becomes part of every asset and profile link.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="nav-creator-name">Creator Name</Label>
+              <Input id="nav-creator-name" className="h-10 text-sm" value={creatorNameInput} maxLength={64} onChange={(event) => setCreatorNameInput(event.target.value)} />
+            </div>
+            <div className="flex items-start gap-3 text-sm text-muted-foreground">
+              <Checkbox id="nav-creator-name-forever" checked={creatorNameAccepted} onCheckedChange={(checked) => setCreatorNameAccepted(checked === true)} />
+              <Label htmlFor="nav-creator-name-forever" className="leading-5">I understand this creator name is permanent.</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="destructive" disabled={!canSetCreatorName} onClick={() => void confirmCreatorName()}>
+              {creatorNameBusy ? "Saving..." : "Set Forever And Open Profile"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }
@@ -166,11 +235,12 @@ interface AccountMenuProps {
   theme: "light" | "dark";
   nextTheme: "light" | "dark";
   onDashboardOrLogin: () => void;
+  onProfileOrLogin: () => void;
   onLogout: () => void | Promise<void>;
   onToggleTheme: () => void;
 }
 
-function AccountMenu({ accountActive, accountLabel, hasUnreadNotifications, isAuthenticated, theme, nextTheme, onDashboardOrLogin, onLogout, onToggleTheme }: AccountMenuProps) {
+function AccountMenu({ accountActive, accountLabel, hasUnreadNotifications, isAuthenticated, theme, nextTheme, onDashboardOrLogin, onProfileOrLogin, onLogout, onToggleTheme }: AccountMenuProps) {
   const nextThemeLabel = nextTheme === "dark" ? "Switch to Dark Mode" : "Switch to Light Mode";
 
   return (
@@ -182,14 +252,23 @@ function AccountMenu({ accountActive, accountLabel, hasUnreadNotifications, isAu
       >
         <span className="h-4 w-4 shrink-0" aria-hidden="true"><UserCircle className="h-4 w-4" /></span>
         <span className="truncate">{accountLabel}</span>
-        {hasUnreadNotifications ? <span className="absolute -right-2 -top-1 h-2.5 w-2.5 rounded-full bg-destructive ring-2 ring-background" aria-hidden="true" /> : null}
+        {hasUnreadNotifications ? <NotificationDot className="absolute -right-2 -top-1" /> : null}
       </button>
       <div className="invisible fixed right-4 top-11 z-[1100] w-56 pt-1 opacity-0 transition-[opacity,visibility] duration-150 ease-out group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 lg:right-8">
         <div role="menu" className={`aottg2-theme aottg2-palette-workshop aottg2-menu-content overflow-hidden rounded-none bg-popover p-1 text-popover-foreground shadow-md ${theme}`}>
           <MenuLabel>Account</MenuLabel>
+          {isAuthenticated ? (
+            <MenuItem onClick={onProfileOrLogin}>
+              <MenuIcon><UserCircle className="h-4 w-4" /></MenuIcon>
+              Profile
+            </MenuItem>
+          ) : null}
           <MenuItem onClick={onDashboardOrLogin}>
             <MenuIcon>{isAuthenticated ? <Gauge className="h-4 w-4" /> : <LogIn className="h-4 w-4" />}</MenuIcon>
-            {isAuthenticated ? "Dashboard" : "Login"}
+            <span className="flex flex-1 items-center justify-between gap-3">
+              {isAuthenticated ? "Dashboard" : "Login"}
+              {isAuthenticated && hasUnreadNotifications ? <NotificationDot /> : null}
+            </span>
           </MenuItem>
           {isAuthenticated ? (
             <MenuItem onClick={onLogout}>
@@ -245,6 +324,10 @@ function MobileNavButton({ active, children, onClick, showDot }: { active?: bool
   );
 }
 
+function NotificationDot({ className = "" }: { className?: string }) {
+  return <span className={`h-2.5 w-2.5 shrink-0 rounded-full bg-destructive ${className}`} aria-hidden="true" />;
+}
+
 function ScrollToTop() {
   const pathname = usePathname();
 
@@ -253,4 +336,8 @@ function ScrollToTop() {
   }, [pathname]);
 
   return null;
+}
+
+function normalizeSlug(value: string | undefined) {
+  return value?.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) ?? "";
 }
