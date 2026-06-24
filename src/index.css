@@ -379,7 +379,16 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+  width: 100%;
+  max-width: 80rem;
+  margin: 0 auto;
   padding: 0 1rem;
+}
+
+@media (min-width: 640px) {
+  .landing-marquee-heading {
+    padding: 0 1.5rem;
+  }
 }
 
 .landing-marquee-right .landing-marquee-heading {

@@ -9,6 +9,7 @@ import { authApi, authAssetUrl } from "../../auth/api";
 import { getAccessToken } from "../../auth/storage";
 import type { ProfilePreset } from "../../auth/types";
 import { useAuth } from "../../auth/useAuth";
+import { Pagination } from "../../components/Pagination";
 import { listCreators, setCreatorFollow, type CreatorListResponse, type CreatorSummary } from "../../lib/api/workshop";
 import { queryClient } from "../../lib/queryClient";
 import { toast } from "../../lib/toast";
@@ -90,8 +91,6 @@ export function CreatorsView() {
       void queryClient.invalidateQueries({ queryKey: ["workshop", "dashboard"] });
     },
   });
-  const totalPages = Math.max(1, Math.ceil((creatorsQuery.data?.total ?? 0) / pageSize));
-
   function updateParams(next: { q?: string; tab?: string; sort?: string; page?: number }) {
     const params = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(next)) {
@@ -182,13 +181,7 @@ export function CreatorsView() {
                 />
               ))}
             </div>
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-              <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
-              <div className="flex gap-2">
-                <Button type="button" variant="ghost" disabled={page <= 1} onClick={() => updateParams({ page: page - 1 })}>Previous</Button>
-                <Button type="button" variant="ghost" disabled={page >= totalPages} onClick={() => updateParams({ page: page + 1 })}>Next</Button>
-              </div>
-            </div>
+            <Pagination className="mt-4" page={page} total={creatorsQuery.data?.total ?? 0} pageSize={pageSize} onPage={(nextPage) => updateParams({ page: nextPage })} />
           </>
         ) : null}
       </section>

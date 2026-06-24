@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { getAccessToken } from "../auth/storage";
 import { CreatorIdentityLink } from "../components/CreatorIdentityLink";
+import { Pagination } from "../components/Pagination";
 import { WorkshopAssetCard } from "../components/WorkshopAssetCard";
 import { queryClient } from "../lib/queryClient";
 import {
@@ -27,6 +28,7 @@ import {
 import { toast } from "../lib/toast";
 
 type DashboardTab = "overview" | "assets" | "favorites" | "comments" | "notifications";
+const dashboardPageSize = 24;
 
 const tabs: { id: DashboardTab; label: string; icon: ReactNode }[] = [
   { id: "overview", label: "Overview", icon: <Eye className="h-4 w-4" /> },
@@ -109,49 +111,68 @@ function OverviewPanel({ data, onTab }: { data: Awaited<ReturnType<typeof getCre
 function AssetsPanel() {
   const router = useRouter();
   const token = getAccessToken();
+  const [page, setPage] = useState(1);
   const assetsQuery = useQuery({
-    queryKey: ["workshop", "dashboard-assets"],
-    queryFn: () => listAssets({ mine: true, pageSize: 48 }, token),
+    queryKey: ["workshop", "dashboard-assets", page],
+    queryFn: () => listAssets({ mine: true, page, pageSize: dashboardPageSize }, token),
     enabled: Boolean(token),
   });
 
   if (assetsQuery.isLoading) return <LoadingPanel />;
   if (assetsQuery.isError) return <EmptyPanel title="Assets unavailable" text="Could not load your assets." />;
-  return <AssetGrid assets={assetsQuery.data?.assets ?? []} empty="No assets yet." onOpen={(asset) => router.push(assetPath(asset))} />;
+  return (
+    <>
+      <AssetGrid assets={assetsQuery.data?.assets ?? []} empty="No assets yet." onOpen={(asset) => router.push(assetPath(asset))} />
+      <Pagination className="mt-4" page={page} total={assetsQuery.data?.total ?? 0} pageSize={dashboardPageSize} onPage={setPage} />
+    </>
+  );
 }
 
 function FavoritesPanel() {
   const router = useRouter();
   const token = getAccessToken();
+  const [page, setPage] = useState(1);
   const favoritesQuery = useQuery({
-    queryKey: ["workshop", "dashboard-favorites"],
-    queryFn: () => listFavoriteAssets(token!, 1, 48),
+    queryKey: ["workshop", "dashboard-favorites", page],
+    queryFn: () => listFavoriteAssets(token!, page, dashboardPageSize),
     enabled: Boolean(token),
   });
 
   if (favoritesQuery.isLoading) return <LoadingPanel />;
   if (favoritesQuery.isError) return <EmptyPanel title="Favorites unavailable" text="Could not load your favorites." />;
-  return <AssetGrid assets={favoritesQuery.data?.assets ?? []} empty="No favorites yet." onOpen={(asset) => router.push(assetPath(asset))} />;
+  return (
+    <>
+      <AssetGrid assets={favoritesQuery.data?.assets ?? []} empty="No favorites yet." onOpen={(asset) => router.push(assetPath(asset))} />
+      <Pagination className="mt-4" page={page} total={favoritesQuery.data?.total ?? 0} pageSize={dashboardPageSize} onPage={setPage} />
+    </>
+  );
 }
 
 function CommentsPanel() {
   const token = getAccessToken();
+  const [page, setPage] = useState(1);
   const commentsQuery = useQuery({
-    queryKey: ["workshop", "dashboard-comments"],
-    queryFn: () => listDashboardComments(token!, 1, 48),
+    queryKey: ["workshop", "dashboard-comments", page],
+    queryFn: () => listDashboardComments(token!, page, dashboardPageSize),
     enabled: Boolean(token),
   });
 
   if (commentsQuery.isLoading) return <LoadingPanel />;
   if (commentsQuery.isError) return <EmptyPanel title="Comments unavailable" text="Could not load comments." />;
-  return <CommentRows comments={commentsQuery.data?.comments ?? []} />;
+  return (
+    <>
+      <CommentRows comments={commentsQuery.data?.comments ?? []} />
+      <Pagination className="mt-4" page={page} total={commentsQuery.data?.total ?? 0} pageSize={dashboardPageSize} onPage={setPage} />
+    </>
+  );
 }
 
 function NotificationsPanel() {
   const token = getAccessToken();
+  const [page, setPage] = useState(1);
   const notificationsQuery = useQuery({
-    queryKey: ["workshop", "notifications"],
-    queryFn: () => listNotifications(token!, 1, 48),
+    queryKey: ["workshop", "notifications", page],
+    queryFn: () => listNotifications(token!, page, dashboardPageSize),
     enabled: Boolean(token),
   });
   const markAll = useMutation({
@@ -166,6 +187,7 @@ function NotificationsPanel() {
   return (
     <DashboardSection title="Notifications" action={<Button variant="secondary" size="sm" disabled={!notificationsQuery.data?.unread || markAll.isPending} onClick={() => markAll.mutate()}>Mark All Read</Button>}>
       <NotificationRows notifications={notificationsQuery.data?.notifications ?? []} />
+      <Pagination className="mt-4" page={page} total={notificationsQuery.data?.total ?? 0} pageSize={dashboardPageSize} onPage={setPage} />
     </DashboardSection>
   );
 }

@@ -7,6 +7,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useAuth } from "../../auth/useAuth";
+import { Pagination } from "../../components/Pagination";
 import { SideCard } from "../../components/SideCard";
 import { WorkshopAssetCard } from "../../components/WorkshopAssetCard";
 import { assetPath, listAssets, type AssetListQuery, type AssetListResponse } from "../../lib/api/workshop";
@@ -91,8 +92,6 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
       toast.error("Could not load library", { description: query.error instanceof Error ? query.error.message : "Try again." });
     }
   }, [query.error]);
-
-  const totalPages = Math.max(1, Math.ceil((query.data?.total ?? 0) / pageSize));
 
   function handleAddAsset() {
     router.push(isAuthenticated ? "/library/publish" : "/login?next=%2Flibrary%2Fpublish");
@@ -217,16 +216,8 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
                   </motion.div>
                 ))}
               </div>
-              <motion.div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4" initial={motionInitial(reduceMotion, 6)} animate={motionAnimate} transition={motionTransition(0.12)}>
-                <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
-                <div className="flex gap-2">
-                  <Button type="button" variant="ghost" disabled={page <= 1} onClick={() => updateParams({ page: page - 1 })}>
-                    Previous
-                  </Button>
-                  <Button type="button" variant="ghost" disabled={page >= totalPages} onClick={() => updateParams({ page: page + 1 })}>
-                    Next
-                  </Button>
-                </div>
+              <motion.div className="mt-8" initial={motionInitial(reduceMotion, 6)} animate={motionAnimate} transition={motionTransition(0.12)}>
+                <Pagination page={page} total={query.data.total} pageSize={pageSize} onPage={(nextPage) => updateParams({ page: nextPage })} />
               </motion.div>
             </>
           ) : null}

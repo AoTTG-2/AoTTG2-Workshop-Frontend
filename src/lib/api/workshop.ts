@@ -503,6 +503,11 @@ export async function getPublicCreator(creatorName: string, accessToken?: string
   return workshopJson<PublicCreator>(`/creators/${encodeURIComponent(creatorName)}`, { headers: authHeaders(accessToken) });
 }
 
+export async function getCreatorAssets(creatorName: string, page = 1, pageSize = 12, accessToken?: string | null): Promise<AssetListResponse> {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  return workshopJson<AssetListResponse>(`/creators/${encodeURIComponent(creatorName)}/assets?${params.toString()}`, { headers: authHeaders(accessToken) });
+}
+
 export async function listCreators(query: CreatorListQuery = {}, accessToken?: string | null): Promise<CreatorListResponse> {
   const params = new URLSearchParams();
   if (query.q?.trim()) params.set("q", query.q.trim());

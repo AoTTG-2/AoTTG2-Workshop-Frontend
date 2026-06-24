@@ -1,9 +1,9 @@
 "use client";
 
-import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Spinner, StatCard, Tabs, TabsList, TabsTrigger } from "@aottg2/ui";
+import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Spinner, StatCard } from "@aottg2/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Flag, FolderOpen, MessageCircle, Search, ThumbsUp, Users } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { FaDiscord, FaFacebookF, FaInstagram, FaYoutube } from "react-icons/fa";
 import { FaXTwitter } from "react-icons/fa6";
@@ -14,25 +14,28 @@ import { getAccessToken } from "../auth/storage";
 import type { ProfilePreset } from "../auth/types";
 import { useAuth } from "../auth/useAuth";
 import { ReportDialog } from "../components/ReportDialog";
+import { Pagination } from "../components/Pagination";
 import { WorkshopAssetCard } from "../components/WorkshopAssetCard";
 import { AUTH_FRONTEND_PROFILE_URL } from "../lib/config";
-import { assetPath, getFeaturedAssets, listAssets, reportWorkshopAccount, setFeaturedAssets, type PublicCreator, type WorkshopAsset } from "../lib/api/workshop";
+import { assetPath, getCreatorAssets, getFeaturedAssets, listAssets, reportWorkshopAccount, setFeaturedAssets, type PublicCreator, type WorkshopAsset } from "../lib/api/workshop";
 import { toast } from "../lib/toast";
 
 const maxFeaturedAssets = 6;
-type ProfileAssetTab = "featured" | "latest";
+const latestPageSize = 12;
 
 export function CreatorProfile({ creator }: { creator: PublicCreator }) {
   const { isAuthenticated, isLoading, profile: viewerProfile } = useAuth();
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const profile = creator.profile;
   const [reportOpen, setReportOpen] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
-  const [assetTab, setAssetTab] = useState<ProfileAssetTab>("featured");
   const [featuredPickerOpen, setFeaturedPickerOpen] = useState(false);
   const [featuredAssets, setFeaturedAssetsState] = useState(creator.featuredAssets);
   const socialLinks = socialLinksFromProfile(profile?.socials);
   const token = getAccessToken();
+  const latestPage = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
   const presetsQuery = useQuery({
     queryKey: ["auth", "profile-presets"],
     queryFn: async () => {
@@ -66,6 +69,12 @@ export function CreatorProfile({ creator }: { creator: PublicCreator }) {
     onError: (error) => toast.error("Could not save featured assets", { description: error instanceof Error ? error.message : "Try again." }),
   });
   const shownFeaturedAssets = featuredAssets;
+  const latestQuery = useQuery({
+    queryKey: ["workshop", "creator-assets", creator.creatorName, latestPage, latestPageSize],
+    queryFn: () => getCreatorAssets(creator.creatorName, latestPage, latestPageSize, token),
+    initialData: latestPage === 1 ? { total: creator.stats.assetCount, page: 1, pageSize: latestPageSize, assets: creator.latestAssets } : undefined,
+  });
+  const latestAssets = latestQuery.data?.assets ?? [];
 
   useEffect(() => {
     setFeaturedAssetsState(creator.featuredAssets);
@@ -91,6 +100,13 @@ export function CreatorProfile({ creator }: { creator: PublicCreator }) {
     } finally {
       setReportBusy(false);
     }
+  }
+
+  function updateLatestPage(page: number) {
+    const params = new URLSearchParams(searchParams);
+    if (page <= 1) params.delete("page");
+    else params.set("page", String(page));
+    router.push(`/${encodeURIComponent(creator.creatorName)}${params.size ? `?${params.toString()}` : ""}`);
   }
 
   return (
@@ -157,22 +173,19 @@ export function CreatorProfile({ creator }: { creator: PublicCreator }) {
           <StatCard label="Comments" value={formatCount(creator.stats.commentCount)} icon={<MessageCircle className="h-5 w-5" />} />
         </section>
 
-        <Tabs value={assetTab} onValueChange={(value) => setAssetTab(value as ProfileAssetTab)}>
-          <TabsList>
-            <TabsTrigger value="featured">Featured</TabsTrigger>
-            <TabsTrigger value="latest">Latest</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {assetTab === "featured" ? (
-          <AssetSection
-            title="Featured"
-            assets={shownFeaturedAssets}
-            empty="No featured assets yet."
-            action={canManageFeatured ? <Button type="button" variant="secondary" onClick={() => setFeaturedPickerOpen(true)}>Manage Featured</Button> : null}
-          />
-        ) : (
-          <AssetSection title="Latest" assets={creator.latestAssets} empty="No assets yet." />
-        )}
+        <AssetSection
+          title="Featured"
+          assets={shownFeaturedAssets}
+          empty="No featured assets yet."
+          action={canManageFeatured ? <Button type="button" variant="secondary" onClick={() => setFeaturedPickerOpen(true)}>Manage Featured</Button> : null}
+        />
+        <AssetSection
+          title="Latest"
+          assets={latestAssets}
+          empty={latestQuery.isError ? "Could not load assets." : "No assets yet."}
+          loading={latestQuery.isLoading}
+          footer={<Pagination page={latestPage} total={latestQuery.data?.total ?? 0} pageSize={latestPageSize} onPage={updateLatestPage} />}
+        />
       </div>
       <ReportDialog open={reportOpen} title="Report Creator" description="Send this creator account to the moderation queue." busy={reportBusy} onOpenChange={setReportOpen} onSubmit={submitReport} />
       {canManageFeatured ? (
@@ -212,7 +225,7 @@ function SocialLinks({ links }: { links: string[] }) {
   );
 }
 
-function AssetSection({ title, assets, empty, action }: { title: string; assets: WorkshopAsset[]; empty: string; action?: ReactNode }) {
+function AssetSection({ title, assets, empty, action, footer, loading = false }: { title: string; assets: WorkshopAsset[]; empty: string; action?: ReactNode; footer?: ReactNode; loading?: boolean }) {
   const router = useRouter();
   return (
     <section className="grid gap-3">
@@ -220,15 +233,20 @@ function AssetSection({ title, assets, empty, action }: { title: string; assets:
         <h2 className="font-primary text-xl font-semibold uppercase">{title}</h2>
         {action}
       </div>
-      {assets.length ? (
+      {loading ? (
+        <div className="grid min-h-48 place-items-center border border-border bg-card/40">
+          <Spinner size="sm" variant="primary" label="Loading assets" />
+        </div>
+      ) : assets.length ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {assets.map((asset) => (
             <WorkshopAssetCard key={asset.id} asset={asset} onOpen={() => router.push(assetPath(asset))} />
           ))}
         </div>
       ) : (
-        <div className="border border-border bg-card/40 p-4 text-sm text-muted-foreground">{empty}</div>
+          <div className="border border-border bg-card/40 p-4 text-sm text-muted-foreground">{empty}</div>
       )}
+      {footer}
     </section>
   );
 }

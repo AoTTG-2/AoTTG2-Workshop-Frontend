@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { canAccessWorkshopModeration, canModerateAssets, canModerateComments, canReadWorkshopAudit, canResolveReports } from "../auth/workshopPermissions";
 import { getAccessToken } from "../auth/storage";
 import { useAuth } from "../auth/useAuth";
+import { Pagination } from "../components/Pagination";
 import { deleteWorkshopAsset, dismissModerationReport, hideModerationAsset, hideModerationComment, listModerationAssets, listModerationAuditEvents, listModerationComments, listModerationReports, resolveModerationReport, restoreModerationAsset, restoreModerationComment, type WorkshopAsset, type WorkshopAuditEvent, type WorkshopComment, type WorkshopReport } from "../lib/api/workshop";
 import { queryClient } from "../lib/queryClient";
 import { toast } from "../lib/toast";
@@ -194,7 +195,7 @@ export function ModerationShell() {
             <>
               <div className="grid content-start gap-3">
                 <ReportList reports={reports} selectedId={selectedReport?.id ?? null} loading={reportsQuery.isLoading} error={reportsQuery.isError} onSelect={setSelectedId} />
-                <PageControls total={reportsQuery.data?.total ?? 0} page={page} onPage={goPage} />
+                <Pagination total={reportsQuery.data?.total ?? 0} page={page} pageSize={pageSize} onPage={goPage} />
               </div>
               <ReportDetail report={selectedReport} note={note} onNote={setNote} onDone={() => { setNote(""); void invalidateModeration(); }} />
             </>
@@ -202,7 +203,7 @@ export function ModerationShell() {
             <>
               <div className="grid content-start gap-3">
                 <CommentList comments={comments} selectedId={selectedComment?.id ?? null} loading={commentsQuery.isLoading} error={commentsQuery.isError} onSelect={setSelectedId} />
-                <PageControls total={commentsQuery.data?.total ?? 0} page={page} onPage={goPage} />
+                <Pagination total={commentsQuery.data?.total ?? 0} page={page} pageSize={pageSize} onPage={goPage} />
               </div>
               <CommentDetail comment={selectedComment} onDone={() => void invalidateModeration()} />
             </>
@@ -210,7 +211,7 @@ export function ModerationShell() {
             <>
               <div className="grid content-start gap-3">
                 <AssetList assets={assets} selectedId={selectedAsset?.id ?? null} loading={assetsQuery.isLoading} error={assetsQuery.isError} onSelect={setSelectedId} />
-                <PageControls total={assetsQuery.data?.total ?? 0} page={page} onPage={goPage} />
+                <Pagination total={assetsQuery.data?.total ?? 0} page={page} pageSize={pageSize} onPage={goPage} />
               </div>
               <AssetDetail asset={selectedAsset} deleted={view === "assets-deleted"} onDone={() => void invalidateModeration()} />
             </>
@@ -317,7 +318,7 @@ function AuditLogView({
         </CardContent>
       </Card>
 
-      <PageControls total={total} page={page} pageSize={auditPageSize} onPage={onPage} />
+      <Pagination total={total} page={page} pageSize={auditPageSize} onPage={onPage} />
     </div>
   );
 }
@@ -583,20 +584,6 @@ function EmptyPanel({ title, text }: { title: string; text: string }) {
 
 function listItemClass(active: boolean) {
   return `grid !h-auto !min-h-24 content-start gap-2 overflow-hidden border p-3 text-left transition-colors hover:border-primary hover:bg-card ${active ? "border-primary bg-card" : "border-border bg-card/40"}`;
-}
-
-function PageControls({ total, page, onPage, pageSize: size = pageSize }: { total: number; page: number; onPage: (page: number) => void; pageSize?: number }) {
-  const totalPages = Math.max(1, Math.ceil(total / size));
-  if (totalPages <= 1) return null;
-  return (
-    <div className="flex items-center justify-between gap-3 border border-border bg-card/40 p-3">
-      <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
-      <div className="flex gap-2">
-        <Button size="sm" variant="ghost" disabled={page <= 1} onClick={() => onPage(page - 1)}>Previous</Button>
-        <Button size="sm" variant="ghost" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>Next</Button>
-      </div>
-    </div>
-  );
 }
 
 async function invalidateModeration() {
