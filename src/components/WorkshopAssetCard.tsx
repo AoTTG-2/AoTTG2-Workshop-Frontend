@@ -133,6 +133,9 @@ function PreviewImage({ media, title }: { media?: WorkshopMedia; title: string }
         src={sources[sourceIndex]}
         alt={media.description || title}
         loading="lazy"
+        ref={(image) => {
+          if (image?.complete && image.naturalWidth > 0 && !loaded) setLoaded(true);
+        }}
         onLoad={() => setLoaded(true)}
         onError={() => {
           if (sourceIndex < sources.length - 1) {

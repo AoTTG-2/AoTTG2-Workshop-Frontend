@@ -911,6 +911,9 @@ function GalleryImage({ media, title, direction, reduceMotion }: { media?: Works
           animate={{ opacity: loaded ? 1 : 0, x: 0, scale: 1 }}
           exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: direction * -20, scale: 0.99 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
+          ref={(image) => {
+            if (image?.complete && image.naturalWidth > 0 && !loaded) setLoaded(true);
+          }}
           onLoad={() => setLoaded(true)}
           onError={() => {
             if (sourceIndex < sources.length - 1) {
@@ -945,6 +948,9 @@ function GalleryThumb({ item, title, active, onClick }: { item: WorkshopMedia; t
         src={sources[sourceIndex]}
         alt={item.description || title}
         loading="lazy"
+        ref={(image) => {
+          if (image?.complete && image.naturalWidth > 0 && !loaded) setLoaded(true);
+        }}
         onLoad={() => setLoaded(true)}
         onError={() => {
           if (sourceIndex < sources.length - 1) {
