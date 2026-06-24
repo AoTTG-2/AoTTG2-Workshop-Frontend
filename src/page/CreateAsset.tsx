@@ -1,10 +1,10 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, Spinner, Textarea } from "@aottg2/ui";
-import { Backpack, Badge, Bold, Cable, Cloud, Code, Code2, Cog, Crown, Eye, Flag, Footprints, Glasses, Hand, Heading, Image as ImageIcon, Italic, Link as LinkIcon, List, ListOrdered, Map, Palette, Quote, Rocket, Search, Shield, Shirt, Smile, Sparkles, Strikethrough, UserRound, Zap } from "lucide-react";
+import { Button, Checkbox, Command, CommandEmpty, CommandGroup, CommandItem, CommandList, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, Popover, PopoverContent, PopoverTrigger, Spinner, Textarea } from "@aottg2/ui";
+import { Backpack, Badge, Bold, Cable, Check, Cloud, Code, Code2, Cog, Crown, Eye, Flag, Footprints, Glasses, Hand, Heading, Image as ImageIcon, Italic, Link as LinkIcon, List, ListOrdered, Map, Palette, Quote, Rocket, Search, Shield, Shirt, Smile, Sparkles, Square, Strikethrough, UserRound, X, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { ElementRef, FormEvent, ReactNode } from "react";
+import type { ElementRef, FormEvent, KeyboardEvent, ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { motion, useReducedMotion } from "motion/react";
@@ -13,11 +13,12 @@ import { z } from "zod";
 import { getAccessToken } from "../auth/storage";
 import { useAuth } from "../auth/useAuth";
 import { canModerateAssets } from "../auth/workshopPermissions";
-import { assetPath, createAsset, getVariantCatalog, listAssets, setCreatorName, updateAsset, type SkinPartPayload, type SkinSetPayload, type VariantCatalog, type WorkshopAsset, type WorkshopVariantOption } from "../lib/api/workshop";
+import { assetPath, createAsset, getVariantCatalog, listAssets, listTagSuggestions, setCreatorName, updateAsset, type SkinPartPayload, type SkinSetPayload, type VariantCatalog, type WorkshopAsset, type WorkshopVariantOption } from "../lib/api/workshop";
 import { WORKSHOP_STATIC_API_ORIGIN } from "../lib/config";
 import { toast } from "../lib/toast";
 import { SideCard } from "../components/SideCard";
 import { WorkshopAssetCard } from "../components/WorkshopAssetCard";
+import { AssetTagButton } from "../components/AssetTag";
 
 type AssetKind = "skin_part" | "skin_set";
 type WizardStep = "type" | "listing" | "data" | "description";
@@ -28,9 +29,12 @@ interface VariantTargetForm {
   skinAssetId?: string | null;
   linkedAsset?: WorkshopAsset | null;
   textureUrl: string;
+  textureUrls?: { left: string; right: string };
   variants: string[];
   hookTiling?: string;
+  hookTilings?: { left: string; right: string };
   boots?: boolean;
+  mirror?: boolean;
 }
 
 const wizardSteps: { key: WizardStep; label: string }[] = [
@@ -64,20 +68,26 @@ const skinTypeLabels: Record<string, string> = {
   Glass: "Glasses",
   Skin: "Body Skin",
   Logo: "Cape Logo",
-  GearL: "Left Gear",
-  GearR: "Right Gear",
+  GearL: "Left Blade",
+  GearR: "Right Blade",
+  Blades: "Blades",
+  AHSS: "AHSS",
+  APG: "APG",
   Gas: "Gas Smoke",
   WeaponTrail: "Blade Trail",
   ThunderspearL: "Left Thunderspear",
   ThunderspearR: "Right Thunderspear",
+  Thunderspears: "Thunderspears",
   HookL: "Left Hook",
   HookR: "Right Hook",
+  Hooks: "Hooks",
   Hat: "Hat",
   Head: "Head Accessory",
   Back: "Back Accessory",
 };
 
-const pairedTilingSlots = new Set(["HookLTiling", "HookRTiling"]);
+const groupedSlots = new Set(["Blades", "AHSS", "APG", "Thunderspears", "Hooks"]);
+const legacyGroupedSlots = new Set(["GearL", "GearR", "ThunderspearL", "ThunderspearR", "HookL", "HookR", "HookLTiling", "HookRTiling"]);
 
 const markdownComponents: Components = {
   h1: ({ children }) => <h2 className="mt-6 font-primary text-2xl uppercase leading-none text-foreground first:mt-0">{children}</h2>,
@@ -131,14 +141,19 @@ const fallbackCatalog: VariantCatalog = {
     "Skin",
     "Costume",
     "Logo",
+    "Blades",
+    "AHSS",
+    "APG",
     "GearL",
     "GearR",
     "Gas",
     "Hoodie",
     "WeaponTrail",
     "Horse",
+    "Thunderspears",
     "ThunderspearL",
     "ThunderspearR",
+    "Hooks",
     "HookL",
     "HookLTiling",
     "HookR",
@@ -215,19 +230,25 @@ const commonSchema = z
 const itemSchema = z
   .object({
     slot: z.string().min(1, "Slot is required"),
-    textureUrl: z.string().trim().min(1, "Texture URL is required"),
+    textureUrl: z.string().trim().optional().default(""),
+    textureUrls: z.object({ left: z.string().trim(), right: z.string().trim() }).optional(),
     variants: z.array(z.string()),
     hookTiling: z.string().trim().optional(),
+    hookTilings: z.object({ left: z.string().trim(), right: z.string().trim() }).optional(),
     boots: z.boolean().optional(),
+    mirror: z.boolean().optional(),
   });
 
 const skinPartSchema = commonSchema
   .extend({
     slot: z.string().min(1, "Slot is required"),
-    textureUrl: z.string().trim().min(1, "Texture URL is required"),
+    textureUrl: z.string().trim().optional().default(""),
+    textureUrls: z.object({ left: z.string().trim(), right: z.string().trim() }).optional(),
     variants: z.array(z.string()),
     hookTiling: z.string().trim().optional(),
+    hookTilings: z.object({ left: z.string().trim(), right: z.string().trim() }).optional(),
     boots: z.boolean().optional(),
+    mirror: z.boolean().optional(),
   });
 
 function splitList(value: string | undefined) {
@@ -235,6 +256,17 @@ function splitList(value: string | undefined) {
     .split(/[\n,]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function useDebouncedValue<T>(value: T, delayMs: number) {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timeout);
+  }, [delayMs, value]);
+
+  return debounced;
 }
 
 function mediaUrls(common: { thumbnailUrl: string; galleryUrls: string }) {
@@ -314,12 +346,31 @@ function isHookSlot(slot: string) {
   return slot === "HookL" || slot === "HookR";
 }
 
+function isGroupedSlot(slot: string) {
+  return groupedSlots.has(slot);
+}
+
+function isGroupedHooksSlot(slot: string) {
+  return slot === "Hooks";
+}
+
 function isCostumeSlot(slot: string) {
   return slot === "Costume";
 }
 
 function targetSlotPatch(value: VariantTargetForm, slot: string) {
-  return { ...value, slot, skinAssetId: null, linkedAsset: null, variants: [], hookTiling: isHookSlot(slot) ? value.hookTiling || "1" : undefined, boots: isCostumeSlot(slot) ? value.boots ?? true : undefined };
+  return {
+    ...value,
+    slot,
+    skinAssetId: null,
+    linkedAsset: null,
+    variants: [],
+    textureUrls: isGroupedSlot(slot) ? value.textureUrls ?? { left: "", right: "" } : undefined,
+    mirror: isGroupedSlot(slot) ? value.mirror ?? false : undefined,
+    hookTiling: isHookSlot(slot) ? value.hookTiling || "1" : undefined,
+    hookTilings: isGroupedHooksSlot(slot) ? value.hookTilings ?? { left: "1", right: "1" } : undefined,
+    boots: isCostumeSlot(slot) ? value.boots ?? true : undefined,
+  };
 }
 
 function hookTilingSlot(slot: string) {
@@ -339,8 +390,37 @@ function bootsPayload(value: { slot: string; boots?: boolean }) {
   return isCostumeSlot(value.slot) ? { boots: value.boots ?? true } : {};
 }
 
+function groupedTexturePayload(value: { slot: string; textureUrls?: { left: string; right: string }; hookTilings?: { left: string; right: string }; mirror?: boolean }, catalog: VariantCatalog) {
+  const left = value.textureUrls?.left.trim() ?? "";
+  const right = value.textureUrls?.right.trim() ?? "";
+  if (!left && !right) throw new Error(`Add a left or right texture URL for ${skinTypeLabel(value.slot)}`);
+  if (left) validateTextureUrl(left, catalog);
+  if (right) validateTextureUrl(right, catalog);
+  const payload: Record<string, unknown> = {
+    slot: value.slot,
+    textureUrls: { left: left || null, right: right || null },
+    mirror: value.mirror ?? false,
+    variantScope: "all",
+  };
+  if (isGroupedHooksSlot(value.slot)) {
+    const hookTilings = value.hookTilings ?? { left: "1", right: "1" };
+    const leftTiling = Number(hookTilings.left || "1");
+    const rightTiling = Number(hookTilings.right || "1");
+    if (!Number.isFinite(leftTiling) || leftTiling <= 0 || !Number.isFinite(rightTiling) || rightTiling <= 0) {
+      throw new Error("Hook tiling must be greater than 0");
+    }
+    payload.hookTilings = { left: leftTiling, right: rightTiling };
+  }
+  return payload;
+}
+
 function prepareTarget(value: VariantTargetForm, catalog: VariantCatalog) {
   const data = itemSchema.parse(value);
+  if (isGroupedSlot(data.slot)) {
+    return groupedTexturePayload(data, catalog);
+  }
+
+  if (!data.textureUrl) throw new Error("Texture URL is required");
   validateTextureUrl(data.textureUrl, catalog);
   if (!isCompatibilitySlot(data.slot, catalog)) {
     return { slot: data.slot, textureUrl: data.textureUrl, variantScope: "all" as const, ...hookTilingPayload(data) };
@@ -434,8 +514,11 @@ function targetFromSkinPart(payload: SkinPartPayload | Record<string, unknown>):
     source: "url",
     slot: data.slot || "Hair",
     textureUrl: data.textureUrl || "",
+    textureUrls: data.textureUrls ? { left: data.textureUrls.left ?? "", right: data.textureUrls.right ?? "" } : undefined,
     variants: Array.isArray(data.variants) ? data.variants : [],
     boots: data.slot === "Costume" ? data.boots ?? true : undefined,
+    mirror: data.mirror ?? false,
+    hookTilings: data.hookTilings ? { left: String(data.hookTilings.left ?? 1), right: String(data.hookTilings.right ?? 1) } : undefined,
   };
 }
 
@@ -451,8 +534,11 @@ function targetsFromSkinSet(payload: SkinSetPayload | Record<string, unknown>): 
     slot: item.slot || "Hair",
     skinAssetId: item.skinAssetId ?? null,
     textureUrl: item.textureUrl || "",
+    textureUrls: item.textureUrls ? { left: item.textureUrls.left ?? "", right: item.textureUrls.right ?? "" } : undefined,
     variants: Array.isArray(item.variants) ? item.variants : [],
     boots: item.slot === "Costume" ? item.boots ?? true : undefined,
+    mirror: item.mirror ?? false,
+    hookTilings: item.hookTilings ? { left: String(item.hookTilings.left ?? 1), right: String(item.hookTilings.right ?? 1) } : undefined,
   }));
 }
 
@@ -480,12 +566,12 @@ function skinTypeIcon(slot: string) {
   if (slot === "Face") return <Smile className="h-5 w-5" aria-hidden="true" />;
   if (slot === "Skin") return <Hand className="h-5 w-5" aria-hidden="true" />;
   if (slot === "Logo") return <Flag className="h-5 w-5" aria-hidden="true" />;
-  if (slot === "GearL" || slot === "GearR") return <Cog className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "GearL" || slot === "GearR" || slot === "Blades" || slot === "AHSS" || slot === "APG") return <Cog className="h-5 w-5" aria-hidden="true" />;
   if (slot === "Gas") return <Cloud className="h-5 w-5" aria-hidden="true" />;
   if (slot === "WeaponTrail") return <Zap className="h-5 w-5" aria-hidden="true" />;
   if (slot === "Horse") return <Shield className="h-5 w-5" aria-hidden="true" />;
-  if (slot === "ThunderspearL" || slot === "ThunderspearR") return <Rocket className="h-5 w-5" aria-hidden="true" />;
-  if (slot === "HookL" || slot === "HookR") return <Cable className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "ThunderspearL" || slot === "ThunderspearR" || slot === "Thunderspears") return <Rocket className="h-5 w-5" aria-hidden="true" />;
+  if (slot === "HookL" || slot === "HookR" || slot === "Hooks") return <Cable className="h-5 w-5" aria-hidden="true" />;
   if (slot === "Hat") return <Crown className="h-5 w-5" aria-hidden="true" />;
   if (slot === "Head") return <Badge className="h-5 w-5" aria-hidden="true" />;
   if (slot === "Back") return <Backpack className="h-5 w-5" aria-hidden="true" />;
@@ -531,7 +617,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
   const stepIndex = Math.max(steps.findIndex((item) => item.key === step), 0);
   const normalizedCreatorName = normalizeSlug(creatorNameInput);
   const canSetCreatorName = Boolean(normalizedCreatorName) && normalizedCreatorName.length <= 32 && creatorNameAccepted && !creatorNameBusy;
-  const humanPartChoices = catalog.humanSkinParts.filter((slot) => slot && !pairedTilingSlots.has(slot));
+  const humanPartChoices = catalog.humanSkinParts.filter((slot) => slot && !legacyGroupedSlots.has(slot));
   const accountId = workshopUser?.authAccountId ?? profile?.accountId;
   const permissionSource = workshopUser ?? profile;
   const canEditAsset = !isEdit || Boolean(editableAsset && isAuthenticated && (accountId === editableAsset.ownerAuthAccountId || canModerateAssets(permissionSource)));
@@ -852,7 +938,8 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
                   <p className="text-xs text-muted-foreground">Required for publishing.</p>
                 </Field>
                 <Field label="Tags">
-                  <Input className="h-10 text-sm" placeholder="hair, levi, red" value={common.tags} onChange={(event) => setCommon({ ...common, tags: event.target.value })} />
+                  <TagPicker value={splitList(common.tags)} onChange={(tags) => setCommon({ ...common, tags: tags.join(", ") })} />
+                  <p className="text-xs text-muted-foreground">Add up to 8 tags.</p>
                 </Field>
               </div>
             </div>
@@ -864,7 +951,9 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
           kind === "skin_part" ? (
             <section className="grid gap-4 border-t border-border pt-6">
               <h2 className="text-sm font-semibold uppercase text-muted-foreground">Skin Part Target</h2>
-              <SkinTargetCard value={part} onChange={setPart} catalog={catalog} texturePlaceholder="https://i.imgur.com/hair.png" />
+              <div className="w-full justify-self-center lg:w-[calc((100%-1rem)/2)]">
+                <SkinTargetCard value={part} onChange={setPart} catalog={catalog} texturePlaceholder="https://i.imgur.com/hair.png" />
+              </div>
             </section>
           ) : (
             <section className="grid gap-5 border-t border-border pt-6">
@@ -995,16 +1084,139 @@ function TypeChoice({ active = false, compact = false, disabled = false, icon, t
     <Button
       type="button"
       variant={active ? "default" : "ghost"}
-      className={`group flex !h-auto w-full flex-col !items-start !justify-center gap-2 !overflow-visible !whitespace-normal px-4 py-4 text-left ${minHeight} ${active ? "aottg2-emboss-bg aottg2-cta-primary shadow-[0_3px_0_hsl(var(--primary)/0.45)]" : "bg-[color-mix(in_srgb,hsl(var(--input))_58%,hsl(var(--background)))] shadow-[inset_0_1px_5px_rgb(0_0_0_/_0.28),inset_0_1px_0_rgb(255_255_255_/_0.04)] hover:bg-foreground"} ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
+      className={`group flex !h-auto w-full min-w-0 flex-col !items-start !justify-center gap-2 !overflow-hidden !whitespace-normal px-4 py-4 text-left ${minHeight} ${active ? "aottg2-emboss-bg aottg2-cta-primary shadow-[0_3px_0_hsl(var(--primary)/0.45)]" : "bg-[color-mix(in_srgb,hsl(var(--input))_58%,hsl(var(--background)))] shadow-[inset_0_1px_5px_rgb(0_0_0_/_0.28),inset_0_1px_0_rgb(255_255_255_/_0.04)] hover:bg-foreground"} ${disabled ? "cursor-not-allowed opacity-45" : ""}`}
       disabled={disabled}
       onClick={onClick}
     >
-      <span className={`flex items-center gap-2 whitespace-normal font-primary font-semibold uppercase leading-none ${compact ? "text-xl" : "text-2xl"} ${active ? "text-primary-foreground" : "text-foreground group-hover:text-background"}`}>
-        {icon}
-        {title}
+      <span className={`flex w-full min-w-0 items-center gap-2 whitespace-normal font-primary font-semibold uppercase leading-tight ${compact ? "text-lg" : "text-2xl"} ${active ? "text-primary-foreground" : "text-foreground group-hover:text-background"}`}>
+        <span className="shrink-0">{icon}</span>
+        <span className="min-w-0 max-w-full break-words">{title}</span>
       </span>
       {body ? <span className={`block whitespace-normal text-sm leading-5 ${active ? "text-primary-foreground" : "text-foreground group-hover:text-background"}`}>{body}</span> : null}
     </Button>
+  );
+}
+
+function TagPicker({ value, onChange }: { value: string[]; onChange: (tags: string[]) => void }) {
+  const [draft, setDraft] = useState("");
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<ElementRef<"input"> | null>(null);
+  const debouncedDraft = useDebouncedValue(draft.trim(), 120);
+  const selectedTags = value
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+  const selectedLookup = new Set(selectedTags.map((tag) => tag.toLowerCase()));
+  const suggestionsQuery = useQuery({
+    queryKey: ["workshop", "tag-suggestions", debouncedDraft],
+    queryFn: () => listTagSuggestions(debouncedDraft, 8),
+    enabled: open,
+    staleTime: 30_000,
+  });
+  const suggestions = (suggestionsQuery.data?.tags ?? []).filter((item) => !selectedLookup.has(item.tag.toLowerCase()));
+
+  function addTags(tags: string[], rawTags: string[]) {
+    const next = [...tags];
+    const lookup = new Set(next.map((tag) => tag.toLowerCase()));
+    for (const rawTag of rawTags) {
+      const tag = rawTag.trim();
+      const key = tag.toLowerCase();
+      if (!tag || lookup.has(key)) continue;
+      next.push(tag);
+      lookup.add(key);
+    }
+    return next;
+  }
+
+  function commit(rawTag = draft) {
+    const next = addTags(selectedTags, [rawTag]);
+    if (next.length !== selectedTags.length) onChange(next);
+    setDraft("");
+    setOpen(false);
+  }
+
+  function updateDraft(nextValue: string) {
+    setOpen(true);
+    if (!nextValue.includes(",")) {
+      setDraft(nextValue);
+      return;
+    }
+
+    const parts = nextValue.split(",");
+    const trailingDraft = parts.pop() ?? "";
+    onChange(addTags(selectedTags, parts));
+    setDraft(trailingDraft);
+  }
+
+  function handleKeyDown(event: KeyboardEvent<ElementRef<"input">>) {
+    if (event.key === "Enter" || event.key === ",") {
+      event.preventDefault();
+      commit();
+      return;
+    }
+
+    if (event.key === "Backspace" && draft.length === 0 && selectedTags.length > 0) {
+      event.preventDefault();
+      onChange(selectedTags.slice(0, -1));
+    }
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <div
+          className="relative flex h-10 w-full cursor-text items-center overflow-hidden rounded-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background"
+          onClick={() => inputRef.current?.focus()}
+        >
+          <Input aria-hidden="true" tabIndex={-1} readOnly className="pointer-events-none absolute inset-0 h-10" />
+          <div className="relative z-10 flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden px-3 py-2">
+            {selectedTags.map((tag) => (
+              <AssetTagButton key={tag} size="sm" className="h-6 max-w-32 shrink-0 gap-1 px-1.5 text-[11px]" onClick={(event) => {
+                event.stopPropagation();
+                onChange(selectedTags.filter((item) => item !== tag));
+              }}>
+                <span className="truncate">{tag}</span>
+                <X className="size-3" aria-hidden="true" />
+                <span className="sr-only">Remove {tag}</span>
+              </AssetTagButton>
+            ))}
+            <input
+              ref={inputRef}
+              className="h-6 min-w-[7rem] flex-1 border-0 bg-transparent p-0 text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground"
+              placeholder={selectedTags.length === 0 ? "Type a tag, then comma" : ""}
+              value={draft}
+              onChange={(event) => updateDraft(event.target.value)}
+              onFocus={() => setOpen(true)}
+              onKeyDown={handleKeyDown}
+            />
+          </div>
+        </div>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-72 p-0" align="start" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <Command shouldFilter={false}>
+          <CommandList>
+            {suggestionsQuery.isFetching ? (
+              <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
+                <Spinner size="sm" variant="primary" label="Loading tags" />
+                Loading tags
+              </div>
+            ) : suggestions.length > 0 ? (
+              <CommandGroup heading="Existing tags">
+                {suggestions.map((item) => (
+                  <CommandItem key={item.tag} value={item.tag} className="cursor-pointer px-3 py-2 hover:!bg-secondary hover:!text-secondary-foreground data-[selected=true]:!bg-secondary data-[selected=true]:!text-secondary-foreground" onSelect={() => commit(item.tag)}>
+                    <div className="flex w-full items-center justify-between gap-3">
+                      <span className="text-sm font-semibold uppercase text-inherit">{item.tag}</span>
+                      <span className="text-xs font-medium uppercase text-inherit opacity-75">{item.count} {item.count === 1 ? "skin" : "skins"}</span>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ) : (
+              <CommandEmpty>No matching tags</CommandEmpty>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -1083,9 +1295,10 @@ function GalleryPreview({ urls, title }: { urls: string[]; title: string }) {
   );
 }
 
-function TexturePreviewButton({ url, label, onClick, className = "min-h-40" }: { url: string; label: string; onClick: () => void; className?: string }) {
+function TexturePreviewButton({ url, label, emptyLabel, onClick, className = "min-h-40" }: { url: string; label: string; emptyLabel?: string; onClick: () => void; className?: string }) {
   const [failed, setFailed] = useState(false);
   const cleanUrl = url.trim();
+  const emptyWords = (emptyLabel ?? `Set ${label}`).trim().split(/\s+/);
 
   useEffect(() => {
     setFailed(false);
@@ -1093,9 +1306,13 @@ function TexturePreviewButton({ url, label, onClick, className = "min-h-40" }: {
 
   if (!cleanUrl || failed) {
     return (
-      <Button type="button" variant="ghost" className={`flex ${className} w-full items-center justify-center gap-3 border border-border bg-muted/40 p-4 text-center text-foreground`} onClick={onClick}>
-        <ImageIcon className="h-6 w-6 shrink-0" />
-        <span className="font-primary text-base font-semibold uppercase leading-none text-foreground">Set Texture URL</span>
+      <Button type="button" variant="ghost" className={`flex ${className} w-full flex-col items-center justify-center gap-2 overflow-hidden border border-border bg-muted/40 p-3 text-center text-foreground`} onClick={onClick}>
+        <ImageIcon className="h-6 w-6 shrink-0 text-current" />
+        <span className="flex max-w-full flex-col items-center font-primary text-xs font-semibold uppercase leading-none text-current">
+          {emptyWords.map((word) => (
+            <span key={word}>{word}</span>
+          ))}
+        </span>
       </Button>
     );
   }
@@ -1207,16 +1424,26 @@ function SkinTargetCard({
   const [variantOpen, setVariantOpen] = useState(false);
   const [variantInitialPhase, setVariantInitialPhase] = useState<"models" | "boots">("models");
   const [textureOpen, setTextureOpen] = useState(false);
+  const [pairedTextureSide, setPairedTextureSide] = useState<"left" | "right" | null>(null);
   const [assetOpen, setAssetOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
   const compatibilityOptions = compatibilityVariantOptions(value.slot, catalog);
   const needsCompatibility = isCompatibilitySlot(value.slot, catalog);
   const needsHookTiling = isHookSlot(value.slot);
+  const isGrouped = isGroupedSlot(value.slot);
   const selectedOptions = selectedVariantOptions(value, catalog);
   const isAssetSource = allowAssetSource && (value.source === "asset" || Boolean(value.skinAssetId));
   const cardTitle = isAssetSource ? `${value.linkedAsset?.title ?? skinTypeLabel(value.slot)} - Referenced Skin Part` : targetTitle(value, catalog);
-  const previewHeight = tall ? "!h-56 !min-h-56" : "min-h-40";
-  const controlHeight = tall ? "min-h-24" : "min-h-16";
+  const previewHeight = tall ? "!h-56 !min-h-56" : "!h-40 !min-h-40";
+  const controlHeight = tall ? "min-h-24" : "min-h-[74px]";
+  const textureUrls = value.textureUrls ?? { left: "", right: "" };
+  const hookTilings = value.hookTilings ?? { left: "1", right: "1" };
+
+  function pairedTextureUrl(side: "left" | "right") {
+    const own = textureUrls[side];
+    const mirrored = side === "left" ? textureUrls.right : textureUrls.left;
+    return own || (value.mirror ? mirrored : "");
+  }
 
   function selectSlot(slot: string) {
     onChange(targetSlotPatch(value, slot));
@@ -1240,6 +1467,10 @@ function SkinTargetCard({
     setAssetOpen(false);
   }
 
+  function updatePairedTexture(side: "left" | "right", textureUrl: string) {
+    onChange({ ...value, source: "url", textureUrls: { ...textureUrls, [side]: textureUrl }, textureUrl: "", skinAssetId: null, linkedAsset: null });
+  }
+
   return (
     <SideCard
       title={
@@ -1256,7 +1487,21 @@ function SkinTargetCard({
       contentClassName="grid gap-4"
     >
       <div className={`grid items-stretch gap-4 ${isAssetSource && !value.skinAssetId ? "" : "sm:grid-cols-[minmax(260px,1fr)_minmax(0,1fr)]"}`}>
-        {isAssetSource ? (
+        {isGrouped ? (
+          isAssetSource && !value.skinAssetId ? (
+            <SelectAssetButton slot={value.slot} onClick={() => setAssetOpen(true)} className={previewHeight} />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(["left", "right"] as const).map((side) =>
+                isAssetSource ? (
+                  <TexturePreviewPanel key={side} url={pairedTextureUrl(side)} label={`${side} ${skinTypeLabel(value.slot)} texture`} className={previewHeight} />
+                ) : (
+                  <TexturePreviewButton key={side} url={pairedTextureUrl(side)} label={`${side} ${skinTypeLabel(value.slot)} texture`} emptyLabel={`Set ${side} texture`} onClick={() => setPairedTextureSide(side)} className={previewHeight} />
+                ),
+              )}
+            </div>
+          )
+        ) : isAssetSource ? (
           value.skinAssetId ? (
             <TexturePreviewPanel url={value.textureUrl} label={`${skinTypeLabel(value.slot)} texture`} className={previewHeight} />
           ) : (
@@ -1275,6 +1520,23 @@ function SkinTargetCard({
               <span>{selectedOptions.length === 1 ? variantDisplayLabel(selectedOptions[0]) : selectedOptions.length ? `${selectedOptions.length} Models` : "Choose Models"}</span>
               <span className="text-xs">{compatibilityOptions.length} available</span>
             </Button>
+          ) : isGrouped ? (
+            <div className="grid gap-3">
+              <Button type="button" variant="secondary" className={`${controlHeight} justify-between gap-3 px-3`} disabled={isAssetSource} onClick={() => onChange({ ...value, mirror: !(value.mirror ?? false) })}>
+                <span>Mirror</span>
+                {value.mirror ? <Check className="h-5 w-5" aria-hidden="true" /> : <Square className="h-5 w-5" aria-hidden="true" />}
+              </Button>
+              {isGroupedHooksSlot(value.slot) ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Field label="Left Tiling">
+                    <Input className="h-12 text-sm" min="0.01" step="0.01" type="number" value={hookTilings.left} disabled={isAssetSource} onChange={(event) => onChange({ ...value, hookTilings: { ...hookTilings, left: event.target.value } })} />
+                  </Field>
+                  <Field label="Right Tiling">
+                    <Input className="h-12 text-sm" min="0.01" step="0.01" type="number" value={hookTilings.right} disabled={isAssetSource} onChange={(event) => onChange({ ...value, hookTilings: { ...hookTilings, right: event.target.value } })} />
+                  </Field>
+                </div>
+              ) : null}
+            </div>
           ) : needsHookTiling ? (
             <Field label="Hook Tiling">
               <Input className="h-12 text-sm" min="0.01" step="0.01" type="number" value={value.hookTiling || "1"} onChange={(event) => onChange({ ...value, hookTiling: event.target.value })} />
@@ -1326,6 +1588,12 @@ function SkinTargetCard({
         </Dialog>
       ) : null}
       <TextureUrlDialog open={textureOpen} onOpenChange={setTextureOpen} value={value.textureUrl} label={skinTypeLabel(value.slot)} placeholder={texturePlaceholder} onSave={(textureUrl) => onChange({ ...value, source: "url", textureUrl, skinAssetId: null, linkedAsset: null })} />
+      <TextureUrlDialog open={pairedTextureSide !== null} onOpenChange={(open) => {
+        if (!open) setPairedTextureSide(null);
+      }} value={pairedTextureSide ? textureUrls[pairedTextureSide] : ""} label={`${pairedTextureSide ?? "Left"} ${skinTypeLabel(value.slot)}`} placeholder={texturePlaceholder} onSave={(textureUrl) => {
+        if (pairedTextureSide) updatePairedTexture(pairedTextureSide, textureUrl);
+        setPairedTextureSide(null);
+      }} />
       {allowAssetSource ? <AssetPickerDialog open={assetOpen} onOpenChange={setAssetOpen} slot={value.slot} selectedId={value.skinAssetId} onSelect={selectAsset} /> : null}
       <SlotPickerDialog slot={value.slot} catalog={catalog} open={slotOpen} onOpenChange={setSlotOpen} onSelect={selectSlot} />
       {!isAssetSource && needsCompatibility ? <VariantPickerDialog slot={value.slot} options={compatibilityOptions} selected={value.variants} boots={value.boots ?? true} initialPhase={variantInitialPhase} open={variantOpen} onBootsChange={(boots) => onChange({ ...value, boots })} onOpenChange={setVariantOpen} onToggle={toggleVariant} /> : null}
@@ -1401,7 +1669,7 @@ function AssetPickerDialog({ open, onOpenChange, slot, selectedId, onSelect }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="max-w-6xl">
         <DialogHeader>
           <DialogTitle>{slot ? `Select ${skinTypeLabel(slot)} Asset` : "Select Skin Part Asset"}</DialogTitle>
           <DialogDescription>Choose one of your published skin parts for this set item.</DialogDescription>
@@ -1502,13 +1770,13 @@ function SlotPickerDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-6xl">
         <DialogHeader>
           <DialogTitle>Choose Skin Item</DialogTitle>
           <DialogDescription>Select the texture slot first. Model selection opens next when this slot needs it.</DialogDescription>
         </DialogHeader>
         <div className="grid max-h-[60vh] auto-rows-fr gap-3 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-4">
-          {catalog.humanSkinParts.filter((item) => !pairedTilingSlots.has(item)).map((item) => {
+          {catalog.humanSkinParts.filter((item) => !legacyGroupedSlots.has(item)).map((item) => {
             const active = item === slot;
             return (
               <TypeChoice

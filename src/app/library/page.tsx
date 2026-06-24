@@ -47,9 +47,6 @@ function parseAssetQuery(params: Record<string, string | string[] | undefined>):
 }
 
 function normalizeSlotParam(value: string) {
-  if (value === "Gear") return "GearL";
-  if (value === "Thunderspears") return "ThunderspearL";
-  if (value === "Hooks") return "HookL";
   return value;
 }
 

@@ -174,6 +174,7 @@ function assetCategory(asset: WorkshopAsset) {
 
 function summarizeAsset(asset: WorkshopAsset) {
   if (asset.type === "skin_part" && isSkinPartPayload(asset.payload)) {
+    if (isGroupedSlot(asset.payload.slot)) return summarizeGroupedSlot(asset.payload);
     const variants = asset.payload.variantScope === "specific" && asset.payload.variants?.length ? `: ${asset.payload.variants.join(", ")}` : "";
     const boots = asset.payload.slot === "Costume" ? ` - Boots ${asset.payload.boots === false ? "Off" : "On"}` : "";
     return `${asset.payload.slot ?? "Skin part"}${variants}${boots}`;
@@ -189,6 +190,17 @@ function summarizeAsset(asset: WorkshopAsset) {
 
 function isSkinPartPayload(payload: WorkshopAsset["payload"]): payload is SkinPartPayload {
   return "slot" in payload || "textureUrl" in payload;
+}
+
+function isGroupedSlot(slot: string | undefined) {
+  return slot === "Blades" || slot === "AHSS" || slot === "APG" || slot === "Thunderspears" || slot === "Hooks";
+}
+
+function summarizeGroupedSlot(payload: SkinPartPayload) {
+  const left = Boolean(payload.textureUrls?.left);
+  const right = Boolean(payload.textureUrls?.right);
+  const side = payload.mirror ? "Mirror" : left && right ? "Both sides" : left ? "Left only" : right ? "Right only" : "No side";
+  return `${payload.slot ?? "Grouped part"} - ${side}`;
 }
 
 function isSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkinSetPayload {

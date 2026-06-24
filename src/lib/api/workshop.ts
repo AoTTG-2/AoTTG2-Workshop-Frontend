@@ -34,18 +34,34 @@ export interface SkinPartPayload {
   category?: string;
   slot?: string;
   textureUrl?: string;
+  textureUrls?: PairedTextureUrls | null;
   variantScope?: "all" | "specific" | string;
   variants?: string[];
   boots?: boolean | null;
+  mirror?: boolean | null;
+  hookTilings?: HookTilings | null;
 }
 
 export interface SkinSetItem {
   slot?: string;
   skinAssetId?: string | null;
   textureUrl?: string | null;
+  textureUrls?: PairedTextureUrls | null;
   variantScope?: "all" | "specific" | string | null;
   variants?: string[] | null;
   boots?: boolean | null;
+  mirror?: boolean | null;
+  hookTilings?: HookTilings | null;
+}
+
+export interface PairedTextureUrls {
+  left?: string | null;
+  right?: string | null;
+}
+
+export interface HookTilings {
+  left?: number | null;
+  right?: number | null;
 }
 
 export interface SkinSetPayload {
@@ -112,6 +128,15 @@ export interface AssetListResponse {
   page: number;
   pageSize: number;
   assets: WorkshopAsset[];
+}
+
+export interface TagSuggestion {
+  tag: string;
+  count: number;
+}
+
+export interface TagSuggestionResponse {
+  tags: TagSuggestion[];
 }
 
 export interface CreatorStats {
@@ -480,6 +505,12 @@ export async function listAssets(query: AssetListQuery = {}, accessToken?: strin
   }
 
   return parseJson<AssetListResponse>(response);
+}
+
+export async function listTagSuggestions(q = "", limit = 8): Promise<TagSuggestionResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (q.trim()) params.set("q", q.trim());
+  return workshopJson<TagSuggestionResponse>(`/tags?${params.toString()}`);
 }
 
 export async function listFavoriteAssets(accessToken: string, page = 1, pageSize = 24): Promise<AssetListResponse> {

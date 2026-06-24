@@ -812,8 +812,17 @@ function AssetSummary({ asset }: { asset: WorkshopAsset }) {
     return (
       <dl className="grid gap-2 text-sm">
         <SummaryRow label="Slot" value={asset.payload.slot} />
-        <SummaryRow label="Scope" value={asset.payload.variantScope} />
-        <SummaryRow label="Variants" value={asset.payload.variants?.join(", ")} />
+        {isGroupedSlot(asset.payload.slot) ? (
+          <>
+            <SummaryRow label="Sides" value={summarizeGroupedSlot(asset.payload)} />
+            {asset.payload.slot === "Hooks" ? <SummaryRow label="Hook Tilings" value={`${asset.payload.hookTilings?.left ?? 1} / ${asset.payload.hookTilings?.right ?? 1}`} /> : null}
+          </>
+        ) : (
+          <>
+            <SummaryRow label="Scope" value={asset.payload.variantScope} />
+            <SummaryRow label="Variants" value={asset.payload.variants?.join(", ")} />
+          </>
+        )}
         {asset.payload.slot === "Costume" ? <SummaryRow label="Boots" value={asset.payload.boots === false ? "Off" : "On"} /> : null}
       </dl>
     );
@@ -859,7 +868,7 @@ function SetItemSummary({ item }: { item: SkinSetItem }) {
           Linked skin part
         </Link>
       ) : (
-        <span>{item.textureUrl || "no texture"}</span>
+        <span>{item.textureUrl || [item.textureUrls?.left, item.textureUrls?.right].filter(Boolean).join(" / ") || "no texture"}</span>
       )}
       {details ? <span>{details}</span> : null}
     </div>
@@ -1001,6 +1010,7 @@ function assetCategory(asset: WorkshopAsset) {
 
 function summarizeAsset(asset: WorkshopAsset) {
   if (asset.type === "skin_part" && isSkinPartPayload(asset.payload)) {
+    if (isGroupedSlot(asset.payload.slot)) return `${asset.payload.slot ?? "Grouped part"} - ${summarizeGroupedSlot(asset.payload)}`;
     const variants = asset.payload.variantScope === "specific" && asset.payload.variants?.length ? `: ${asset.payload.variants.join(", ")}` : "";
     const boots = asset.payload.slot === "Costume" ? ` - Boots ${asset.payload.boots === false ? "Off" : "On"}` : "";
     return `${asset.payload.slot ?? "Skin part"}${variants}${boots}`;
@@ -1016,17 +1026,19 @@ function summarizeAsset(asset: WorkshopAsset) {
 
 function collectTextureUrls(asset: WorkshopAsset) {
   if (asset.type === "skin_part" && isSkinPartPayload(asset.payload)) {
+    if (isGroupedSlot(asset.payload.slot)) return [asset.payload.textureUrls?.left, asset.payload.textureUrls?.right].filter(Boolean) as string[];
     return asset.payload.textureUrl ? [asset.payload.textureUrl] : [];
   }
 
   if (asset.type === "skin_set" && isSkinSetPayload(asset.payload)) {
-    return (asset.payload.items ?? []).map((item) => item.textureUrl).filter((url): url is string => Boolean(url));
+    return (asset.payload.items ?? []).flatMap((item) => [item.textureUrl, item.textureUrls?.left, item.textureUrls?.right]).filter((url): url is string => Boolean(url));
   }
 
   return [];
 }
 
 function summarizeSetItemDetails(item: SkinSetItem) {
+  if (isGroupedSlot(item.slot)) return ` - ${summarizeGroupedSlot(item)}`;
   const variants = item.variantScope === "specific" && item.variants?.length ? ` - ${item.variants.join(", ")}` : "";
   const boots = item.slot === "Costume" ? ` - Boots ${item.boots === false ? "Off" : "On"}` : "";
   return `${variants}${boots}`;
@@ -1034,6 +1046,20 @@ function summarizeSetItemDetails(item: SkinSetItem) {
 
 function isSkinPartPayload(payload: WorkshopAsset["payload"]): payload is SkinPartPayload {
   return "slot" in payload || "textureUrl" in payload;
+}
+
+function isGroupedSlot(slot: string | undefined) {
+  return slot === "Blades" || slot === "AHSS" || slot === "APG" || slot === "Thunderspears" || slot === "Hooks";
+}
+
+function summarizeGroupedSlot(payload: SkinPartPayload | SkinSetItem) {
+  const left = Boolean(payload.textureUrls?.left);
+  const right = Boolean(payload.textureUrls?.right);
+  if (payload.mirror) return "Mirror";
+  if (left && right) return "Both sides";
+  if (left) return "Left only";
+  if (right) return "Right only";
+  return "No side";
 }
 
 function isSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkinSetPayload {

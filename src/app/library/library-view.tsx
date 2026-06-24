@@ -36,7 +36,7 @@ const categoryFilters = [
   { label: "Custom Logic", type: "custom_logic", icon: FileCode2 },
   { label: "Maps", type: "map", icon: Map },
 ];
-const humanParts = ["Hair", "Eye", "Glass", "Face", "Skin", "Costume", "Logo", "Gear", "Gas", "Hoodie", "WeaponTrail", "Horse", "Thunderspears", "Hooks", "Hat", "Head", "Back"];
+const humanParts = ["Hair", "Eye", "Glass", "Face", "Skin", "Costume", "Logo", "Blades", "AHSS", "APG", "Gas", "Hoodie", "WeaponTrail", "Horse", "Thunderspears", "Hooks", "Hat", "Head", "Back"];
 const humanPartIcons = {
   Hair: Sparkles,
   Eye,
@@ -45,7 +45,9 @@ const humanPartIcons = {
   Skin: User,
   Costume: Shirt,
   Logo: Palette,
-  Gear: Box,
+  Blades: Box,
+  AHSS: Box,
+  APG: Box,
   Gas: Zap,
   Hoodie: Shirt,
   WeaponTrail: Swords,
@@ -283,9 +285,6 @@ function StateMessage({ title, message }: { title: string; message: string }) {
 }
 
 function normalizeSlotParam(value: string) {
-  if (value === "Gear") return "GearL";
-  if (value === "Thunderspears") return "ThunderspearL";
-  if (value === "Hooks") return "HookL";
   return value;
 }
 
