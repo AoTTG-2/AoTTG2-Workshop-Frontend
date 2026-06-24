@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { assetPath, type WorkshopAsset, type WorkshopMedia } from "../lib/api/workshop";
+import { thumbnailDisplayUrl } from "../lib/media";
 
 const heroSlides = [
   { src: "/hero/nemona-poster.webp", alt: "Nemona AoTTG2 skin by Divinityxrc" },
@@ -197,7 +198,7 @@ function AssetCard({ asset }: { asset: WorkshopAsset }) {
         {thumbnail && !failed ? (
           <div className="relative aspect-video overflow-hidden bg-muted/50">
             {!loaded ? <ThumbnailLoading /> : null}
-            <img className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} src={thumbnail.url} alt={thumbnail.description || asset.title} loading="lazy" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
+            <img className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} src={thumbnailDisplayUrl(thumbnail.url)} alt={thumbnail.description || asset.title} loading="lazy" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
           </div>
         ) : (
           <div className="grid aspect-video place-items-center bg-muted/50 font-primary text-sm uppercase text-muted-foreground">No preview</div>

@@ -6,6 +6,7 @@ import { type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useStat
 import { AssetTag, AssetTagButton } from "./AssetTag";
 import { CreatorIdentityLink } from "./CreatorIdentityLink";
 import type { SkinPartPayload, SkinSetPayload, WorkshopAsset, WorkshopMedia } from "../lib/api/workshop";
+import { thumbnailDisplayUrl } from "../lib/media";
 
 interface WorkshopAssetCardProps {
   asset: WorkshopAsset;
@@ -123,7 +124,7 @@ function PreviewImage({ media, title }: { media?: WorkshopMedia; title: string }
   return (
     <div className="relative aspect-video overflow-hidden bg-muted/50">
       {!loaded ? <ThumbnailLoading /> : null}
-      <img className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} src={media.url} alt={media.description || title} loading="lazy" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
+      <img className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} src={thumbnailDisplayUrl(media.url)} alt={media.description || title} loading="lazy" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
     </div>
   );
 }
