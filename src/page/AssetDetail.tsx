@@ -14,8 +14,9 @@ import { getAccessToken } from "../auth/storage";
 import { useAuth } from "../auth/useAuth";
 import { canModerateAssets, canModerateComments } from "../auth/workshopPermissions";
 import { AssetTag, AssetTagLink } from "../components/AssetTag";
+import { ReportDialog } from "../components/ReportDialog";
 import { SideCard } from "../components/SideCard";
-import { assetPath, createAssetComment, deleteWorkshopAsset, deleteWorkshopComment, getAsset, getAssetBySeoPath, hideModerationComment, listAssetComments, listAssetUsedBy, replyToAssetComment, reportWorkshopComment, setAssetFavorite, setAssetLike, trackAssetDownload, trackAssetView, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopComment, type WorkshopMedia } from "../lib/api/workshop";
+import { assetPath, createAssetComment, deleteWorkshopAsset, deleteWorkshopComment, getAsset, getAssetBySeoPath, hideModerationComment, listAssetComments, listAssetUsedBy, replyToAssetComment, reportWorkshopAsset, reportWorkshopComment, setAssetFavorite, setAssetLike, trackAssetDownload, trackAssetView, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopComment, type WorkshopMedia } from "../lib/api/workshop";
 import { toast } from "../lib/toast";
 
 const markdownComponents: Components = {
@@ -72,14 +73,14 @@ export function AssetDetail({ id = "", creatorName = "", assetSlug = "", initial
   }, [asset, id, router]);
 
   useEffect(() => {
-    if (!asset?.id || trackedView.current === asset.id) return;
+    if (!asset?.id || asset.status !== "visible" || trackedView.current === asset.id) return;
     trackedView.current = asset.id;
     void trackAssetView(asset.id, getAccessToken())
       .then((result) => {
         if (result.counted) void refetchAsset();
       })
       .catch(() => undefined);
-  }, [asset?.id, refetchAsset]);
+  }, [asset?.id, asset?.status, refetchAsset]);
 
   if (query.isLoading) {
     return (
@@ -121,6 +122,8 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
   const [galleryDirection, setGalleryDirection] = useState(1);
   const [likeBurst, setLikeBurst] = useState(false);
   const [favoriteBurst, setFavoriteBurst] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportBusy, setReportBusy] = useState(false);
   const activeMedia = media[activeIndex];
   const textureUrls = collectTextureUrls(asset);
   const category = assetCategory(asset);
@@ -166,8 +169,22 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
     }
   }
 
-  function comingSoon(label: string) {
-    toast.info(`${label} coming soon`, { description: "This action is not available yet." });
+  async function submitAssetReport(reason: string, details: string | null) {
+    const token = getAccessToken();
+    if (!isAuthenticated || !token) {
+      toast.info("Sign in to report assets.", { description: "Reports are attached to your account." });
+      return;
+    }
+    try {
+      setReportBusy(true);
+      await reportWorkshopAsset(asset.publicId || asset.id, reason, details, token);
+      toast.success("Asset reported", { description: "Moderators can review it now." });
+      setReportOpen(false);
+    } catch (error) {
+      toast.error("Could not report asset", { description: error instanceof Error ? error.message : "Try again." });
+    } finally {
+      setReportBusy(false);
+    }
   }
 
   async function importAsset() {
@@ -240,6 +257,28 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
     }
   }
 
+  if (asset.status !== "visible") {
+    return (
+      <main className="mx-auto w-full max-w-4xl px-6 py-8">
+        <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" href="/library">
+          Back to library
+        </Link>
+        <div className="mt-6 border border-border bg-card/40 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="font-primary text-3xl uppercase">{asset.title}</h1>
+            <AssetTag variant="category">{asset.status}</AssetTag>
+          </div>
+          <p className="mt-3 text-sm text-muted-foreground">{isOwnAsset || canModerateAssets(permissionSource) ? "This asset is hidden from the public." : "This asset is unavailable."}</p>
+          {canModerateAssets(permissionSource) ? (
+            <Button className="mt-5" type="button" onClick={() => router.push("/moderation")}>
+              Open Moderation
+            </Button>
+          ) : null}
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
       <motion.div initial={motionInitial(reduceMotion, 6)} animate={motionAnimate} transition={motionTransition(0)}>
@@ -291,7 +330,7 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
                   <MenuAction icon={<Copy className="h-4 w-4" />} label="Copy ID" onClick={() => copyText("asset id", asset.publicId)} />
                   <MenuAction icon={<LinkIcon className="h-4 w-4" />} label="Copy Link" onClick={() => copyText("asset link", publicAssetUrl)} />
                   {canEditAsset ? <MenuAction icon={<Pencil className="h-4 w-4" />} label="Edit Asset" onClick={() => router.push(`${assetPath(asset)}/edit`)} /> : null}
-                  <MenuAction icon={<Flag className="h-4 w-4" />} label="Report" onClick={() => comingSoon("Report")} />
+                  {!isOwnAsset ? <MenuAction icon={<Flag className="h-4 w-4" />} label="Report" onClick={() => setReportOpen(true)} /> : null}
                   {canDeleteAsset ? <MenuAction destructive icon={<Trash2 className="h-4 w-4" />} label="Delete Asset" onClick={deleteAsset} /> : null}
                 </div>
               </details>
@@ -395,6 +434,7 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
       </div>
 
       <AssetComments asset={asset} onAssetRefresh={onRefresh} />
+      <ReportDialog open={reportOpen} title="Report Asset" description="Send this asset to the moderation queue." busy={reportBusy} onOpenChange={setReportOpen} onSubmit={submitAssetReport} />
     </main>
   );
 }
@@ -413,7 +453,9 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
   const [body, setBody] = useState("");
   const [replyBody, setReplyBody] = useState("");
   const [replyTo, setReplyTo] = useState<{ commentId: string; rowId: string; author: string } | null>(null);
+  const [reportCommentId, setReportCommentId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [reportBusy, setReportBusy] = useState(false);
 
   useEffect(() => {
     if (!replyTo) return;
@@ -500,19 +542,22 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
     }
   }
 
-  async function reportComment(commentId: string) {
+  async function submitCommentReport(reason: string, details: string | null) {
     const token = getAccessToken();
     if (!isAuthenticated || !token) {
       toast.info("Sign in to report comments.", { description: "Reports are attached to your account." });
       return;
     }
-    const reason = window.prompt("Reason for reporting this comment?", "spam")?.trim();
-    if (!reason) return;
+    if (!reportCommentId) return;
     try {
-      await reportWorkshopComment(commentId, reason, token);
+      setReportBusy(true);
+      await reportWorkshopComment(reportCommentId, reason, details, token);
       toast.success("Comment reported", { description: "Moderators can review it now." });
+      setReportCommentId(null);
     } catch (error) {
       toast.error("Could not report comment", { description: error instanceof Error ? error.message : "Try again." });
+    } finally {
+      setReportBusy(false);
     }
   }
 
@@ -538,7 +583,7 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
           { label: "Reply", onSelect: () => startReply(parent.id, comment.id, comment.authorDisplayName) },
           accountId === comment.authorAuthAccountId ? { label: "Delete", destructive: true, onSelect: () => void deleteComment(comment.id) } : null,
           canModerateComments(permissionSource) && comment.status === "visible" ? { label: "Hide", destructive: true, onSelect: () => void hideComment(comment.id) } : null,
-          accountId !== comment.authorAuthAccountId ? { label: "Report", destructive: true, onSelect: () => void reportComment(comment.id) } : null,
+          accountId !== comment.authorAuthAccountId ? { label: "Report", destructive: true, onSelect: () => setReportCommentId(comment.id) } : null,
         ].filter((item): item is NonNullable<typeof item> => item !== null)
       : undefined;
 
@@ -557,6 +602,7 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
   const comments = commentsQuery.data?.comments.map((comment) => toItem(comment)) ?? [];
 
   return (
+    <>
     <motion.section className="mt-5 border-t border-border pt-5" initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.1)}>
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -607,6 +653,8 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
         />
       </motion.div>
     </motion.section>
+    <ReportDialog open={Boolean(reportCommentId)} title="Report Comment" description="Send this comment to the moderation queue." busy={reportBusy} onOpenChange={(open) => !open && setReportCommentId(null)} onSubmit={submitCommentReport} />
+    </>
   );
 }
 

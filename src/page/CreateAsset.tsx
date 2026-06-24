@@ -853,6 +853,7 @@ function ListingPreview({ kind, common, authorName }: { kind: AssetKind; common:
     publicId: "preview",
     creatorName: "preview",
     assetSlug: "preview",
+    status: "visible",
     type: kind,
     title,
     shortDescription: common.shortDescription.trim() || null,

@@ -76,6 +76,7 @@ export function WorkshopAssetCard({ asset, interactive = true, onOpen, onTagSele
           <div className="flex min-w-0 items-center gap-3">
             <StatIcon icon={<Download className="h-3.5 w-3.5" />} label={formatStatLabel(asset.engagement?.downloadCount ?? 0, "download")} value={asset.engagement?.downloadCount ?? 0} />
             <StatIcon icon={<ThumbsUp className="h-3.5 w-3.5" />} label={formatStatLabel(asset.engagement?.likeCount ?? 0, "thank")} value={asset.engagement?.likeCount ?? 0} />
+            {asset.status !== "visible" ? <span className="text-destructive">{asset.status}</span> : null}
           </div>
           <span className="ml-auto inline-flex shrink-0 items-center gap-1" title={formatDate(asset.createdAt)}>
             <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />

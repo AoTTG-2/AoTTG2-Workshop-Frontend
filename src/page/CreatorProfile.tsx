@@ -2,16 +2,24 @@
 
 import { Badge, Button, StatCard } from "@aottg2/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Download, FolderOpen, MessageCircle, ThumbsUp } from "lucide-react";
+import { Download, Flag, FolderOpen, MessageCircle, ThumbsUp } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { authApi, authAssetUrl } from "../auth/api";
+import { getAccessToken } from "../auth/storage";
 import type { ProfilePreset } from "../auth/types";
+import { useAuth } from "../auth/useAuth";
+import { ReportDialog } from "../components/ReportDialog";
 import { WorkshopAssetCard } from "../components/WorkshopAssetCard";
-import { assetPath, type PublicCreator, type WorkshopAsset } from "../lib/api/workshop";
+import { assetPath, reportWorkshopAccount, type PublicCreator, type WorkshopAsset } from "../lib/api/workshop";
+import { toast } from "../lib/toast";
 
 export function CreatorProfile({ creator }: { creator: PublicCreator }) {
   const router = useRouter();
+  const { isAuthenticated, profile: viewerProfile } = useAuth();
   const profile = creator.profile;
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportBusy, setReportBusy] = useState(false);
   const socials = Object.entries(profile?.socials ?? {}).filter(([, value]) => value.trim());
   const presetsQuery = useQuery({
     queryKey: ["auth", "profile-presets"],
@@ -28,6 +36,25 @@ export function CreatorProfile({ creator }: { creator: PublicCreator }) {
   const displayName = profile?.displayName || creator.displayName;
   const avatarUrl = presetImageUrl(avatarPreset);
   const bannerUrl = presetImageUrl(bannerPreset);
+  const isOwnProfile = viewerProfile?.accountId === creator.authAccountId;
+
+  async function submitReport(reason: string, details: string | null) {
+    const token = getAccessToken();
+    if (!isAuthenticated || !token) {
+      toast.info("Sign in to report creators.", { description: "Reports are attached to your account." });
+      return;
+    }
+    try {
+      setReportBusy(true);
+      await reportWorkshopAccount(creator.authAccountId, reason, details, token);
+      toast.success("Creator reported", { description: "Moderators can review it now." });
+      setReportOpen(false);
+    } catch (error) {
+      toast.error("Could not report creator", { description: error instanceof Error ? error.message : "Try again." });
+    } finally {
+      setReportBusy(false);
+    }
+  }
 
   return (
     <main className="min-h-[calc(100vh-80px)] px-4 py-6 lg:px-8">
@@ -48,7 +75,15 @@ export function CreatorProfile({ creator }: { creator: PublicCreator }) {
                   </div>
                 </div>
               </div>
-              <Button type="button" onClick={() => router.push("/library")}>Browse Library</Button>
+              <div className="flex flex-wrap gap-2">
+                {!isOwnProfile ? (
+                  <Button type="button" variant="secondary" onClick={() => setReportOpen(true)}>
+                    <Flag className="h-4 w-4" aria-hidden="true" />
+                    Report
+                  </Button>
+                ) : null}
+                <Button type="button" onClick={() => router.push("/library")}>Browse Library</Button>
+              </div>
             </div>
             {profile?.description ? <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{profile.description}</p> : null}
             {socials.length ? (
@@ -71,6 +106,7 @@ export function CreatorProfile({ creator }: { creator: PublicCreator }) {
         <AssetSection title="Featured" assets={creator.featuredAssets} empty="No featured assets yet." />
         <AssetSection title="Latest" assets={creator.latestAssets} empty="No assets yet." />
       </div>
+      <ReportDialog open={reportOpen} title="Report Creator" description="Send this creator account to the moderation queue." busy={reportBusy} onOpenChange={setReportOpen} onSubmit={submitReport} />
     </main>
   );
 }

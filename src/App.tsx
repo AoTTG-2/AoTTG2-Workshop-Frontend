@@ -2,13 +2,14 @@
 
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@aottg2/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Gauge, LogIn, LogOut, Moon, Sun, UserCircle } from "lucide-react";
+import { Gauge, LogIn, LogOut, Moon, ShieldAlert, Sun, UserCircle } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { websiteLogoutUrl } from "./auth/loginRedirect";
 import { getAccessToken } from "./auth/storage";
 import { useAuth } from "./auth/useAuth";
+import { canAccessWorkshopModeration } from "./auth/workshopPermissions";
 import { listNotifications } from "./lib/api/workshop";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
@@ -59,14 +60,16 @@ export function AppShell({ children, theme, onToggleTheme }: AppShellProps) {
 }
 
 function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggleTheme">) {
-  const { isAuthenticated, profile, logout } = useAuth();
+  const { isAuthenticated, profile, workshopUser, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const nextTheme = theme === "dark" ? "light" : "dark";
   const accountLabel = isAuthenticated ? profile?.displayName ?? "ACCOUNT" : "LOGIN";
   const libraryActive = pathname === "/library" || pathname === "/";
+  const moderationActive = pathname === "/moderation";
   const accountActive = pathname === "/dashboard" || pathname === "/login";
+  const canAccessModeration = canAccessWorkshopModeration(workshopUser ?? profile);
   const accessToken = isAuthenticated ? getAccessToken() : null;
   const unreadQuery = useQuery({
     queryKey: ["workshop", "notifications", "nav", profile?.accountId],
@@ -118,6 +121,12 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
           <button type="button" className={`workshop-control-free transition-colors duration-150 ease-out hover:text-primary ${libraryActive ? "text-primary" : ""}`} onClick={() => go("/library")}>
             LIBRARY
           </button>
+          {canAccessModeration ? (
+            <button type="button" className={`workshop-control-free inline-flex items-center gap-2 transition-colors duration-150 ease-out hover:text-primary ${moderationActive ? "text-primary" : ""}`} onClick={() => go("/moderation")}>
+              <ShieldAlert className="h-4 w-4" aria-hidden="true" />
+              MODERATION
+            </button>
+          ) : null}
           <AccountMenu
             accountActive={accountActive}
             accountLabel={accountLabel}
@@ -139,6 +148,7 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
       {mobileOpen ? (
         <nav id="mobile-navigation" className="grid bg-background font-primary text-foreground shadow-[0_18px_30px_rgb(0_0_0_/_0.24)] md:hidden" aria-label="Mobile navigation">
           <MobileNavButton active={libraryActive} onClick={() => go("/library")}>Library</MobileNavButton>
+          {canAccessModeration ? <MobileNavButton active={moderationActive} onClick={() => go("/moderation")}>Moderation</MobileNavButton> : null}
           <MobileNavButton active={accountActive} showDot={hasUnreadNotifications} onClick={goDashboardOrLogin}>{isAuthenticated ? "Dashboard" : "Login"}</MobileNavButton>
           <MobileNavButton onClick={switchTheme}>Switch to {nextTheme === "dark" ? "Dark" : "Light"} Mode</MobileNavButton>
           {isAuthenticated ? <MobileNavButton onClick={handleLogout}>Logout</MobileNavButton> : null}

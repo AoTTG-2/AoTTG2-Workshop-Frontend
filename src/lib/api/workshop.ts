@@ -58,6 +58,7 @@ export interface WorkshopAsset {
   publicId: string;
   creatorName: string;
   assetSlug: string;
+  status: "visible" | "hidden" | "deleted" | string;
   type: WorkshopAssetType | string;
   title: string;
   descriptionMarkdown?: string | null;
@@ -230,6 +231,29 @@ export interface CommentReportResponse {
   reason: string;
   createdAt: string;
   resolvedAt?: string | null;
+}
+
+export interface WorkshopReport {
+  id: string;
+  targetType: "asset" | "comment" | "account" | string;
+  targetId: string;
+  targetOwnerAuthAccountId: string;
+  reporterAuthAccountId: string;
+  reason: string;
+  details?: string | null;
+  snapshotJson: string;
+  status: "open" | "resolved" | "dismissed" | string;
+  createdAt: string;
+  resolvedAt?: string | null;
+  resolvedByAuthAccountId?: string | null;
+  resolutionNote?: string | null;
+}
+
+export interface ReportListResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  reports: WorkshopReport[];
 }
 
 interface ApiError {
@@ -513,8 +537,38 @@ export async function deleteWorkshopComment(commentId: string, accessToken: stri
   });
 }
 
-export async function reportWorkshopComment(commentId: string, reason: string, accessToken: string): Promise<CommentReportResponse> {
-  return workshopJson<CommentReportResponse>(`/comments/${encodeURIComponent(commentId)}/reports`, jsonAuthInit("POST", accessToken, { reason }));
+export async function reportWorkshopComment(commentId: string, reason: string, details: string | null, accessToken: string): Promise<WorkshopReport> {
+  return workshopJson<WorkshopReport>(`/comments/${encodeURIComponent(commentId)}/reports`, jsonAuthInit("POST", accessToken, { reason, details }));
+}
+
+export async function reportWorkshopAsset(assetId: string, reason: string, details: string | null, accessToken: string): Promise<WorkshopReport> {
+  return workshopJson<WorkshopReport>(`/assets/${encodeURIComponent(assetId)}/reports`, jsonAuthInit("POST", accessToken, { reason, details }));
+}
+
+export async function reportWorkshopAccount(accountId: string, reason: string, details: string | null, accessToken: string): Promise<WorkshopReport> {
+  return workshopJson<WorkshopReport>(`/accounts/${encodeURIComponent(accountId)}/reports`, jsonAuthInit("POST", accessToken, { reason, details }));
+}
+
+export async function listModerationReports(accessToken: string, status = "open", targetType?: string, page = 1, pageSize = 24): Promise<ReportListResponse> {
+  const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+  if (targetType) params.set("targetType", targetType);
+  return workshopJson<ReportListResponse>(`/moderation/reports?${params.toString()}`, { headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function resolveModerationReport(reportId: string, accessToken: string, note?: string | null): Promise<WorkshopReport> {
+  return workshopJson<WorkshopReport>(`/moderation/reports/${encodeURIComponent(reportId)}/resolve`, jsonAuthInit("PUT", accessToken, { note }));
+}
+
+export async function dismissModerationReport(reportId: string, accessToken: string, note?: string | null): Promise<WorkshopReport> {
+  return workshopJson<WorkshopReport>(`/moderation/reports/${encodeURIComponent(reportId)}/dismiss`, jsonAuthInit("PUT", accessToken, { note }));
+}
+
+export async function hideModerationAsset(assetId: string, accessToken: string): Promise<WorkshopAsset> {
+  return workshopJson<WorkshopAsset>(`/moderation/assets/${encodeURIComponent(assetId)}/hide`, { method: "PUT", headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function restoreModerationAsset(assetId: string, accessToken: string): Promise<WorkshopAsset> {
+  return workshopJson<WorkshopAsset>(`/moderation/assets/${encodeURIComponent(assetId)}/restore`, { method: "PUT", headers: { authorization: `Bearer ${accessToken}` } });
 }
 
 export async function listModerationComments(accessToken: string, status: "reported" | "hidden" = "reported", page = 1, pageSize = 24): Promise<CommentListResponse> {
@@ -530,7 +584,7 @@ export async function restoreModerationComment(commentId: string, accessToken: s
   return workshopJson<WorkshopComment>(`/moderation/comments/${encodeURIComponent(commentId)}/restore`, { method: "PUT", headers: { authorization: `Bearer ${accessToken}` } });
 }
 
-export async function resolveModerationReport(reportId: string, accessToken: string): Promise<CommentReportResponse> {
+export async function resolveModerationCommentReport(reportId: string, accessToken: string): Promise<CommentReportResponse> {
   return workshopJson<CommentReportResponse>(`/moderation/comment-reports/${encodeURIComponent(reportId)}/resolve`, { method: "PUT", headers: { authorization: `Bearer ${accessToken}` } });
 }
 
