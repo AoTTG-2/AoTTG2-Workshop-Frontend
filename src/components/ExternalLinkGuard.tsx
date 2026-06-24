@@ -4,7 +4,7 @@ import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogH
 import { useEffect, useMemo, useState } from "react";
 
 function isAllowedInternalUrl(url: URL) {
-  return url.hostname === "aottg2.com" || url.hostname.endsWith(".aottg2.com");
+  return ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || url.hostname === "aottg2.com" || url.hostname.endsWith(".aottg2.com");
 }
 
 export function ExternalLinkGuard() {
