@@ -1,10 +1,14 @@
 "use client";
 
-import { Badge, Button, StatCard } from "@aottg2/ui";
+import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, StatCard } from "@aottg2/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Download, Flag, FolderOpen, MessageCircle, ThumbsUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { FaDiscord, FaFacebookF, FaInstagram, FaYoutube } from "react-icons/fa";
+import { FaXTwitter } from "react-icons/fa6";
+import { FiLink } from "react-icons/fi";
+import type { IconType } from "react-icons";
 import { authApi, authAssetUrl } from "../auth/api";
 import { getAccessToken } from "../auth/storage";
 import type { ProfilePreset } from "../auth/types";
@@ -16,12 +20,11 @@ import { assetPath, reportWorkshopAccount, type PublicCreator, type WorkshopAsse
 import { toast } from "../lib/toast";
 
 export function CreatorProfile({ creator }: { creator: PublicCreator }) {
-  const router = useRouter();
-  const { isAuthenticated, profile: viewerProfile } = useAuth();
+  const { isAuthenticated, isLoading, profile: viewerProfile } = useAuth();
   const profile = creator.profile;
   const [reportOpen, setReportOpen] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
-  const socials = Object.entries(profile?.socials ?? {}).filter(([, value]) => value.trim());
+  const socialLinks = socialLinksFromProfile(profile?.socials);
   const presetsQuery = useQuery({
     queryKey: ["auth", "profile-presets"],
     queryFn: async () => {
@@ -60,46 +63,58 @@ export function CreatorProfile({ creator }: { creator: PublicCreator }) {
   return (
     <main className="min-h-[calc(100vh-80px)] px-4 py-6 lg:px-8">
       <div className="mx-auto grid w-full max-w-7xl gap-6">
-        <section className="overflow-hidden border border-border bg-card/50">
-          <div className="h-32 bg-muted/40 sm:h-44">
-            {bannerUrl ? <img src={bannerUrl} alt={`${displayName} banner`} className="h-full w-full object-cover" /> : null}
+        <Card className="overflow-hidden border-border bg-card/90 text-card-foreground">
+          <div className="relative h-44 bg-muted md:h-56">
+            {bannerUrl ? (
+              <img src={bannerUrl} alt="" className="h-full w-full object-cover" decoding="async" />
+            ) : (
+              <div className="h-full w-full bg-background/70" />
+            )}
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-background/85 to-transparent" />
+            <div className="absolute -bottom-10 left-6 h-24 w-24 overflow-hidden border-4 border-background bg-muted shadow-xl md:left-8 md:h-28 md:w-28">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={`${displayName} avatar`} className="h-full w-full object-cover" decoding="async" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center font-primary text-3xl text-muted-foreground">
+                  {initials(displayName)}
+                </div>
+              )}
+            </div>
           </div>
-          <div className="grid gap-4 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="flex min-w-0 flex-wrap items-end gap-4">
-                <ProfileAvatar imageUrl={avatarUrl} name={displayName} />
-                <div className="min-w-0 pb-1">
-                  <h1 className="font-primary text-3xl font-semibold uppercase leading-none text-foreground">{displayName}</h1>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
+          <CardHeader className="pt-6 md:min-h-32 md:pt-6">
+            <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)] md:items-start">
+              <div className="min-w-0 space-y-3 pt-8 md:pt-10">
+                <div className="min-w-0 space-y-2">
+                  <CardTitle>{displayName}</CardTitle>
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="secondary">/{creator.creatorName}</Badge>
                     <span className="text-sm text-muted-foreground">{formatDate(profile?.createdAt ?? "")}</span>
                   </div>
                 </div>
+                {profile?.description?.trim() ? (
+                  <CardDescription className="max-w-3xl whitespace-pre-wrap text-sm leading-relaxed">
+                    {profile.description.trim()}
+                  </CardDescription>
+                ) : null}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {isOwnProfile ? (
-                  <Button type="button" variant="secondary" onClick={() => { window.location.href = AUTH_FRONTEND_PROFILE_URL; }}>
-                    Edit Profile
-                  </Button>
-                ) : (
-                  <Button type="button" variant="secondary" onClick={() => setReportOpen(true)}>
-                    <Flag className="h-4 w-4" aria-hidden="true" />
-                    Report
-                  </Button>
+              <div className="flex min-w-0 flex-col items-start gap-4 md:items-end md:justify-self-end">
+                {!isLoading && (
+                  isOwnProfile ? (
+                    <Button type="button" variant="secondary" onClick={() => { window.location.href = AUTH_FRONTEND_PROFILE_URL; }}>
+                      Edit Profile
+                    </Button>
+                  ) : (
+                    <Button type="button" variant="destructive" onClick={() => setReportOpen(true)}>
+                      <Flag className="h-4 w-4" aria-hidden="true" />
+                      Report
+                    </Button>
+                  )
                 )}
-                <Button type="button" onClick={() => router.push("/library")}>Browse Library</Button>
+                {socialLinks.length ? <SocialLinks links={socialLinks} /> : null}
               </div>
             </div>
-            {profile?.description ? <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{profile.description}</p> : null}
-            {socials.length ? (
-              <div className="flex flex-wrap gap-2">
-                {socials.map(([key, value]) => (
-                  <SocialBadge key={key} label={key} value={value} />
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </section>
+          </CardHeader>
+        </Card>
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Assets" value={formatCount(creator.stats.assetCount)} hint={`${creator.stats.skinPartCount} parts / ${creator.stats.skinSetCount} sets`} icon={<FolderOpen className="h-5 w-5" />} />
@@ -116,21 +131,27 @@ export function CreatorProfile({ creator }: { creator: PublicCreator }) {
   );
 }
 
-function ProfileAvatar({ imageUrl, name }: { imageUrl: string; name: string }) {
+function SocialLinks({ links }: { links: string[] }) {
   return (
-    <div className="-mt-14 grid h-24 w-24 shrink-0 place-items-center overflow-hidden border-4 border-background bg-muted font-primary text-2xl uppercase text-muted-foreground">
-      {imageUrl ? <img src={imageUrl} alt={`${name} avatar`} className="h-full w-full object-cover" /> : initials(name)}
+    <div className="flex min-w-0 flex-col items-start gap-2 md:items-end">
+      {links.map((url, index) => {
+        const href = safeSocialUrl(url);
+        const label = socialLabel(url);
+        const Icon = socialIcon(url);
+        const className = "inline-flex max-w-full items-center gap-2 text-sm text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground hover:decoration-primary";
+        return href ? (
+          <a key={`${url}-${index}`} href={href} target="_blank" rel="noreferrer" className={className}>
+            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="truncate">{label}</span>
+          </a>
+        ) : (
+          <span key={`${url}-${index}`} className="inline-flex max-w-full items-center gap-2 text-sm text-muted-foreground">
+            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="truncate">{label}</span>
+          </span>
+        );
+      })}
     </div>
-  );
-}
-
-function SocialBadge({ label, value }: { label: string; value: string }) {
-  const href = safeSocialUrl(value);
-  if (!href) return <Badge variant="outline">{label}: {value}</Badge>;
-  return (
-    <a href={href} target="_blank" rel="noreferrer">
-      <Badge variant="outline">{label}</Badge>
-    </a>
   );
 }
 
@@ -163,6 +184,34 @@ function formatDate(value: string) {
 
 function presetImageUrl(preset?: ProfilePreset) {
   return preset ? authAssetUrl(preset.imageUrl) : "";
+}
+
+function socialLinksFromProfile(socials?: Record<string, string>) {
+  return Object.values(socials ?? {})
+    .map((url) => url.trim())
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+function socialLabel(url: string) {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "");
+    const path = `${parsed.pathname}${parsed.search}`.replace(/\/$/, "");
+    return `${host}${path}`;
+  } catch {
+    return url;
+  }
+}
+
+function socialIcon(url: string): IconType {
+  const host = safeSocialUrl(url) ? new URL(url).hostname.replace(/^www\./, "").toLowerCase() : "";
+  if (host === "discord.gg" || host.endsWith("discord.com")) return FaDiscord;
+  if (host.endsWith("facebook.com") || host === "fb.com") return FaFacebookF;
+  if (host.endsWith("instagram.com")) return FaInstagram;
+  if (host === "x.com" || host.endsWith("twitter.com")) return FaXTwitter;
+  if (host.endsWith("youtube.com") || host === "youtu.be") return FaYoutube;
+  return FiLink;
 }
 
 function initials(value: string) {
