@@ -6,7 +6,7 @@ import { type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useStat
 import { AssetTag, AssetTagButton } from "./AssetTag";
 import { CreatorIdentityLink } from "./CreatorIdentityLink";
 import type { SkinPartPayload, SkinSetPayload, WorkshopAsset, WorkshopMedia } from "../lib/api/workshop";
-import { thumbnailDisplayUrl } from "../lib/media";
+import { thumbnailDisplayUrls } from "../lib/media";
 
 interface WorkshopAssetCardProps {
   asset: WorkshopAsset;
@@ -111,20 +111,38 @@ function StatIcon({ icon, label, value }: { icon: ReactNode; label: string; valu
 function PreviewImage({ media, title }: { media?: WorkshopMedia; title: string }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [sourceIndex, setSourceIndex] = useState(0);
 
   useEffect(() => {
     setLoaded(false);
     setFailed(false);
+    setSourceIndex(0);
   }, [media?.url]);
 
   if (!media || failed) {
     return <div className="grid aspect-video place-items-center bg-muted/50 font-primary text-sm uppercase text-muted-foreground">No preview</div>;
   }
 
+  const sources = thumbnailDisplayUrls(media.url, { width: 360, height: 203, fit: "cover" });
+
   return (
     <div className="relative aspect-video overflow-hidden bg-muted/50">
       {!loaded ? <ThumbnailLoading /> : null}
-      <img className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} src={thumbnailDisplayUrl(media.url)} alt={media.description || title} loading="lazy" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
+      <img
+        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`}
+        src={sources[sourceIndex]}
+        alt={media.description || title}
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+        onError={() => {
+          if (sourceIndex < sources.length - 1) {
+            setLoaded(false);
+            setSourceIndex((index) => index + 1);
+            return;
+          }
+          setFailed(true);
+        }}
+      />
     </div>
   );
 }

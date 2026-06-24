@@ -6,7 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { assetPath, type WorkshopAsset, type WorkshopMedia } from "../lib/api/workshop";
-import { thumbnailDisplayUrl } from "../lib/media";
+import { thumbnailDisplayUrls } from "../lib/media";
 
 const heroSlides = [
   { src: "/hero/nemona-poster.webp", alt: "Nemona AoTTG2 skin by Divinityxrc" },
@@ -186,11 +186,15 @@ function AssetCard({ asset }: { asset: WorkshopAsset }) {
   const href = assetPath(asset);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [sourceIndex, setSourceIndex] = useState(0);
 
   useEffect(() => {
     setLoaded(false);
     setFailed(false);
+    setSourceIndex(0);
   }, [thumbnail?.url]);
+
+  const sources = thumbnail ? thumbnailDisplayUrls(thumbnail.url, { width: 360, height: 203, fit: "cover" }) : [];
 
   return (
     <Link className="landing-asset-card block" href={href}>
@@ -198,7 +202,21 @@ function AssetCard({ asset }: { asset: WorkshopAsset }) {
         {thumbnail && !failed ? (
           <div className="relative aspect-video overflow-hidden bg-muted/50">
             {!loaded ? <ThumbnailLoading /> : null}
-            <img className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} src={thumbnailDisplayUrl(thumbnail.url)} alt={thumbnail.description || asset.title} loading="lazy" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />
+            <img
+              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`}
+              src={sources[sourceIndex]}
+              alt={thumbnail.description || asset.title}
+              loading="lazy"
+              onLoad={() => setLoaded(true)}
+              onError={() => {
+                if (sourceIndex < sources.length - 1) {
+                  setLoaded(false);
+                  setSourceIndex((index) => index + 1);
+                  return;
+                }
+                setFailed(true);
+              }}
+            />
           </div>
         ) : (
           <div className="grid aspect-video place-items-center bg-muted/50 font-primary text-sm uppercase text-muted-foreground">No preview</div>

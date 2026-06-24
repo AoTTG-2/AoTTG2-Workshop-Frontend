@@ -20,6 +20,7 @@ import { CreatorIdentityLink, CreatorMention } from "../components/CreatorIdenti
 import { ReportDialog } from "../components/ReportDialog";
 import { SideCard } from "../components/SideCard";
 import { assetPath, createAssetComment, deleteWorkshopAsset, deleteWorkshopComment, getAsset, getAssetBySeoPath, hideModerationComment, listAssetComments, listAssetUsedBy, replyToAssetComment, reportWorkshopAsset, reportWorkshopComment, setAssetFavorite, setAssetLike, trackAssetDownload, trackAssetView, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopComment, type WorkshopMedia } from "../lib/api/workshop";
+import { thumbnailDisplayUrls } from "../lib/media";
 import { toast } from "../lib/toast";
 
 const markdownComponents: Components = {
@@ -878,10 +879,12 @@ function SummaryRow({ label, value }: { label: string; value?: string | null }) 
 function GalleryImage({ media, title, direction, reduceMotion }: { media?: WorkshopMedia; title: string; direction: number; reduceMotion: boolean | null }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [sourceIndex, setSourceIndex] = useState(0);
 
   useEffect(() => {
     setLoaded(false);
     setFailed(false);
+    setSourceIndex(0);
   }, [media?.url]);
 
   if (!media) {
@@ -892,14 +895,16 @@ function GalleryImage({ media, title, direction, reduceMotion }: { media?: Works
     return <div className="grid aspect-video place-items-center bg-muted/50 font-primary text-sm uppercase text-muted-foreground">No preview</div>;
   }
 
+  const sources = thumbnailDisplayUrls(media.url, { width: 960, height: 540, fit: "inside" });
+
   return (
     <div className="workshop-gallery-image relative aspect-video overflow-hidden bg-muted/50">
       {!loaded ? <ThumbnailLoading /> : null}
       <AnimatePresence mode="wait" custom={direction}>
         <motion.img
-          key={media.url}
+          key={`${media.url}-${sourceIndex}`}
           className="absolute inset-0 h-full w-full object-contain"
-          src={media.url}
+          src={sources[sourceIndex]}
           alt={media.description || title}
           custom={direction}
           initial={reduceMotion ? false : { opacity: 0, x: direction * 24, scale: 0.985 }}
@@ -907,7 +912,14 @@ function GalleryImage({ media, title, direction, reduceMotion }: { media?: Works
           exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: direction * -20, scale: 0.99 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
           onLoad={() => setLoaded(true)}
-          onError={() => setFailed(true)}
+          onError={() => {
+            if (sourceIndex < sources.length - 1) {
+              setLoaded(false);
+              setSourceIndex((index) => index + 1);
+              return;
+            }
+            setFailed(true);
+          }}
         />
       </AnimatePresence>
     </div>
@@ -916,15 +928,33 @@ function GalleryImage({ media, title, direction, reduceMotion }: { media?: Works
 
 function GalleryThumb({ item, title, active, onClick }: { item: WorkshopMedia; title: string; active: boolean; onClick: () => void }) {
   const [loaded, setLoaded] = useState(false);
+  const [sourceIndex, setSourceIndex] = useState(0);
 
   useEffect(() => {
     setLoaded(false);
+    setSourceIndex(0);
   }, [item.url]);
+
+  const sources = thumbnailDisplayUrls(item.url, { width: 180, height: 101, fit: "cover" });
 
   return (
     <button type="button" className={`workshop-control-free workshop-gallery-thumb relative aspect-video overflow-hidden bg-muted/50 ${active ? "is-active" : ""}`} aria-current={active ? "true" : undefined} onClick={onClick}>
       {!loaded ? <div className="absolute inset-0 grid place-items-center bg-muted/50"><Spinner size="sm" variant="primary" label="Loading thumbnail" /></div> : null}
-      <img className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`} src={item.url} alt={item.description || title} loading="lazy" onLoad={() => setLoaded(true)} onError={() => setLoaded(true)} />
+      <img
+        className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`}
+        src={sources[sourceIndex]}
+        alt={item.description || title}
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+        onError={() => {
+          if (sourceIndex < sources.length - 1) {
+            setLoaded(false);
+            setSourceIndex((index) => index + 1);
+            return;
+          }
+          setLoaded(true);
+        }}
+      />
     </button>
   );
 }
