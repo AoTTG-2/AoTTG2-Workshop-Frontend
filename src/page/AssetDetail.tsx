@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Button, CommentBox, CommentSection, Spinner, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, type CommentItem } from "@aottg2/ui";
+import { Button, CommentBox, CommentSection, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Spinner, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, type CommentItem } from "@aottg2/ui";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -128,6 +128,8 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
   const [favoriteBurst, setFavoriteBurst] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const activeMedia = media[activeIndex];
   const textureUrls = collectTextureUrls(asset);
   const category = assetCategory(asset);
@@ -251,13 +253,16 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
       toast.info("Sign in required.", { description: "Your session may have expired." });
       return;
     }
-    if (!window.confirm(`Delete "${asset.title}"?`)) return;
+    setDeleteBusy(true);
     try {
       await deleteWorkshopAsset(asset.publicId || asset.id, token);
       toast.success("Asset deleted", { description: "Removed from the Workshop library." });
+      setDeleteOpen(false);
       router.push("/library");
     } catch (error) {
       toast.error("Could not delete asset", { description: error instanceof Error ? error.message : "Try again." });
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -335,7 +340,7 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
                   <MenuAction icon={<LinkIcon className="h-4 w-4" />} label="Copy Link" onClick={() => copyText("asset link", publicAssetUrl)} />
                   {canEditAsset ? <MenuAction icon={<Pencil className="h-4 w-4" />} label="Edit Asset" onClick={() => router.push(`${assetPath(asset)}/edit`)} /> : null}
                   {!isOwnAsset ? <MenuAction icon={<Flag className="h-4 w-4" />} label="Report" onClick={() => setReportOpen(true)} /> : null}
-                  {canDeleteAsset ? <MenuAction destructive icon={<Trash2 className="h-4 w-4" />} label="Delete Asset" onClick={deleteAsset} /> : null}
+                  {canDeleteAsset ? <MenuAction destructive icon={<Trash2 className="h-4 w-4" />} label="Delete Asset" onClick={() => setDeleteOpen(true)} /> : null}
                 </div>
               </details>
             </div>
@@ -441,6 +446,18 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
       </div>
 
       <AssetComments asset={asset} onAssetRefresh={onRefresh} />
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent variant="destructive">
+          <DialogHeader>
+            <DialogTitle>Delete Asset</DialogTitle>
+            <DialogDescription>Delete &quot;{asset.title}&quot; from the Workshop library?</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="ghost" disabled={deleteBusy} onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button type="button" variant="destructive" disabled={deleteBusy} onClick={() => void deleteAsset()}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ReportDialog open={reportOpen} title="Report Asset" description="Send this asset to the moderation queue." busy={reportBusy} onOpenChange={setReportOpen} onSubmit={submitAssetReport} />
     </main>
   );
