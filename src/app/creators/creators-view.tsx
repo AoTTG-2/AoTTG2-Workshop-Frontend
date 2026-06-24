@@ -1,7 +1,7 @@
 "use client";
 
 import { Avatar, AvatarFallback, AvatarImage, Badge, Button, Card, CardContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Input, Spinner, Tabs, TabsList, TabsTrigger } from "@aottg2/ui";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { type QueryKey, useMutation, useQuery } from "@tanstack/react-query";
 import { ChevronDown, Download, Search, Sparkles, ThumbsUp, UserCheck, UserPlus, Users } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useState } from "react";
@@ -9,7 +9,7 @@ import { authApi, authAssetUrl } from "../../auth/api";
 import { getAccessToken } from "../../auth/storage";
 import type { ProfilePreset } from "../../auth/types";
 import { useAuth } from "../../auth/useAuth";
-import { listCreators, setCreatorFollow, type CreatorSummary } from "../../lib/api/workshop";
+import { listCreators, setCreatorFollow, type CreatorListResponse, type CreatorSummary } from "../../lib/api/workshop";
 import { queryClient } from "../../lib/queryClient";
 import { toast } from "../../lib/toast";
 
@@ -55,16 +55,40 @@ export function CreatorsView() {
     staleTime: 60 * 60 * 1000,
   });
   const avatarByKey = useMemo(() => new Map((presetsQuery.data?.avatars ?? []).map((preset) => [preset.key, preset])), [presetsQuery.data?.avatars]);
+  function updateCreatorCache(creatorName: string, update: (creator: CreatorSummary) => CreatorSummary) {
+    queryClient.setQueriesData<CreatorListResponse>({ queryKey: ["workshop", "creators"] }, (data) => data
+      ? { ...data, creators: data.creators.map((creator) => creator.creatorName === creatorName ? update(creator) : creator) }
+      : data);
+  }
+
   const follow = useMutation({
     mutationFn: (input: { creator: CreatorSummary; following: boolean }) => setCreatorFollow(input.creator.creatorName, input.following, token!),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["workshop", "creators"] }),
-        queryClient.invalidateQueries({ queryKey: ["workshop", "notifications"] }),
-        queryClient.invalidateQueries({ queryKey: ["workshop", "dashboard"] }),
-      ]);
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: ["workshop", "creators"] });
+      const previous = queryClient.getQueriesData<CreatorListResponse>({ queryKey: ["workshop", "creators"] });
+      updateCreatorCache(input.creator.creatorName, (creator) => ({
+        ...creator,
+        viewerFollowing: input.following,
+        followerCount: Math.max(0, creator.followerCount + (input.following ? 1 : -1)),
+      }));
+      return { previous };
     },
-    onError: (error) => toast.error("Could not update follow", { description: error instanceof Error ? error.message : "Try again." }),
+    onSuccess: (result, input) => {
+      updateCreatorCache(input.creator.creatorName, (creator) => ({
+        ...creator,
+        viewerFollowing: result.following,
+        followerCount: result.followerCount,
+      }));
+    },
+    onError: (error, _input, context?: { previous: [QueryKey, CreatorListResponse | undefined][] }) => {
+      context?.previous.forEach(([key, data]) => queryClient.setQueryData(key, data));
+      toast.error("Could not update follow", { description: error instanceof Error ? error.message : "Try again." });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["workshop", "creators"] });
+      void queryClient.invalidateQueries({ queryKey: ["workshop", "notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["workshop", "dashboard"] });
+    },
   });
   const totalPages = Math.max(1, Math.ceil((creatorsQuery.data?.total ?? 0) / pageSize));
 
