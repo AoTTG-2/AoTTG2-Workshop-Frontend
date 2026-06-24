@@ -60,13 +60,13 @@ export default async function CreatorOpenGraphImage({ params }: ImageProps) {
             {creator ? creatorInitials(creator) : handle.slice(0, 2).toUpperCase()}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
-            <div style={{ color: "#e7b85a", fontSize: 30, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase" }}>
+            <div style={{ color: "#e7b85a", display: "flex", fontSize: 30, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase" }}>
               AoTTG2 Workshop
             </div>
-            <div style={{ fontSize: 74, fontWeight: 900, lineHeight: 1.03, maxWidth: 780 }}>
+            <div style={{ display: "flex", fontSize: 74, fontWeight: 900, lineHeight: 1.03, maxWidth: 780 }}>
               {displayName}
             </div>
-            <div style={{ color: "#b8c1c7", fontSize: 34 }}>
+            <div style={{ color: "#b8c1c7", display: "flex", fontSize: 34 }}>
               /{handle}
             </div>
           </div>
@@ -86,11 +86,11 @@ export default async function CreatorOpenGraphImage({ params }: ImageProps) {
                 width: 250,
               }}
             >
-              <div style={{ color: "#b8c1c7", fontSize: 23, fontWeight: 700, textTransform: "uppercase" }}>{label}</div>
-              <div style={{ color: "#ffffff", fontSize: 48, fontWeight: 900 }}>{compactCount(value)}</div>
+              <div style={{ color: "#b8c1c7", display: "flex", fontSize: 23, fontWeight: 700, textTransform: "uppercase" }}>{label}</div>
+              <div style={{ color: "#ffffff", display: "flex", fontSize: 48, fontWeight: 900 }}>{compactCount(value)}</div>
             </div>
           )) : (
-            <div style={{ color: "#b8c1c7", fontSize: 34 }}>Creator profile</div>
+            <div style={{ color: "#b8c1c7", display: "flex", fontSize: 34 }}>Creator profile</div>
           )}
         </div>
       </div>
