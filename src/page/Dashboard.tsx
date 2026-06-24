@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Card, CardContent, CardHeader, CardTitle, CommentBox, Sidebar, SidebarHeader, SidebarItem, SidebarSection, Spinner, StatCard, renderCommentMarkdown } from "@aottg2/ui";
-import { Bell, Eye, FolderOpen, MessageCircle, Pin, ThumbsUp, Download } from "lucide-react";
+import { Bell, Eye, FolderOpen, MessageCircle, Pin, ThumbsUp, Download, Star } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -15,6 +15,7 @@ import {
   getFeaturedAssets,
   listAssets,
   listDashboardComments,
+  listFavoriteAssets,
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
@@ -26,11 +27,12 @@ import {
 } from "../lib/api/workshop";
 import { toast } from "../lib/toast";
 
-type DashboardTab = "overview" | "assets" | "comments" | "notifications" | "featured";
+type DashboardTab = "overview" | "assets" | "favorites" | "comments" | "notifications" | "featured";
 
 const tabs: { id: DashboardTab; label: string; icon: ReactNode }[] = [
   { id: "overview", label: "Overview", icon: <Eye className="h-4 w-4" /> },
   { id: "assets", label: "Assets", icon: <FolderOpen className="h-4 w-4" /> },
+  { id: "favorites", label: "Favorites", icon: <Star className="h-4 w-4" /> },
   { id: "comments", label: "Comments", icon: <MessageCircle className="h-4 w-4" /> },
   { id: "notifications", label: "Notifications", icon: <Bell className="h-4 w-4" /> },
   { id: "featured", label: "Featured", icon: <Pin className="h-4 w-4" /> },
@@ -78,6 +80,7 @@ export function DashboardShell() {
             <>
               {tab === "overview" ? <OverviewPanel data={dashboardQuery.data} onTab={setTab} /> : null}
               {tab === "assets" ? <AssetsPanel /> : null}
+              {tab === "favorites" ? <FavoritesPanel /> : null}
               {tab === "comments" ? <CommentsPanel /> : null}
               {tab === "notifications" ? <NotificationsPanel /> : null}
               {tab === "featured" ? <FeaturedPanel /> : null}
@@ -118,6 +121,20 @@ function AssetsPanel() {
   if (assetsQuery.isLoading) return <LoadingPanel />;
   if (assetsQuery.isError) return <EmptyPanel title="Assets unavailable" text="Could not load your assets." />;
   return <AssetGrid assets={assetsQuery.data?.assets ?? []} empty="No assets yet." onOpen={(asset) => router.push(assetPath(asset))} />;
+}
+
+function FavoritesPanel() {
+  const router = useRouter();
+  const token = getAccessToken();
+  const favoritesQuery = useQuery({
+    queryKey: ["workshop", "dashboard-favorites"],
+    queryFn: () => listFavoriteAssets(token!, 1, 48),
+    enabled: Boolean(token),
+  });
+
+  if (favoritesQuery.isLoading) return <LoadingPanel />;
+  if (favoritesQuery.isError) return <EmptyPanel title="Favorites unavailable" text="Could not load your favorites." />;
+  return <AssetGrid assets={favoritesQuery.data?.assets ?? []} empty="No favorites yet." onOpen={(asset) => router.push(assetPath(asset))} />;
 }
 
 function CommentsPanel() {
@@ -309,7 +326,9 @@ function NotificationRow({ notification, compact }: { notification: WorkshopNoti
     onSuccess: invalidateDashboard,
   });
   const meta = parseMetadata(notification.metadataJson);
-  const title = notification.assetTitle || meta.assetTitle || "Workshop update";
+  const title = notification.type === "creator_followed"
+    ? `${meta.displayName ?? "Someone"} followed you`
+    : notification.assetTitle || meta.assetTitle || "Workshop update";
 
   return (
     <div className={`grid gap-2 border border-border bg-card/50 p-4 ${notification.readAt ? "opacity-70" : ""}`}>
@@ -397,7 +416,7 @@ async function invalidateDashboard() {
 
 function parseMetadata(value: string) {
   try {
-    return JSON.parse(value) as { assetTitle?: string; commentPreview?: string };
+    return JSON.parse(value) as { assetTitle?: string; commentPreview?: string; displayName?: string };
   } catch {
     return {};
   }

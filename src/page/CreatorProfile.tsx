@@ -2,7 +2,7 @@
 
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, StatCard } from "@aottg2/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Download, Flag, FolderOpen, MessageCircle, ThumbsUp } from "lucide-react";
+import { Download, Flag, FolderOpen, MessageCircle, ThumbsUp, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FaDiscord, FaFacebookF, FaInstagram, FaYoutube } from "react-icons/fa";
@@ -116,8 +116,9 @@ export function CreatorProfile({ creator }: { creator: PublicCreator }) {
           </CardHeader>
         </Card>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <StatCard label="Assets" value={formatCount(creator.stats.assetCount)} hint={`${creator.stats.skinPartCount} parts / ${creator.stats.skinSetCount} sets`} icon={<FolderOpen className="h-5 w-5" />} />
+          <StatCard label="Followers" value={formatCount(creator.followerCount ?? 0)} icon={<Users className="h-5 w-5" />} />
           <StatCard label="Downloads" value={formatCount(creator.stats.downloadCount)} icon={<Download className="h-5 w-5" />} />
           <StatCard label="Thanks" value={formatCount(creator.stats.likeCount)} icon={<ThumbsUp className="h-5 w-5" />} />
           <StatCard label="Comments" value={formatCount(creator.stats.commentCount)} icon={<MessageCircle className="h-5 w-5" />} />

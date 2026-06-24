@@ -72,6 +72,7 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
   const nextTheme = theme === "dark" ? "light" : "dark";
   const accountLabel = isLoading ? "ACCOUNT" : isAuthenticated ? profile?.displayName ?? "ACCOUNT" : "LOGIN";
   const libraryActive = pathname === "/library" || pathname === "/";
+  const creatorsActive = pathname === "/creators";
   const moderationActive = pathname === "/moderation";
   const accountActive = pathname === "/dashboard" || pathname === "/login";
   const canAccessModeration = canAccessWorkshopModeration(workshopUser ?? profile);
@@ -171,6 +172,9 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
           <button type="button" className={`workshop-control-free transition-colors duration-150 ease-out hover:text-primary ${libraryActive ? "text-primary" : ""}`} onClick={() => go("/library")}>
             LIBRARY
           </button>
+          <button type="button" className={`workshop-control-free transition-colors duration-150 ease-out hover:text-primary ${creatorsActive ? "text-primary" : ""}`} onClick={() => go("/creators")}>
+            CREATORS
+          </button>
           {canAccessModeration ? (
             <button type="button" className={`workshop-control-free inline-flex items-center gap-2 transition-colors duration-150 ease-out hover:text-primary ${moderationActive ? "text-primary" : ""}`} onClick={() => go("/moderation")}>
               <ShieldAlert className="h-4 w-4" aria-hidden="true" />
@@ -200,6 +204,7 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
       {mobileOpen ? (
         <nav id="mobile-navigation" className="grid bg-background font-primary text-foreground shadow-[0_18px_30px_rgb(0_0_0_/_0.24)] md:hidden" aria-label="Mobile navigation">
           <MobileNavButton active={libraryActive} onClick={() => go("/library")}>Library</MobileNavButton>
+          <MobileNavButton active={creatorsActive} onClick={() => go("/creators")}>Creators</MobileNavButton>
           {canAccessModeration ? <MobileNavButton active={moderationActive} onClick={() => go("/moderation")}>Moderation</MobileNavButton> : null}
           {!isLoading && isAuthenticated ? <MobileNavButton onClick={goProfileOrLogin}>Profile</MobileNavButton> : null}
           <MobileNavButton active={accountActive} disabled={isLoading} showDot={hasUnreadNotifications} onClick={goDashboardOrLogin}>{isLoading ? "Account" : isAuthenticated ? "Dashboard" : "Login"}</MobileNavButton>

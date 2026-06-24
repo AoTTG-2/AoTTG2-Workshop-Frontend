@@ -128,8 +128,40 @@ export interface PublicCreator {
   displayName: string;
   profile?: PublicProfile | null;
   stats: CreatorStats;
+  followerCount: number;
+  viewerFollowing: boolean;
   featuredAssets: WorkshopAsset[];
   latestAssets: WorkshopAsset[];
+}
+
+export interface CreatorSummary {
+  creatorName: string;
+  authAccountId: string;
+  displayName: string;
+  profile?: PublicProfile | null;
+  stats: CreatorStats;
+  followerCount: number;
+  viewerFollowing: boolean;
+}
+
+export interface CreatorListQuery {
+  q?: string;
+  tab?: string;
+  sort?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface CreatorListResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  creators: CreatorSummary[];
+}
+
+export interface CreatorFollowResponse {
+  following: boolean;
+  followerCount: number;
 }
 
 export interface DashboardComment {
@@ -297,13 +329,13 @@ async function refreshWorkshopSession(): Promise<string | null> {
   return data.accessToken;
 }
 
-async function workshopJson<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
-  const response = await fetch(`${WORKSHOP_CONTENT_API_BASE_URL}${path}`, init);
+async function workshopJsonFrom<T>(baseUrl: string, path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  const response = await fetch(`${baseUrl}${path}`, init);
 
   if (response.status === 401 && retry) {
     const nextToken = await refreshWorkshopSession();
     if (nextToken) {
-      return workshopJson<T>(path, {
+      return workshopJsonFrom<T>(baseUrl, path, {
         ...init,
         headers: { ...(init.headers as Record<string, string> | undefined), authorization: `Bearer ${nextToken}` },
       }, false);
@@ -322,6 +354,14 @@ async function workshopJson<T>(path: string, init: RequestInit = {}, retry = tru
   }
 
   return parseJson<T>(response);
+}
+
+async function workshopJson<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  return workshopJsonFrom<T>(WORKSHOP_CONTENT_API_BASE_URL, path, init, retry);
+}
+
+async function workshopApiJson<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  return workshopJsonFrom<T>(WORKSHOP_API_BASE_URL, path, init, retry);
 }
 
 function jsonAuthInit(method: string, accessToken: string, body?: unknown): RequestInit {
@@ -417,6 +457,11 @@ export async function listAssets(query: AssetListQuery = {}, accessToken?: strin
   return parseJson<AssetListResponse>(response);
 }
 
+export async function listFavoriteAssets(accessToken: string, page = 1, pageSize = 24): Promise<AssetListResponse> {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  return workshopApiJson<AssetListResponse>(`/me/favorites?${params.toString()}`, { headers: { authorization: `Bearer ${accessToken}` } });
+}
+
 export async function listAssetUsedBy(id: string, accessToken?: string | null): Promise<AssetListResponse> {
   const response = await fetch(`${WORKSHOP_CONTENT_API_BASE_URL}/assets/${encodeURIComponent(id)}/used-by`, {
     headers: authHeaders(accessToken),
@@ -431,6 +476,23 @@ export async function listAssetUsedBy(id: string, accessToken?: string | null): 
 
 export async function getPublicCreator(creatorName: string, accessToken?: string | null): Promise<PublicCreator> {
   return workshopJson<PublicCreator>(`/creators/${encodeURIComponent(creatorName)}`, { headers: authHeaders(accessToken) });
+}
+
+export async function listCreators(query: CreatorListQuery = {}, accessToken?: string | null): Promise<CreatorListResponse> {
+  const params = new URLSearchParams();
+  if (query.q?.trim()) params.set("q", query.q.trim());
+  if (query.tab?.trim()) params.set("tab", query.tab.trim());
+  if (query.sort?.trim()) params.set("sort", query.sort.trim());
+  if (query.page && query.page > 1) params.set("page", String(query.page));
+  if (query.pageSize) params.set("pageSize", String(query.pageSize));
+  return workshopJson<CreatorListResponse>(`/creators${params.size ? `?${params.toString()}` : ""}`, { headers: authHeaders(accessToken) });
+}
+
+export async function setCreatorFollow(creatorName: string, following: boolean, accessToken: string): Promise<CreatorFollowResponse> {
+  return workshopJson<CreatorFollowResponse>(`/creators/${encodeURIComponent(creatorName)}/follow`, {
+    method: following ? "PUT" : "DELETE",
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
 }
 
 export async function getCreatorDashboard(accessToken: string): Promise<DashboardResponse> {
