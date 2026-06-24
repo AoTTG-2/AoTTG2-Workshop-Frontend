@@ -4,7 +4,7 @@ import { Button, Card, CardContent, Spinner } from "@aottg2/ui";
 import { Download, FileCode2, Gamepad2, Map, Palette, Search, Sparkles, ThumbsUp, UploadCloud, Users } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { type ElementRef, useEffect, useRef, useState } from "react";
 import { assetPath, type WorkshopAsset, type WorkshopMedia } from "../lib/api/workshop";
 import { thumbnailDisplayUrls } from "../lib/media";
 
@@ -187,6 +187,7 @@ function AssetCard({ asset }: { asset: WorkshopAsset }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [sourceIndex, setSourceIndex] = useState(0);
+  const imageRef = useRef<ElementRef<"img"> | null>(null);
 
   useEffect(() => {
     setLoaded(false);
@@ -195,6 +196,13 @@ function AssetCard({ asset }: { asset: WorkshopAsset }) {
   }, [thumbnail?.url]);
 
   const sources = thumbnail ? thumbnailDisplayUrls(thumbnail.url, { width: 360, height: 203, fit: "cover" }) : [];
+  const source = sources[sourceIndex];
+
+  useEffect(() => {
+    setLoaded(false);
+    const image = imageRef.current;
+    if (image?.complete && image.naturalWidth > 0) setLoaded(true);
+  }, [source]);
 
   return (
     <Link className="landing-asset-card block" href={href}>
@@ -204,10 +212,11 @@ function AssetCard({ asset }: { asset: WorkshopAsset }) {
             {!loaded ? <ThumbnailLoading /> : null}
             <img
               className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`}
-              src={sources[sourceIndex]}
+              src={source}
               alt={thumbnail.description || asset.title}
-              loading="lazy"
+              loading="eager"
               ref={(image) => {
+                imageRef.current = image;
                 if (image?.complete && image.naturalWidth > 0 && !loaded) setLoaded(true);
               }}
               onLoad={() => setLoaded(true)}
