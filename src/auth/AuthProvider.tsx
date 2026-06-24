@@ -13,7 +13,7 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [workshopUser, setWorkshopUser] = useState<WorkshopUser | null>(null);
-  const [isLoading, setIsLoading] = useState(hasTokens);
+  const [isLoading, setIsLoading] = useState(true);
 
   const syncWorkshopUser = useCallback(async () => {
     const accessToken = getAccessToken();
@@ -58,13 +58,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [syncWorkshopUser]);
 
   const refreshProfile = useCallback(async () => {
+    setIsLoading(true);
     if (!hasTokens()) {
       setProfile(null);
       setWorkshopUser(null);
+      setIsLoading(false);
       return;
     }
 
-    await hydrateSession();
+    try {
+      await hydrateSession();
+    } finally {
+      setIsLoading(false);
+    }
   }, [hydrateSession]);
 
   useEffect(() => {
@@ -80,6 +86,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return;
       }
 
+      if (active) setIsLoading(true);
       await hydrateSession();
 
       if (active) {
@@ -102,6 +109,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [hydrateSession]);
 
   const acceptSession = useCallback((auth: AuthResponse) => {
+    setIsLoading(true);
     setTokens(auth.accessToken, auth.refreshToken);
     setProfile(auth.profile);
   }, []);

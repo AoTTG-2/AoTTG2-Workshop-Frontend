@@ -546,6 +546,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isLoading) return;
     if (stepIndex < steps.length - 1) {
       goNext();
       return;
@@ -558,7 +559,12 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
         return;
       }
 
-      if (!workshopUser?.creatorName) {
+      if (!workshopUser) {
+        toast.error("Could not load Workshop profile", { description: "Try again in a moment." });
+        return;
+      }
+
+      if (!workshopUser.creatorName) {
         setPendingAsset(asset);
         setCreatorDialogOpen(true);
         return;
@@ -615,7 +621,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
     );
   }
 
-  if (isEdit && isLoading) {
+  if (isLoading) {
     return (
       <main className="grid min-h-[calc(100vh-120px)] place-items-center">
         <Spinner size="lg" variant="primary" label="Checking access" />

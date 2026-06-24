@@ -61,7 +61,7 @@ export function AppShell({ children, theme, onToggleTheme }: AppShellProps) {
 }
 
 function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggleTheme">) {
-  const { isAuthenticated, profile, workshopUser, logout, refreshProfile } = useAuth();
+  const { isAuthenticated, isLoading, profile, workshopUser, logout, refreshProfile } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -70,7 +70,7 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
   const [creatorNameAccepted, setCreatorNameAccepted] = useState(false);
   const [creatorNameBusy, setCreatorNameBusy] = useState(false);
   const nextTheme = theme === "dark" ? "light" : "dark";
-  const accountLabel = isAuthenticated ? profile?.displayName ?? "ACCOUNT" : "LOGIN";
+  const accountLabel = isLoading ? "ACCOUNT" : isAuthenticated ? profile?.displayName ?? "ACCOUNT" : "LOGIN";
   const libraryActive = pathname === "/library" || pathname === "/";
   const moderationActive = pathname === "/moderation";
   const accountActive = pathname === "/dashboard" || pathname === "/login";
@@ -98,17 +98,23 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
 
   function goDashboardOrLogin() {
     closeFocusedMenu();
+    if (isLoading) return;
     go(isAuthenticated ? "/dashboard" : "/login");
   }
 
   function goProfileOrLogin() {
     closeFocusedMenu();
+    if (isLoading) return;
     if (!isAuthenticated) {
       go("/login");
       return;
     }
     if (workshopUser?.creatorName) {
       go(`/${encodeURIComponent(workshopUser.creatorName)}`);
+      return;
+    }
+    if (!workshopUser) {
+      toast.error("Could not load Workshop profile", { description: "Try again in a moment." });
       return;
     }
     setMobileOpen(false);
@@ -176,6 +182,7 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
             accountLabel={accountLabel}
             hasUnreadNotifications={hasUnreadNotifications}
             isAuthenticated={isAuthenticated}
+            isLoading={isLoading}
             theme={theme}
             nextTheme={nextTheme}
             onDashboardOrLogin={goDashboardOrLogin}
@@ -194,10 +201,10 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
         <nav id="mobile-navigation" className="grid bg-background font-primary text-foreground shadow-[0_18px_30px_rgb(0_0_0_/_0.24)] md:hidden" aria-label="Mobile navigation">
           <MobileNavButton active={libraryActive} onClick={() => go("/library")}>Library</MobileNavButton>
           {canAccessModeration ? <MobileNavButton active={moderationActive} onClick={() => go("/moderation")}>Moderation</MobileNavButton> : null}
-          {isAuthenticated ? <MobileNavButton onClick={goProfileOrLogin}>Profile</MobileNavButton> : null}
-          <MobileNavButton active={accountActive} showDot={hasUnreadNotifications} onClick={goDashboardOrLogin}>{isAuthenticated ? "Dashboard" : "Login"}</MobileNavButton>
+          {!isLoading && isAuthenticated ? <MobileNavButton onClick={goProfileOrLogin}>Profile</MobileNavButton> : null}
+          <MobileNavButton active={accountActive} disabled={isLoading} showDot={hasUnreadNotifications} onClick={goDashboardOrLogin}>{isLoading ? "Account" : isAuthenticated ? "Dashboard" : "Login"}</MobileNavButton>
           <MobileNavButton onClick={switchTheme}>Switch to {nextTheme === "dark" ? "Dark" : "Light"} Mode</MobileNavButton>
-          {isAuthenticated ? <MobileNavButton onClick={handleLogout}>Logout</MobileNavButton> : null}
+          {!isLoading && isAuthenticated ? <MobileNavButton onClick={handleLogout}>Logout</MobileNavButton> : null}
         </nav>
       ) : null}
       <Dialog open={creatorDialogOpen} onOpenChange={(open) => { if (open || workshopUser?.creatorName) setCreatorDialogOpen(open); }}>
@@ -232,6 +239,7 @@ interface AccountMenuProps {
   accountLabel: string;
   hasUnreadNotifications: boolean;
   isAuthenticated: boolean;
+  isLoading: boolean;
   theme: "light" | "dark";
   nextTheme: "light" | "dark";
   onDashboardOrLogin: () => void;
@@ -240,7 +248,7 @@ interface AccountMenuProps {
   onToggleTheme: () => void;
 }
 
-function AccountMenu({ accountActive, accountLabel, hasUnreadNotifications, isAuthenticated, theme, nextTheme, onDashboardOrLogin, onProfileOrLogin, onLogout, onToggleTheme }: AccountMenuProps) {
+function AccountMenu({ accountActive, accountLabel, hasUnreadNotifications, isAuthenticated, isLoading, theme, nextTheme, onDashboardOrLogin, onProfileOrLogin, onLogout, onToggleTheme }: AccountMenuProps) {
   const nextThemeLabel = nextTheme === "dark" ? "Switch to Dark Mode" : "Switch to Light Mode";
 
   return (
@@ -257,20 +265,25 @@ function AccountMenu({ accountActive, accountLabel, hasUnreadNotifications, isAu
       <div className="invisible fixed right-4 top-11 z-[1100] w-56 pt-1 opacity-0 transition-[opacity,visibility] duration-150 ease-out group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 lg:right-8">
         <div role="menu" className={`aottg2-theme aottg2-palette-workshop aottg2-menu-content overflow-hidden rounded-none bg-popover p-1 text-popover-foreground shadow-md ${theme}`}>
           <MenuLabel>Account</MenuLabel>
-          {isAuthenticated ? (
+          {isLoading ? (
+            <MenuItem disabled onClick={() => {}}>
+              <MenuIcon><UserCircle className="h-4 w-4" /></MenuIcon>
+              Checking Account
+            </MenuItem>
+          ) : isAuthenticated ? (
             <MenuItem onClick={onProfileOrLogin}>
               <MenuIcon><UserCircle className="h-4 w-4" /></MenuIcon>
               Profile
             </MenuItem>
           ) : null}
-          <MenuItem onClick={onDashboardOrLogin}>
+          {!isLoading ? <MenuItem onClick={onDashboardOrLogin}>
             <MenuIcon>{isAuthenticated ? <Gauge className="h-4 w-4" /> : <LogIn className="h-4 w-4" />}</MenuIcon>
             <span className="flex flex-1 items-center justify-between gap-3">
               {isAuthenticated ? "Dashboard" : "Login"}
               {isAuthenticated && hasUnreadNotifications ? <NotificationDot /> : null}
             </span>
-          </MenuItem>
-          {isAuthenticated ? (
+          </MenuItem> : null}
+          {!isLoading && isAuthenticated ? (
             <MenuItem onClick={onLogout}>
               <MenuIcon><LogOut className="h-4 w-4" /></MenuIcon>
               Logout
@@ -300,22 +313,23 @@ function MenuSeparator() {
   return <div className="-mx-1 my-1 h-px bg-muted" role="separator" />;
 }
 
-function MenuItem({ children, onClick }: { children: ReactNode; onClick: () => void | Promise<void> }) {
+function MenuItem({ children, disabled = false, onClick }: { children: ReactNode; disabled?: boolean; onClick: () => void | Promise<void> }) {
   return (
     <button
       type="button"
       role="menuitem"
+      disabled={disabled}
       onClick={onClick}
-      className="workshop-control-free relative flex w-full cursor-default select-none items-center rounded-none px-2 py-1.5 font-primary text-sm outline-none transition-[background-color,color,opacity] duration-150 ease-out hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+      className="workshop-control-free relative flex w-full cursor-default select-none items-center rounded-none px-2 py-1.5 font-primary text-sm outline-none transition-[background-color,color,opacity] duration-150 ease-out hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-current"
     >
       {children}
     </button>
   );
 }
 
-function MobileNavButton({ active, children, onClick, showDot }: { active?: boolean; children: ReactNode; onClick: () => void | Promise<void>; showDot?: boolean }) {
+function MobileNavButton({ active, children, disabled = false, onClick, showDot }: { active?: boolean; children: ReactNode; disabled?: boolean; onClick: () => void | Promise<void>; showDot?: boolean }) {
   return (
-    <button type="button" className={`workshop-control-free w-full p-4 text-left transition-colors duration-150 ease-out hover:bg-muted ${active ? "text-primary" : ""}`} onClick={onClick}>
+    <button type="button" disabled={disabled} className={`workshop-control-free w-full p-4 text-left transition-colors duration-150 ease-out hover:bg-muted disabled:opacity-60 disabled:hover:bg-transparent ${active ? "text-primary" : ""}`} onClick={onClick}>
       <span className="relative inline-flex items-center gap-2">
         {children}
         {showDot ? <span className="h-2.5 w-2.5 rounded-full bg-destructive" aria-hidden="true" /> : null}
