@@ -30,7 +30,7 @@ export function assetDescription(asset: WorkshopAsset) {
 
 export function assetImage(asset: WorkshopAsset) {
   const media = assetPreviewMedia(asset);
-  return media?.url ? absoluteUrl(media.url) : absoluteUrl("/og/workshop.png");
+  return media?.url ? absoluteUrl(media.url) : absoluteUrl("/og/workshop.jpg");
 }
 
 export function assetMetadata(asset: WorkshopAsset, path: string): Metadata {
