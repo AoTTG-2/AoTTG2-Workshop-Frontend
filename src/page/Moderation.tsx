@@ -114,8 +114,8 @@ function ReportDetail({ report, note, onNote, onDone }: { report: WorkshopReport
   const run = useMutation({
     mutationFn: async (action: string) => {
       if (!report || !token) return;
-      if (action === "hide-asset") await hideModerationAsset(snapshot.publicId || report.targetId, token);
-      if (action === "restore-asset") await restoreModerationAsset(snapshot.publicId || report.targetId, token);
+      if (action === "hide-asset") await hideModerationAsset(snapshotValue(snapshot, "publicId") || report.targetId, token);
+      if (action === "restore-asset") await restoreModerationAsset(snapshotValue(snapshot, "publicId") || report.targetId, token);
       if (action === "hide-comment") await hideModerationComment(report.targetId, token);
       if (action === "restore-comment") await restoreModerationComment(report.targetId, token);
       if (action === "resolve") await resolveModerationReport(report.id, token, note);
@@ -179,14 +179,20 @@ function EmptyPanel({ title, text }: { title: string; text: string }) {
 
 function targetTitle(report: WorkshopReport) {
   const snapshot = parseSnapshot(report.snapshotJson);
-  if (report.targetType === "asset") return String(snapshot.title || snapshot.assetTitle || "Asset report");
-  if (report.targetType === "comment") return String(snapshot.assetTitle || "Comment report");
-  if (report.targetType === "account") return String(snapshot.displayName || snapshot.creatorName || "Account report");
+  if (report.targetType === "asset") return snapshotValue(snapshot, "title") || snapshotValue(snapshot, "assetTitle") || "Asset report";
+  if (report.targetType === "comment") return snapshotValue(snapshot, "assetTitle") || "Comment report";
+  if (report.targetType === "account") return snapshotValue(snapshot, "displayName") || snapshotValue(snapshot, "creatorName") || "Account report";
   return "Report";
 }
 
 function snapshotSummary(snapshot: Record<string, unknown>) {
-  return String(snapshot.title || snapshot.assetTitle || snapshot.body || snapshot.displayName || snapshot.creatorName || "No snapshot");
+  return snapshotValue(snapshot, "title") || snapshotValue(snapshot, "assetTitle") || snapshotValue(snapshot, "body") || snapshotValue(snapshot, "displayName") || snapshotValue(snapshot, "creatorName") || "No snapshot";
+}
+
+function snapshotValue(snapshot: Record<string, unknown>, key: string) {
+  const pascal = `${key.charAt(0).toUpperCase()}${key.slice(1)}`;
+  const value = snapshot[key] ?? snapshot[pascal];
+  return typeof value === "string" ? value : "";
 }
 
 function parseSnapshot(value?: string): Record<string, string> {
