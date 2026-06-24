@@ -10,9 +10,9 @@ export function thumbnailDisplayUrls(url: string, options: ThumbnailDisplayOptio
   const parsed = parseUrl(url);
   if (!parsed || !["http:", "https:"].includes(parsed.protocol)) return [url];
 
-  const wsrvUrl = wsrvThumbnailUrl(url, options);
+  const proxyUrl = imgproxyThumbnailUrl(url, options);
   const imgurUrl = thumbnailDisplayUrl(url);
-  return unique([wsrvUrl, imgurUrl, url]);
+  return unique([proxyUrl, imgurUrl, url]);
 }
 
 export function thumbnailDisplayUrl(url: string) {
@@ -39,16 +39,9 @@ function parseUrl(url: string) {
   }
 }
 
-function wsrvThumbnailUrl(url: string, { width, height, fit = "cover" }: ThumbnailDisplayOptions) {
-  const params = new URLSearchParams({
-    url,
-    w: String(width),
-    fit,
-    output: "webp",
-    q: "80",
-  });
-  if (height) params.set("h", String(height));
-  return `https://wsrv.nl/?${params.toString()}`;
+function imgproxyThumbnailUrl(url: string, { width, height, fit = "cover" }: ThumbnailDisplayOptions) {
+  const mode = fit === "inside" ? "fit" : "fill";
+  return `https://thumb.gisketch.com/unsafe/rs:${mode}:${width}:${height ?? 0}:0/plain/${url}@webp`;
 }
 
 function unique(values: string[]) {

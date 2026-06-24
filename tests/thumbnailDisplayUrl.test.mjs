@@ -7,11 +7,12 @@ assert.equal(thumbnailDisplayUrl("https://example.com/abc123.png"), "https://exa
 assert.equal(thumbnailDisplayUrl("not a url"), "not a url");
 
 assert.deepEqual(thumbnailDisplayUrls("https://example.com/abc123.png", { width: 360, height: 203, fit: "cover" }), [
-  "https://wsrv.nl/?url=https%3A%2F%2Fexample.com%2Fabc123.png&w=360&fit=cover&output=webp&q=80&h=203",
+  "https://thumb.gisketch.com/unsafe/rs:fill:360:203:0/plain/https://example.com/abc123.png@webp",
   "https://example.com/abc123.png",
 ]);
 assert.deepEqual(thumbnailDisplayUrls("https://i.imgur.com/abc123.png", { width: 360, height: 203, fit: "cover" }), [
-  "https://wsrv.nl/?url=https%3A%2F%2Fi.imgur.com%2Fabc123.png&w=360&fit=cover&output=webp&q=80&h=203",
+  "https://thumb.gisketch.com/unsafe/rs:fill:360:203:0/plain/https://i.imgur.com/abc123.png@webp",
   "https://i.imgur.com/abc123m.png",
   "https://i.imgur.com/abc123.png",
 ]);
+assert.equal(thumbnailDisplayUrls("https://example.com/preview.png", { width: 960, height: 540, fit: "inside" })[0], "https://thumb.gisketch.com/unsafe/rs:fit:960:540:0/plain/https://example.com/preview.png@webp");
