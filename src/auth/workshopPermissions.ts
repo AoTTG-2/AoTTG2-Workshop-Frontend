@@ -5,6 +5,7 @@ export const WORKSHOP_PERMISSIONS = {
   commentsModerate: "workshop.comments.moderate",
   reportsResolve: "workshop.reports.resolve",
   auditRead: "workshop.audit.read",
+  usersRestrict: "users.restrict",
 } as const;
 
 type PermissionSource = Pick<ProfileResponse | WorkshopUser, "permissions"> | null | undefined;
@@ -29,6 +30,10 @@ export function canReadWorkshopAudit(source: PermissionSource) {
   return hasWorkshopPermission(source, WORKSHOP_PERMISSIONS.auditRead);
 }
 
+export function canRestrictUsers(source: PermissionSource) {
+  return hasWorkshopPermission(source, WORKSHOP_PERMISSIONS.usersRestrict);
+}
+
 export function canAccessWorkshopModeration(source: PermissionSource) {
-  return canModerateAssets(source) || canModerateComments(source) || canResolveReports(source) || canReadWorkshopAudit(source);
+  return canModerateAssets(source) || canModerateComments(source) || canResolveReports(source) || canReadWorkshopAudit(source) || canRestrictUsers(source);
 }

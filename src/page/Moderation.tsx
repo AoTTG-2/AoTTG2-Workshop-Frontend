@@ -2,22 +2,23 @@
 
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, DataTable, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, EmptyState, FilterBar, Input, Label, SearchInput, Sidebar, SidebarHeader, SidebarItem, SidebarSection, Spinner, Textarea } from "@aottg2/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Archive, EyeOff, FileText, FileWarning, MessageCircle, RotateCcw, ShieldAlert, Trash2, UserRound } from "lucide-react";
+import { Archive, Ban, EyeOff, FileText, FileWarning, MessageCircle, RotateCcw, ShieldAlert, Trash2, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { canAccessWorkshopModeration, canModerateAssets, canModerateComments, canReadWorkshopAudit, canResolveReports } from "../auth/workshopPermissions";
+import { canAccessWorkshopModeration, canModerateAssets, canModerateComments, canReadWorkshopAudit, canResolveReports, canRestrictUsers } from "../auth/workshopPermissions";
 import { getAccessToken } from "../auth/storage";
 import { useAuth } from "../auth/useAuth";
 import { Pagination } from "../components/Pagination";
-import { deleteWorkshopAsset, dismissModerationReport, hideModerationAsset, hideModerationComment, listModerationAssets, listModerationAuditEvents, listModerationComments, listModerationReports, resolveModerationReport, restoreModerationAsset, restoreModerationComment, type WorkshopAsset, type WorkshopAuditEvent, type WorkshopComment, type WorkshopReport } from "../lib/api/workshop";
+import { deleteWorkshopAsset, dismissModerationReport, getModerationUser, hideModerationAsset, hideModerationComment, liftAuthAccountRestriction, listModerationAssets, listModerationAuditEvents, listModerationComments, listModerationReports, listModerationUsers, resolveModerationReport, restoreModerationAsset, restoreModerationComment, restrictAuthAccount, type ModerationUser, type ModerationUserDetail, type WorkshopAsset, type WorkshopAuditEvent, type WorkshopComment, type WorkshopReport } from "../lib/api/workshop";
 import { queryClient } from "../lib/queryClient";
 import { toast } from "../lib/toast";
 
 type ReportStatus = "open" | "resolved" | "dismissed";
 type ReportType = "all" | "asset" | "comment" | "account";
-type View = "reports" | "assets-hidden" | "assets-deleted" | "comments-hidden" | "audits";
+type View = "reports" | "users" | "assets-hidden" | "assets-deleted" | "comments-hidden" | "audits";
 type AuditViewMode = "readable" | "technical";
-type ReportAction = "hide-asset" | "delete-asset" | "hide-comment";
+type ReportAction = "hide-asset" | "delete-asset" | "hide-comment" | "ban-account" | "suspend-account";
+type RestrictionKindDraft = "ban" | "suspension";
 const pageSize = 15;
 const auditPageSize = 50;
 
@@ -34,16 +35,18 @@ const typeFilters: { id: ReportType; label: string; icon: ReactNode }[] = [
   { id: "account", label: "Accounts", icon: <UserRound className="h-4 w-4" /> },
 ];
 
-function firstAllowedView(reports: boolean, assets: boolean, comments: boolean, audits: boolean): View {
+function firstAllowedView(reports: boolean, users: boolean, assets: boolean, comments: boolean, audits: boolean): View {
   if (reports) return "reports";
+  if (users) return "users";
   if (assets) return "assets-hidden";
   if (comments) return "comments-hidden";
   if (audits) return "audits";
   return "reports";
 }
 
-function viewAllowed(view: View, reports: boolean, assets: boolean, comments: boolean, audits: boolean) {
+function viewAllowed(view: View, reports: boolean, users: boolean, assets: boolean, comments: boolean, audits: boolean) {
   if (view === "reports") return reports;
+  if (view === "users") return users;
   if (view === "assets-hidden" || view === "assets-deleted") return assets;
   if (view === "comments-hidden") return comments;
   return audits;
@@ -59,6 +62,7 @@ export function ModerationShell() {
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [userSearch, setUserSearch] = useState("");
   const [auditEventType, setAuditEventType] = useState("");
   const [auditViewMode, setAuditViewMode] = useState<AuditViewMode>("readable");
   const canAccess = canAccessWorkshopModeration(permissionSource);
@@ -66,6 +70,7 @@ export function ModerationShell() {
   const canReadAssets = canModerateAssets(permissionSource);
   const canReadComments = canModerateComments(permissionSource);
   const canReadAudits = canReadWorkshopAudit(permissionSource);
+  const canReadUsers = canResolveReports(permissionSource);
 
   const reportsQuery = useQuery({
     queryKey: ["workshop", "moderation", "reports", status, type, page],
@@ -82,6 +87,11 @@ export function ModerationShell() {
     queryFn: () => listModerationAssets(token!, view === "assets-deleted" ? "deleted" : "hidden", page, pageSize),
     enabled: Boolean(token && canReadAssets && (view === "assets-hidden" || view === "assets-deleted")),
   });
+  const usersQuery = useQuery({
+    queryKey: ["workshop", "moderation", "users", userSearch, page],
+    queryFn: () => listModerationUsers(token!, userSearch, true, page, pageSize),
+    enabled: Boolean(token && canReadUsers && view === "users"),
+  });
   const commentsQuery = useQuery({
     queryKey: ["workshop", "moderation", "comments", "hidden", page],
     queryFn: () => listModerationComments(token!, "hidden", page, pageSize),
@@ -95,24 +105,26 @@ export function ModerationShell() {
 
   const reports = useMemo(() => reportsQuery.data?.reports ?? [], [reportsQuery.data?.reports]);
   const assets = useMemo(() => assetsQuery.data?.assets ?? [], [assetsQuery.data?.assets]);
+  const users = useMemo(() => usersQuery.data?.users ?? [], [usersQuery.data?.users]);
   const comments = useMemo(() => commentsQuery.data?.comments ?? [], [commentsQuery.data?.comments]);
   const auditEvents = useMemo(() => auditsQuery.data?.events ?? [], [auditsQuery.data?.events]);
   const hasOpenReports = (openReportsQuery.data?.total ?? 0) > 0;
   const selectedReport = useMemo(() => reports.find((item) => item.id === selectedId) ?? reports[0] ?? null, [reports, selectedId]);
   const selectedAsset = useMemo(() => assets.find((item) => item.id === selectedId) ?? assets[0] ?? null, [assets, selectedId]);
+  const selectedUser = useMemo(() => users.find((item) => item.authAccountId === selectedId) ?? users[0] ?? null, [users, selectedId]);
   const selectedComment = useMemo(() => comments.find((item) => item.id === selectedId) ?? comments[0] ?? null, [comments, selectedId]);
 
   useEffect(() => {
-    if (!canAccess || viewAllowed(view, canReadReports, canReadAssets, canReadComments, canReadAudits)) return;
-    setView(firstAllowedView(canReadReports, canReadAssets, canReadComments, canReadAudits));
+    if (!canAccess || viewAllowed(view, canReadReports, canReadUsers, canReadAssets, canReadComments, canReadAudits)) return;
+    setView(firstAllowedView(canReadReports, canReadUsers, canReadAssets, canReadComments, canReadAudits));
     setPage(1);
     setSelectedId(null);
-  }, [canAccess, canReadAssets, canReadAudits, canReadComments, canReadReports, view]);
+  }, [canAccess, canReadAssets, canReadAudits, canReadComments, canReadReports, canReadUsers, view]);
 
   useEffect(() => {
-    const first = view === "reports" ? reports[0]?.id : view === "comments-hidden" ? comments[0]?.id : view === "audits" ? null : assets[0]?.id;
+    const first = view === "reports" ? reports[0]?.id : view === "users" ? users[0]?.authAccountId : view === "comments-hidden" ? comments[0]?.id : view === "audits" ? null : assets[0]?.id;
     if (!selectedId && first) setSelectedId(first);
-  }, [assets, comments, reports, selectedId, view]);
+  }, [assets, comments, reports, selectedId, users, view]);
 
   if (isLoading) return <LoadingPanel />;
   if (!canAccess) return <EmptyPanel title="Moderation unavailable" text="Workshop moderation permissions are required." />;
@@ -127,6 +139,7 @@ export function ModerationShell() {
   }
 
   function showInventory(nextView: View) {
+    if (nextView === "users" && !canReadUsers) return;
     if ((nextView === "assets-hidden" || nextView === "assets-deleted") && !canReadAssets) return;
     if (nextView === "comments-hidden" && !canReadComments) return;
     if (nextView === "audits" && !canReadAudits) return;
@@ -169,6 +182,7 @@ export function ModerationShell() {
             </>
           ) : null}
           <SidebarSection>
+            {canReadUsers ? <SidebarItem active={view === "users"} icon={<UserRound className="h-4 w-4" />} onClick={() => showInventory("users")}>Users</SidebarItem> : null}
             {canReadAssets ? <SidebarItem active={view === "assets-hidden"} icon={<EyeOff className="h-4 w-4" />} onClick={() => showInventory("assets-hidden")}>Hidden Assets</SidebarItem> : null}
             {canReadAssets ? <SidebarItem active={view === "assets-deleted"} icon={<Trash2 className="h-4 w-4" />} onClick={() => showInventory("assets-deleted")}>Deleted Assets</SidebarItem> : null}
             {canReadComments ? <SidebarItem active={view === "comments-hidden"} icon={<MessageCircle className="h-4 w-4" />} onClick={() => showInventory("comments-hidden")}>Hidden Comments</SidebarItem> : null}
@@ -191,6 +205,15 @@ export function ModerationShell() {
               onPage={goPage}
               onRefresh={() => void auditsQuery.refetch()}
             />
+          ) : view === "users" ? (
+            <>
+              <div className="grid content-start gap-3">
+                <UserQueueSearch value={userSearch} onChange={(value) => { setUserSearch(value); setPage(1); setSelectedId(null); }} />
+                <UserList users={users} selectedId={selectedUser?.authAccountId ?? null} loading={usersQuery.isLoading} error={usersQuery.isError} onSelect={setSelectedId} />
+                <Pagination total={usersQuery.data?.total ?? 0} page={page} pageSize={pageSize} onPage={goPage} />
+              </div>
+              <UserDetail user={selectedUser} onDone={() => void invalidateModeration()} />
+            </>
           ) : view === "reports" ? (
             <>
               <div className="grid content-start gap-3">
@@ -237,6 +260,141 @@ function ReportList({ reports, selectedId, loading, error, onSelect }: { reports
           </div>
         </button>
       ))}
+    </div>
+  );
+}
+
+function UserQueueSearch({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <Card>
+      <CardContent className="p-3">
+        <SearchInput value={value} onChange={(event: { target: { value: string } }) => onChange(event.target.value)} onClear={() => onChange("")} placeholder="Search reported users" className="max-w-none" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function UserList({ users, selectedId, loading, error, onSelect }: { users: ModerationUser[]; selectedId: string | null; loading: boolean; error: boolean; onSelect: (id: string) => void }) {
+  if (loading) return <LoadingPanel />;
+  if (error) return <EmptyPanel title="Users unavailable" text="Could not load reported users." />;
+  if (!users.length) return <EmptyPanel title="No reported users" text="Account and owner reports will appear here." />;
+  return (
+    <div className="grid content-start gap-3">
+      {users.map((user) => (
+        <button key={user.authAccountId} type="button" className={listItemClass(selectedId === user.authAccountId)} onClick={() => onSelect(user.authAccountId)}>
+          <ListTitle title={user.displayName} badge={`${user.openReportCount} open`} dot={user.openReportCount > 0} />
+          <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 overflow-hidden text-xs leading-5 text-muted-foreground">
+            <span>{user.creatorName ? `/${user.creatorName}` : user.authAccountId}</span>
+            <span>{user.assetCount} assets</span>
+            <span>{user.commentCount} comments</span>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function UserDetail({ user, onDone }: { user: ModerationUser | null; onDone: () => void }) {
+  const { profile, workshopUser } = useAuth();
+  const permissionSource = workshopUser ?? profile;
+  const token = getAccessToken();
+  const [dialogKind, setDialogKind] = useState<RestrictionKindDraft | null>(null);
+  const [reason, setReason] = useState("");
+  const [expiresAt, setExpiresAt] = useState(defaultExpiryLocal());
+  const canRestrict = canRestrictUsers(permissionSource);
+  const detailQuery = useQuery({
+    queryKey: ["workshop", "moderation", "users", user?.authAccountId, "detail"],
+    queryFn: () => getModerationUser(token!, user!.authAccountId),
+    enabled: Boolean(token && user?.authAccountId),
+  });
+  const detail = detailQuery.data;
+  const restrict = useMutation({
+    mutationFn: async () => {
+      if (!token || !user || !dialogKind) return;
+      const end = dialogKind === "suspension" ? new Date(expiresAt) : null;
+      if (dialogKind === "suspension" && (!end || Number.isNaN(end.getTime()) || end <= new Date())) throw new Error("Choose a future suspension end time.");
+      await restrictAuthAccount(token, user.authAccountId, { kind: dialogKind, reason: reason.trim(), expiresAt: end?.toISOString() ?? null });
+    },
+    onSuccess: () => {
+      toast.success(dialogKind === "ban" ? "User banned" : "User suspended", { description: "Auth-service restriction saved." });
+      setDialogKind(null);
+      setReason("");
+      onDone();
+    },
+    onError: (error) => toast.error("Restriction failed", { description: error instanceof Error ? error.message : "Try again." }),
+  });
+  const lift = useMutation({
+    mutationFn: () => liftAuthAccountRestriction(token!, user!.authAccountId),
+    onSuccess: () => {
+      toast.success("Restriction lifted", { description: "Auth-service restriction cleared." });
+      onDone();
+    },
+    onError: (error) => toast.error("Lift failed", { description: error instanceof Error ? error.message : "Try again." }),
+  });
+
+  if (!user) return <EmptyPanel title="Select a user" text="Choose a reported account from the queue." />;
+
+  return (
+    <Card>
+      <CardHeader className="gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardTitle className="text-lg">{user.displayName}</CardTitle>
+          <Badge variant={user.openReportCount > 0 ? "secondary" : "outline"}>{user.openReportCount} open reports</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <div className="grid gap-2 text-sm">
+          <DetailRow label="Account" value={user.authAccountId} />
+          <DetailRow label="Creator" value={user.creatorName ? `/${user.creatorName}` : "No creator name"} />
+          <DetailRow label="Activity" value={`${user.assetCount} assets, ${user.hiddenAssetCount} hidden, ${user.deletedAssetCount} deleted, ${user.commentCount} comments`} />
+          <DetailRow label="Last seen" value={formatDate(user.lastSeenAt)} />
+        </div>
+        {canRestrict ? (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => { setDialogKind("suspension"); setReason("Workshop moderation action."); setExpiresAt(defaultExpiryLocal()); }}><Ban className="h-4 w-4" />SUSPEND</Button>
+            <Button size="sm" variant="destructive" onClick={() => { setDialogKind("ban"); setReason("Workshop moderation action."); }}><Ban className="h-4 w-4" />BAN</Button>
+            <Button size="sm" variant="ghost" disabled={lift.isPending} onClick={() => lift.mutate()}>LIFT</Button>
+          </div>
+        ) : null}
+        {detailQuery.isLoading ? <Spinner label="Loading user evidence" /> : detail ? <UserEvidence detail={detail} /> : null}
+      </CardContent>
+      <AccountRestrictionDialog
+        kind={dialogKind}
+        reason={reason}
+        expiresAt={expiresAt}
+        busy={restrict.isPending}
+        onKind={setDialogKind}
+        onReason={setReason}
+        onExpiresAt={setExpiresAt}
+        onOpenChange={(open) => { if (!open) setDialogKind(null); }}
+        onConfirm={() => restrict.mutate()}
+      />
+    </Card>
+  );
+}
+
+function UserEvidence({ detail }: { detail: ModerationUserDetail }) {
+  return (
+    <div className="grid gap-4">
+      <EvidenceBlock title="Recent Reports" empty="No reports.">
+        {detail.recentReports.map((report) => <DetailRow key={report.id} label={report.targetType} value={`${report.reason} - ${report.status}`} />)}
+      </EvidenceBlock>
+      <EvidenceBlock title="Recent Assets" empty="No assets.">
+        {detail.recentAssets.map((asset) => <DetailRow key={asset.id} label={asset.status} value={`${asset.title} / ${asset.assetSlug}`} />)}
+      </EvidenceBlock>
+      <EvidenceBlock title="Recent Comments" empty="No comments.">
+        {detail.recentComments.map((comment) => <DetailRow key={comment.id} label={comment.status} value={comment.body} />)}
+      </EvidenceBlock>
+    </div>
+  );
+}
+
+function EvidenceBlock({ title, empty, children }: { title: string; empty: string; children: ReactNode }) {
+  const items = Array.isArray(children) ? children.filter(Boolean) : children;
+  return (
+    <div className="grid gap-2 rounded-md border border-border p-3">
+      <h3 className="font-primary text-sm uppercase">{title}</h3>
+      {Array.isArray(items) && items.length === 0 ? <p className="text-sm text-muted-foreground">{empty}</p> : items}
     </div>
   );
 }
@@ -367,10 +525,14 @@ function ReportDetail({ report, note, onNote, onDone }: { report: WorkshopReport
   const token = getAccessToken();
   const snapshot = parseSnapshot(report?.snapshotJson);
   const [confirmAction, setConfirmAction] = useState<ReportAction | null>(null);
+  const [accountRestrictionKind, setAccountRestrictionKind] = useState<RestrictionKindDraft | null>(null);
+  const [accountRestrictionReason, setAccountRestrictionReason] = useState("");
+  const [accountRestrictionExpiresAt, setAccountRestrictionExpiresAt] = useState(defaultExpiryLocal());
   const run = useMutation({
     mutationFn: async (action: ReportAction | "dismiss") => {
       if (!report || !token) return;
       const assetId = snapshotValue(snapshot, "publicId") || report.targetId;
+      const accountRestrictionEnd = accountRestrictionKind === "suspension" ? new Date(accountRestrictionExpiresAt) : null;
       if (action === "hide-asset") {
         await hideModerationAsset(assetId, token);
         await resolveModerationReport(report.id, token, note);
@@ -383,11 +545,25 @@ function ReportDetail({ report, note, onNote, onDone }: { report: WorkshopReport
         await hideModerationComment(report.targetId, token);
         await resolveModerationReport(report.id, token, note);
       }
+      if (action === "ban-account" || action === "suspend-account") {
+        if (!accountRestrictionKind) return;
+        if (accountRestrictionKind === "suspension" && (!accountRestrictionEnd || Number.isNaN(accountRestrictionEnd.getTime()) || accountRestrictionEnd <= new Date())) {
+          throw new Error("Choose a future suspension end time.");
+        }
+        await restrictAuthAccount(token, report.targetOwnerAuthAccountId, {
+          kind: accountRestrictionKind,
+          reason: accountRestrictionReason.trim(),
+          expiresAt: accountRestrictionEnd?.toISOString() ?? null,
+        });
+        await resolveModerationReport(report.id, token, note || accountRestrictionReason);
+      }
       if (action === "dismiss") await dismissModerationReport(report.id, token, note);
     },
     onSuccess: (_, action) => {
       toast.success("Moderation updated", { description: action === "dismiss" ? "Report dismissed." : "Report resolved." });
       setConfirmAction(null);
+      setAccountRestrictionKind(null);
+      setAccountRestrictionReason("");
       onDone();
     },
     onError: (error) => toast.error("Moderation failed", { description: error instanceof Error ? error.message : "Try again." }),
@@ -418,6 +594,8 @@ function ReportDetail({ report, note, onNote, onDone }: { report: WorkshopReport
           {report.targetType === "asset" && report.status === "open" && canModerateAssets(permissionSource) && canResolveReports(permissionSource) ? <Button size="sm" variant="destructive" disabled={run.isPending} onClick={() => setConfirmAction("hide-asset")}><EyeOff className="h-4 w-4" />HIDE</Button> : null}
           {report.targetType === "asset" && report.status === "open" && canModerateAssets(permissionSource) && canResolveReports(permissionSource) ? <Button size="sm" variant="destructive" disabled={run.isPending} onClick={() => setConfirmAction("delete-asset")}><Trash2 className="h-4 w-4" />DELETE</Button> : null}
           {report.targetType === "comment" && report.status === "open" && canModerateComments(permissionSource) && canResolveReports(permissionSource) ? <Button size="sm" variant="destructive" disabled={run.isPending} onClick={() => setConfirmAction("hide-comment")}><EyeOff className="h-4 w-4" />HIDE</Button> : null}
+          {report.targetType === "account" && report.status === "open" && canRestrictUsers(permissionSource) && canResolveReports(permissionSource) ? <Button size="sm" variant="secondary" disabled={run.isPending} onClick={() => { setAccountRestrictionKind("suspension"); setAccountRestrictionReason(report.details || "Workshop account report."); setAccountRestrictionExpiresAt(defaultExpiryLocal()); }}><Ban className="h-4 w-4" />SUSPEND</Button> : null}
+          {report.targetType === "account" && report.status === "open" && canRestrictUsers(permissionSource) && canResolveReports(permissionSource) ? <Button size="sm" variant="destructive" disabled={run.isPending} onClick={() => { setAccountRestrictionKind("ban"); setAccountRestrictionReason(report.details || "Workshop account report."); }}><Ban className="h-4 w-4" />BAN</Button> : null}
           {canResolveReports(permissionSource) && report.status === "open" ? <Button size="sm" variant="ghost" disabled={run.isPending} onClick={() => run.mutate("dismiss")}>DISMISS</Button> : null}
         </div>
       </CardContent>
@@ -430,6 +608,17 @@ function ReportDetail({ report, note, onNote, onDone }: { report: WorkshopReport
       busy={run.isPending}
       onOpenChange={(open) => { if (!open) setConfirmAction(null); }}
       onConfirm={() => { if (confirmAction) run.mutate(confirmAction); }}
+    />
+    <AccountRestrictionDialog
+      kind={accountRestrictionKind}
+      reason={accountRestrictionReason}
+      expiresAt={accountRestrictionExpiresAt}
+      busy={run.isPending}
+      onKind={setAccountRestrictionKind}
+      onReason={setAccountRestrictionReason}
+      onExpiresAt={setAccountRestrictionExpiresAt}
+      onOpenChange={(open) => { if (!open) setAccountRestrictionKind(null); }}
+      onConfirm={() => run.mutate(accountRestrictionKind === "ban" ? "ban-account" : "suspend-account")}
     />
     </>
   );
@@ -684,6 +873,59 @@ function ConfirmDialog({
   );
 }
 
+function AccountRestrictionDialog({
+  kind,
+  reason,
+  expiresAt,
+  busy,
+  onKind,
+  onReason,
+  onExpiresAt,
+  onOpenChange,
+  onConfirm,
+}: {
+  kind: RestrictionKindDraft | null;
+  reason: string;
+  expiresAt: string;
+  busy: boolean;
+  onKind: (kind: RestrictionKindDraft | null) => void;
+  onReason: (value: string) => void;
+  onExpiresAt: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={kind !== null} onOpenChange={onOpenChange}>
+      <DialogContent variant={kind === "ban" ? "destructive" : undefined}>
+        <DialogHeader>
+          <DialogTitle>{kind === "ban" ? "Ban Account" : "Suspend Account"}</DialogTitle>
+          <DialogDescription>This restriction is enforced by the auth service.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant={kind === "suspension" ? "default" : "secondary"} onClick={() => onKind("suspension")}>Suspend</Button>
+            <Button type="button" variant={kind === "ban" ? "destructive" : "secondary"} onClick={() => onKind("ban")}>Ban</Button>
+          </div>
+          {kind === "suspension" ? (
+            <div className="grid gap-2">
+              <Label htmlFor="account-restriction-expires-at">Suspension ends</Label>
+              <Input id="account-restriction-expires-at" type="datetime-local" value={expiresAt} onChange={(event) => onExpiresAt(event.target.value)} />
+            </div>
+          ) : null}
+          <div className="grid gap-2">
+            <Label htmlFor="account-restriction-reason">Reason</Label>
+            <Textarea id="account-restriction-reason" rows={4} value={reason} onChange={(event) => onReason(event.target.value)} placeholder="Reason shown to the user on login." />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="button" variant={kind === "ban" ? "destructive" : "default"} disabled={busy || !reason.trim()} onClick={onConfirm}>{kind === "ban" ? "BAN" : "SUSPEND"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function snapshotValue(snapshot: Record<string, unknown>, key: string) {
   const pascal = `${key.charAt(0).toUpperCase()}${key.slice(1)}`;
   const value = snapshot[key] ?? snapshot[pascal];
@@ -700,6 +942,12 @@ function parseSnapshot(value?: string): Record<string, string> {
 
 function normalizeSlug(value: string | undefined) {
   return value?.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120) ?? "";
+}
+
+function defaultExpiryLocal() {
+  const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function formatDate(value: string) {

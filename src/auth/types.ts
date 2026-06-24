@@ -10,6 +10,8 @@ export interface ProfileResponse {
   emailVerified: boolean;
   roles: string[];
   permissions?: string[];
+  restrictionStatus?: string;
+  restriction?: AccountRestrictionResponse | null;
   patreon?: {
     linked: boolean;
     patronStatus: string | null;
@@ -17,6 +19,15 @@ export interface ProfileResponse {
     entitledAmountCents: number | null;
     lastSyncedAt: string | null;
   };
+}
+
+export interface AccountRestrictionResponse {
+  kind: "ban" | "suspension" | string;
+  status: "banned" | "suspended" | string;
+  reason: string;
+  expiresAt?: string | null;
+  restrictedAt: string;
+  restrictedByAccountId?: string | null;
 }
 
 export interface WorkshopUser {
@@ -51,6 +62,8 @@ export interface ProfilePresetCatalog {
 
 export interface ErrorResponse {
   error?: string;
+  code?: string;
+  restriction?: AccountRestrictionResponse;
 }
 
 export interface ApiResult<T = unknown> {

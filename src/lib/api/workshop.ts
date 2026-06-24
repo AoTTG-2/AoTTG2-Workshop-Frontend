@@ -340,6 +340,61 @@ export interface ReportListResponse {
   reports: WorkshopReport[];
 }
 
+export interface ModerationUser {
+  authAccountId: string;
+  displayName: string;
+  creatorName?: string | null;
+  avatarKey?: string | null;
+  roles: string[];
+  lastSeenAt: string;
+  assetCount: number;
+  hiddenAssetCount: number;
+  deletedAssetCount: number;
+  commentCount: number;
+  openReportCount: number;
+  totalReportCount: number;
+}
+
+export interface ModerationUserListResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  users: ModerationUser[];
+}
+
+export interface ModerationUserAsset {
+  id: string;
+  publicId: string;
+  assetSlug: string;
+  status: string;
+  title: string;
+  assetType: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ModerationUserComment {
+  id: string;
+  assetId: string;
+  status: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ModerationUserDetail {
+  user: ModerationUser;
+  recentReports: WorkshopReport[];
+  recentAssets: ModerationUserAsset[];
+  recentComments: ModerationUserComment[];
+}
+
+export interface RestrictAccountRequest {
+  kind: "ban" | "suspension";
+  reason: string;
+  expiresAt?: string | null;
+}
+
 export interface WorkshopAuditEvent {
   id: string;
   eventType: string;
@@ -698,9 +753,35 @@ export async function listModerationReports(accessToken: string, status = "open"
   return workshopJson<ReportListResponse>(`/moderation/reports?${params.toString()}`, { headers: { authorization: `Bearer ${accessToken}` } });
 }
 
+export async function listModerationUsers(accessToken: string, search = "", reportedOnly = true, page = 1, pageSize = 24): Promise<ModerationUserListResponse> {
+  const params = new URLSearchParams({ reportedOnly: String(reportedOnly), page: String(page), pageSize: String(pageSize) });
+  if (search.trim()) params.set("search", search.trim());
+  return workshopJson<ModerationUserListResponse>(`/moderation/users?${params.toString()}`, { headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function getModerationUser(accessToken: string, accountId: string): Promise<ModerationUserDetail> {
+  return workshopJson<ModerationUserDetail>(`/moderation/users/${encodeURIComponent(accountId)}`, { headers: { authorization: `Bearer ${accessToken}` } });
+}
+
 export async function listModerationAssets(accessToken: string, status: "hidden" | "deleted", page = 1, pageSize = 24): Promise<AssetListResponse> {
   const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
   return workshopJson<AssetListResponse>(`/moderation/assets?${params.toString()}`, { headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+export async function restrictAuthAccount(accessToken: string, accountId: string, body: RestrictAccountRequest): Promise<unknown> {
+  return workshopJsonFrom<unknown>(
+    AUTH_API_BASE_URL,
+    `/admin/accounts/${encodeURIComponent(accountId)}/restriction`,
+    jsonAuthInit("PUT", accessToken, body),
+  );
+}
+
+export async function liftAuthAccountRestriction(accessToken: string, accountId: string): Promise<unknown> {
+  return workshopJsonFrom<unknown>(
+    AUTH_API_BASE_URL,
+    `/admin/accounts/${encodeURIComponent(accountId)}/restriction`,
+    { method: "DELETE", headers: { authorization: `Bearer ${accessToken}` } },
+  );
 }
 
 export async function resolveModerationReport(reportId: string, accessToken: string, note?: string | null): Promise<WorkshopReport> {

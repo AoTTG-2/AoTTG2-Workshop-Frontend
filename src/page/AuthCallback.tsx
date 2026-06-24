@@ -9,6 +9,13 @@ import { localPath } from "../auth/loginRedirect";
 import { useAuth } from "../auth/useAuth";
 import { AuthShell } from "./AuthShell";
 
+function restrictedError(data: { code?: string; error?: string; restriction?: { status?: string; reason?: string; expiresAt?: string | null } }) {
+  if (data.code !== "account_restricted" || !data.restriction) return data.error ?? "Sign-in failed. Please try again.";
+  const label = data.restriction.status === "suspended" ? "SUSPENSION" : "BAN";
+  const until = data.restriction.expiresAt ? ` Until: ${new Date(data.restriction.expiresAt).toLocaleString()}.` : "";
+  return `REASON FOR ${label}: ${data.restriction.reason || "No reason provided."}${until}`;
+}
+
 export function AuthCallback() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -28,7 +35,7 @@ export function AuthCallback() {
         if (!active) return;
 
         if (!ok || !data.accessToken || !data.refreshToken) {
-          setError(data.error ?? "Sign-in failed. Please try again.");
+          setError(restrictedError(data));
           return;
         }
 
