@@ -27,7 +27,7 @@ export function thumbnailDisplayUrl(url: string) {
   // ponytail: ambiguous Imgur IDs ending in a thumbnail suffix are left alone to avoid double-suffixing.
   if (suffix && IMGUR_THUMBNAIL_SUFFIXES.has(suffix)) return url;
 
-  parsed.pathname = `${directory}${imageId}m${extension}`;
+  parsed.pathname = `${directory}${imageId}l${extension}`;
   return parsed.toString();
 }
 
