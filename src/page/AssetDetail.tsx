@@ -19,7 +19,7 @@ import { AssetTag, AssetTagLink } from "../components/AssetTag";
 import { CreatorIdentityLink, CreatorMention } from "../components/CreatorIdentityLink";
 import { ReportDialog } from "../components/ReportDialog";
 import { SideCard } from "../components/SideCard";
-import { assetPath, createAssetComment, deleteWorkshopAsset, deleteWorkshopComment, getAsset, getAssetBySeoPath, hideModerationComment, listAssetComments, listAssetUsedBy, replyToAssetComment, reportWorkshopAsset, reportWorkshopComment, setAssetFavorite, setAssetLike, trackAssetDownload, trackAssetView, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopComment, type WorkshopMedia } from "../lib/api/workshop";
+import { assetPath, createAssetComment, deleteWorkshopAsset, deleteWorkshopComment, getAsset, getAssetBySeoPath, hideModerationComment, listAssetComments, listAssetUsedBy, replyToAssetComment, reportWorkshopAsset, reportWorkshopComment, setAssetFavorite, setAssetLike, trackAssetDownload, trackAssetView, type ShifterSkinSetPayload, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type SkyboxSkinSetPayload, type WorkshopAsset, type WorkshopComment, type WorkshopMedia } from "../lib/api/workshop";
 import { thumbnailDisplayUrls } from "../lib/media";
 import { toast } from "../lib/toast";
 
@@ -841,6 +841,29 @@ function AssetSummary({ asset }: { asset: WorkshopAsset }) {
     );
   }
 
+  if (asset.type === "shifter_skin_set" && isShifterSkinSetPayload(asset.payload)) {
+    return (
+      <dl className="grid gap-2 text-sm">
+        <SummaryRow label="Eren" value={asset.payload.eren} />
+        <SummaryRow label="Annie" value={asset.payload.annie} />
+        <SummaryRow label="Colossal" value={asset.payload.colossal} />
+      </dl>
+    );
+  }
+
+  if (asset.type === "skybox_skin_set" && isSkyboxSkinSetPayload(asset.payload)) {
+    return (
+      <dl className="grid gap-2 text-sm">
+        <SummaryRow label="Top" value={asset.payload.up} />
+        <SummaryRow label="Left" value={asset.payload.left} />
+        <SummaryRow label="Front" value={asset.payload.front} />
+        <SummaryRow label="Right" value={asset.payload.right} />
+        <SummaryRow label="Back" value={asset.payload.back} />
+        <SummaryRow label="Bottom" value={asset.payload.down} />
+      </dl>
+    );
+  }
+
   return <pre className="overflow-auto bg-muted p-3 text-xs text-foreground">{JSON.stringify(asset.payload, null, 2)}</pre>;
 }
 
@@ -1001,7 +1024,7 @@ function mediaForGallery(media: WorkshopMedia[]) {
 }
 
 function assetCategory(asset: WorkshopAsset) {
-  if ((asset.type === "skin_part" || asset.type === "skin_set") && "category" in asset.payload && typeof asset.payload.category === "string") {
+  if ((asset.type === "skin_part" || asset.type === "skin_set" || asset.type === "shifter_skin_set" || asset.type === "skybox_skin_set") && "category" in asset.payload && typeof asset.payload.category === "string") {
     return asset.payload.category;
   }
 
@@ -1021,6 +1044,16 @@ function summarizeAsset(asset: WorkshopAsset) {
     return `${count} set ${count === 1 ? "item" : "items"}`;
   }
 
+  if (asset.type === "shifter_skin_set" && isShifterSkinSetPayload(asset.payload)) {
+    const count = [asset.payload.eren, asset.payload.annie, asset.payload.colossal].filter(Boolean).length;
+    return `${count} shifter texture${count === 1 ? "" : "s"}`;
+  }
+
+  if (asset.type === "skybox_skin_set" && isSkyboxSkinSetPayload(asset.payload)) {
+    const count = [asset.payload.front, asset.payload.back, asset.payload.left, asset.payload.right, asset.payload.up, asset.payload.down].filter(Boolean).length;
+    return `${count} skybox face${count === 1 ? "" : "s"}`;
+  }
+
   return formatLabel(asset.type);
 }
 
@@ -1032,6 +1065,14 @@ function collectTextureUrls(asset: WorkshopAsset) {
 
   if (asset.type === "skin_set" && isSkinSetPayload(asset.payload)) {
     return (asset.payload.items ?? []).flatMap((item) => [item.textureUrl, item.textureUrls?.left, item.textureUrls?.right]).filter((url): url is string => Boolean(url));
+  }
+
+  if (asset.type === "shifter_skin_set" && isShifterSkinSetPayload(asset.payload)) {
+    return [asset.payload.eren, asset.payload.annie, asset.payload.colossal].filter((url): url is string => Boolean(url));
+  }
+
+  if (asset.type === "skybox_skin_set" && isSkyboxSkinSetPayload(asset.payload)) {
+    return [asset.payload.up, asset.payload.left, asset.payload.front, asset.payload.right, asset.payload.back, asset.payload.down].filter((url): url is string => Boolean(url));
   }
 
   return [];
@@ -1064,6 +1105,14 @@ function summarizeGroupedSlot(payload: SkinPartPayload | SkinSetItem) {
 
 function isSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkinSetPayload {
   return "items" in payload;
+}
+
+function isShifterSkinSetPayload(payload: WorkshopAsset["payload"]): payload is ShifterSkinSetPayload {
+  return "eren" in payload || "annie" in payload || "colossal" in payload;
+}
+
+function isSkyboxSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkyboxSkinSetPayload {
+  return "front" in payload || "back" in payload || "left" in payload || "right" in payload || "up" in payload || "down" in payload;
 }
 
 function formatLabel(value: string) {

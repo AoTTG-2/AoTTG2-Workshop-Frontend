@@ -5,7 +5,7 @@ import { CalendarDays, Download, ThumbsUp } from "lucide-react";
 import { type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useState } from "react";
 import { AssetTag, AssetTagButton } from "./AssetTag";
 import { CreatorIdentityLink } from "./CreatorIdentityLink";
-import type { SkinPartPayload, SkinSetPayload, WorkshopAsset, WorkshopMedia } from "../lib/api/workshop";
+import type { ShifterSkinSetPayload, SkinPartPayload, SkinSetPayload, SkyboxSkinSetPayload, WorkshopAsset, WorkshopMedia } from "../lib/api/workshop";
 import { thumbnailDisplayUrls } from "../lib/media";
 
 interface WorkshopAssetCardProps {
@@ -165,7 +165,7 @@ function selectPreview(media: WorkshopMedia[]) {
 }
 
 function assetCategory(asset: WorkshopAsset) {
-  if ((asset.type === "skin_part" || asset.type === "skin_set") && "category" in asset.payload && typeof asset.payload.category === "string") {
+  if ((asset.type === "skin_part" || asset.type === "skin_set" || asset.type === "shifter_skin_set" || asset.type === "skybox_skin_set") && "category" in asset.payload && typeof asset.payload.category === "string") {
     return asset.payload.category;
   }
 
@@ -183,6 +183,16 @@ function summarizeAsset(asset: WorkshopAsset) {
   if (asset.type === "skin_set" && isSkinSetPayload(asset.payload)) {
     const count = asset.payload.items?.length ?? 0;
     return `${count} set ${count === 1 ? "item" : "items"}`;
+  }
+
+  if (asset.type === "shifter_skin_set" && isShifterSkinSetPayload(asset.payload)) {
+    const count = [asset.payload.eren, asset.payload.annie, asset.payload.colossal].filter(Boolean).length;
+    return `${count} shifter texture${count === 1 ? "" : "s"}`;
+  }
+
+  if (asset.type === "skybox_skin_set" && isSkyboxSkinSetPayload(asset.payload)) {
+    const count = [asset.payload.front, asset.payload.back, asset.payload.left, asset.payload.right, asset.payload.up, asset.payload.down].filter(Boolean).length;
+    return `${count} skybox face${count === 1 ? "" : "s"}`;
   }
 
   return formatLabel(asset.type);
@@ -205,6 +215,14 @@ function summarizeGroupedSlot(payload: SkinPartPayload) {
 
 function isSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkinSetPayload {
   return "items" in payload;
+}
+
+function isShifterSkinSetPayload(payload: WorkshopAsset["payload"]): payload is ShifterSkinSetPayload {
+  return "eren" in payload || "annie" in payload || "colossal" in payload;
+}
+
+function isSkyboxSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkyboxSkinSetPayload {
+  return "front" in payload || "back" in payload || "left" in payload || "right" in payload || "up" in payload || "down" in payload;
 }
 
 function plainPreview(value?: string | null) {

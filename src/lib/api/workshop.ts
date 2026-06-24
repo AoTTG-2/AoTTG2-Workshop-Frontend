@@ -22,7 +22,7 @@ export interface PublicProfile {
   createdAt: string;
 }
 
-export type WorkshopAssetType = "skin_part" | "skin_set";
+export type WorkshopAssetType = "skin_part" | "skin_set" | "shifter_skin_set" | "skybox_skin_set";
 
 export interface WorkshopMedia {
   kind: "thumbnail" | "gallery" | string;
@@ -69,6 +69,23 @@ export interface SkinSetPayload {
   items?: SkinSetItem[];
 }
 
+export interface ShifterSkinSetPayload {
+  category?: "shifter" | string;
+  eren?: string | null;
+  annie?: string | null;
+  colossal?: string | null;
+}
+
+export interface SkyboxSkinSetPayload {
+  category?: "skybox" | string;
+  front?: string | null;
+  back?: string | null;
+  left?: string | null;
+  right?: string | null;
+  up?: string | null;
+  down?: string | null;
+}
+
 export interface WorkshopAsset {
   id: string;
   publicId: string;
@@ -80,7 +97,7 @@ export interface WorkshopAsset {
   descriptionMarkdown?: string | null;
   shortDescription?: string | null;
   media: WorkshopMedia[];
-  payload: SkinPartPayload | SkinSetPayload | Record<string, unknown>;
+  payload: SkinPartPayload | SkinSetPayload | ShifterSkinSetPayload | SkyboxSkinSetPayload | Record<string, unknown>;
   tags: string[];
   ownerAuthAccountId: string;
   authorDisplayName: string;

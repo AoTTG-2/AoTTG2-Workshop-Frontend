@@ -13,14 +13,15 @@ import { z } from "zod";
 import { getAccessToken } from "../auth/storage";
 import { useAuth } from "../auth/useAuth";
 import { canModerateAssets } from "../auth/workshopPermissions";
-import { assetPath, createAsset, getVariantCatalog, listAssets, listTagSuggestions, setCreatorName, updateAsset, type SkinPartPayload, type SkinSetPayload, type VariantCatalog, type WorkshopAsset, type WorkshopVariantOption } from "../lib/api/workshop";
+import { assetPath, createAsset, getVariantCatalog, listAssets, listTagSuggestions, setCreatorName, updateAsset, type ShifterSkinSetPayload, type SkinPartPayload, type SkinSetPayload, type SkyboxSkinSetPayload, type VariantCatalog, type WorkshopAsset, type WorkshopVariantOption } from "../lib/api/workshop";
 import { WORKSHOP_STATIC_API_ORIGIN } from "../lib/config";
 import { toast } from "../lib/toast";
 import { SideCard } from "../components/SideCard";
 import { WorkshopAssetCard } from "../components/WorkshopAssetCard";
 import { AssetTagButton } from "../components/AssetTag";
 
-type AssetKind = "skin_part" | "skin_set";
+type AssetKind = "skin_part" | "skin_set" | "shifter_skin_set" | "skybox_skin_set";
+type SkinCategory = "human" | "shifter" | "skybox";
 type WizardStep = "type" | "listing" | "data" | "description";
 
 interface VariantTargetForm {
@@ -35,6 +36,21 @@ interface VariantTargetForm {
   hookTilings?: { left: string; right: string };
   boots?: boolean;
   mirror?: boolean;
+}
+
+interface ShifterSkinSetForm {
+  eren: string;
+  annie: string;
+  colossal: string;
+}
+
+interface SkyboxSkinSetForm {
+  front: string;
+  back: string;
+  left: string;
+  right: string;
+  up: string;
+  down: string;
 }
 
 const wizardSteps: { key: WizardStep; label: string }[] = [
@@ -85,6 +101,21 @@ const skinTypeLabels: Record<string, string> = {
   Head: "Head Accessory",
   Back: "Back Accessory",
 };
+
+const shifterTargets = [
+  { key: "eren", label: "Eren" },
+  { key: "annie", label: "Annie" },
+  { key: "colossal", label: "Colossal" },
+] as const;
+
+const skyboxFaces = [
+  { key: "up", label: "Top" },
+  { key: "left", label: "Left" },
+  { key: "front", label: "Front" },
+  { key: "right", label: "Right" },
+  { key: "back", label: "Back" },
+  { key: "down", label: "Bottom" },
+] as const;
 
 const groupedSlots = new Set(["Blades", "AHSS", "APG", "Thunderspears", "Hooks"]);
 const legacyGroupedSlots = new Set(["GearL", "GearR", "ThunderspearL", "ThunderspearR", "HookL", "HookR", "HookLTiling", "HookRTiling"]);
@@ -445,6 +476,39 @@ function prepareSetItem(value: VariantTargetForm, catalog: VariantCatalog) {
   return prepareTarget(value, catalog);
 }
 
+function prepareShifterSkinSet(value: ShifterSkinSetForm, catalog: VariantCatalog) {
+  const payload = {
+    category: "shifter" as const,
+    eren: value.eren.trim(),
+    annie: value.annie.trim(),
+    colossal: value.colossal.trim(),
+  };
+  if (!payload.eren && !payload.annie && !payload.colossal) throw new Error("Add at least one shifter texture");
+  shifterTargets.forEach((target) => {
+    const url = payload[target.key];
+    if (url) validateTextureUrl(url, catalog);
+  });
+  return payload;
+}
+
+function prepareSkyboxSkinSet(value: SkyboxSkinSetForm, catalog: VariantCatalog) {
+  const payload = {
+    category: "skybox" as const,
+    front: value.front.trim(),
+    back: value.back.trim(),
+    left: value.left.trim(),
+    right: value.right.trim(),
+    up: value.up.trim(),
+    down: value.down.trim(),
+  };
+  skyboxFaces.forEach((face) => {
+    const url = payload[face.key];
+    if (!url) throw new Error(`Set ${face.label} texture`);
+    validateTextureUrl(url, catalog);
+  });
+  return payload;
+}
+
 function previewUrl(path: string | null | undefined) {
   return path ? `${WORKSHOP_STATIC_API_ORIGIN}${path}` : "";
 }
@@ -491,7 +555,13 @@ function skinPartSlot(asset: WorkshopAsset) {
 }
 
 function isEditableAsset(asset: WorkshopAsset | null | undefined): asset is WorkshopAsset & { type: AssetKind } {
-  return asset?.type === "skin_part" || asset?.type === "skin_set";
+  return asset?.type === "skin_part" || asset?.type === "skin_set" || asset?.type === "shifter_skin_set" || asset?.type === "skybox_skin_set";
+}
+
+function categoryFromAsset(asset: WorkshopAsset | null | undefined): SkinCategory {
+  if (asset?.type === "shifter_skin_set") return "shifter";
+  if (asset?.type === "skybox_skin_set") return "skybox";
+  return "human";
 }
 
 function commonFromAsset(asset: WorkshopAsset | null | undefined) {
@@ -540,6 +610,27 @@ function targetsFromSkinSet(payload: SkinSetPayload | Record<string, unknown>): 
     mirror: item.mirror ?? false,
     hookTilings: item.hookTilings ? { left: String(item.hookTilings.left ?? 1), right: String(item.hookTilings.right ?? 1) } : undefined,
   }));
+}
+
+function shifterFromAsset(payload: ShifterSkinSetPayload | Record<string, unknown>): ShifterSkinSetForm {
+  const data = payload as ShifterSkinSetPayload;
+  return {
+    eren: data.eren ?? "",
+    annie: data.annie ?? "",
+    colossal: data.colossal ?? "",
+  };
+}
+
+function skyboxFromAsset(payload: SkyboxSkinSetPayload | Record<string, unknown>): SkyboxSkinSetForm {
+  const data = payload as SkyboxSkinSetPayload;
+  return {
+    front: data.front ?? "",
+    back: data.back ?? "",
+    left: data.left ?? "",
+    right: data.right ?? "",
+    up: data.up ?? "",
+    down: data.down ?? "",
+  };
 }
 
 function updatePayloadFromAssetForm(asset: unknown) {
@@ -598,11 +689,14 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
   const steps = isEdit ? editWizardSteps : wizardSteps;
   const editableAsset = isEditableAsset(initialAsset) ? initialAsset : null;
   const authorName = profile?.displayName ?? "You";
-  const [kind, setKind] = useState<AssetKind>(() => (editableAsset?.type === "skin_set" ? "skin_set" : "skin_part"));
+  const [skinCategory, setSkinCategory] = useState<SkinCategory>(() => categoryFromAsset(editableAsset));
+  const [kind, setKind] = useState<AssetKind>(() => editableAsset?.type ?? "skin_part");
   const [step, setStep] = useState<WizardStep>(() => (isEdit ? "listing" : "type"));
   const [common, setCommon] = useState(() => commonFromAsset(editableAsset));
   const [part, setPart] = useState<VariantTargetForm>(() => (editableAsset?.type === "skin_part" ? targetFromSkinPart(editableAsset.payload) : { slot: "Hair", textureUrl: "", variants: [] }));
   const [items, setItems] = useState<VariantTargetForm[]>(() => (editableAsset?.type === "skin_set" ? targetsFromSkinSet(editableAsset.payload) : []));
+  const [shifter, setShifter] = useState<ShifterSkinSetForm>(() => (editableAsset?.type === "shifter_skin_set" ? shifterFromAsset(editableAsset.payload) : { eren: "", annie: "", colossal: "" }));
+  const [skybox, setSkybox] = useState<SkyboxSkinSetForm>(() => (editableAsset?.type === "skybox_skin_set" ? skyboxFromAsset(editableAsset.payload) : { front: "", back: "", left: "", right: "", up: "", down: "" }));
   const [newSetItem, setNewSetItem] = useState<VariantTargetForm | null>(null);
   const [newSetItemSourceOpen, setNewSetItemSourceOpen] = useState(false);
   const [newSetItemSlotOpen, setNewSetItemSlotOpen] = useState(false);
@@ -646,6 +740,15 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
 
   function updateItem(index: number, patch: Partial<VariantTargetForm>) {
     setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
+  }
+
+  function selectSkinCategory(category: SkinCategory) {
+    setSkinCategory(category);
+    if (category === "human") {
+      setKind((current) => (current === "skin_part" || current === "skin_set" ? current : "skin_set"));
+      return;
+    }
+    setKind(category === "shifter" ? "shifter_skin_set" : "skybox_skin_set");
   }
 
   function startAddSetItem() {
@@ -707,9 +810,13 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
     }
     if (step === "data") {
       if (kind === "skin_part") prepareTarget(part, catalog);
-      else {
+      else if (kind === "skin_set") {
         if (items.length === 0) throw new Error("Add at least one set item");
         items.forEach((item) => prepareSetItem(item, catalog));
+      } else if (kind === "shifter_skin_set") {
+        prepareShifterSkinSet(shifter, catalog);
+      } else {
+        prepareSkyboxSkinSet(skybox, catalog);
       }
     }
     if (step === "description") buildAsset();
@@ -747,8 +854,34 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
 
     const data = commonSchema.parse(common);
     validatePublishMedia(data);
-    if (items.length === 0) throw new Error("Add at least one set item");
     const assetSlug = normalizeSlug(data.assetSlug);
+    if (kind === "shifter_skin_set") {
+      return {
+        type: "shifter_skin_set",
+        title: data.title,
+        ...(assetSlug ? { assetSlug } : {}),
+        descriptionMarkdown: data.descriptionMarkdown,
+        shortDescription: data.shortDescription,
+        media: mediaFromCommon(data),
+        payload: prepareShifterSkinSet(shifter, catalog),
+        tags: splitList(data.tags),
+      };
+    }
+
+    if (kind === "skybox_skin_set") {
+      return {
+        type: "skybox_skin_set",
+        title: data.title,
+        ...(assetSlug ? { assetSlug } : {}),
+        descriptionMarkdown: data.descriptionMarkdown,
+        shortDescription: data.shortDescription,
+        media: mediaFromCommon(data),
+        payload: prepareSkyboxSkinSet(skybox, catalog),
+        tags: splitList(data.tags),
+      };
+    }
+
+    if (items.length === 0) throw new Error("Add at least one set item");
     return {
       type: "skin_set",
       title: data.title,
@@ -888,34 +1021,41 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
         {step === "type" ? (
           <section className="grid gap-6 border-t border-border pt-6">
             <SideCard title="Category" variant="secondary" contentClassName="grid auto-rows-fr gap-4 sm:grid-cols-3">
-              <TypeChoice active icon={<Sparkles className="h-5 w-5" aria-hidden="true" />} title="Skins" body="Human texture assets and sets." onClick={() => undefined} />
+              <TypeChoice active icon={<Sparkles className="h-5 w-5" aria-hidden="true" />} title="Skins" body="Human, Shifter, and Skybox texture assets." onClick={() => undefined} />
               <TypeChoice disabled icon={<Map className="h-5 w-5" aria-hidden="true" />} title="Maps" body="Coming after backend support." onClick={() => undefined} />
               <TypeChoice disabled icon={<Code2 className="h-5 w-5" aria-hidden="true" />} title="Custom Logics" body="Coming after backend support." onClick={() => undefined} />
             </SideCard>
-            <SideCard title="Skin Type" variant="secondary" contentClassName="grid auto-rows-fr gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="sm:col-span-2 lg:col-span-4">
-                <TypeChoice
-                  active={kind === "skin_set"}
-                  icon={skinTypeIcon("Set")}
-                  title={skinTypeLabel("Set")}
-                  body="Publish multiple skin parts together. Add Hair, Eyes, Costume, Hooks, and other texture URLs in one asset."
-                  onClick={() => setKind("skin_set")}
-                />
-              </div>
-              {humanPartChoices.map((slot) => (
-                <TypeChoice
-                  key={slot}
-                  active={kind === "skin_part" && part.slot === slot}
-                  compact
-                  icon={skinTypeIcon(slot)}
-                  title={skinTypeLabel(slot)}
-                  onClick={() => {
-                    setKind("skin_part");
-                    setPart((current) => targetSlotPatch(current, slot));
-                  }}
-                />
-              ))}
+            <SideCard title="Skin Category" variant="secondary" contentClassName="grid auto-rows-fr gap-4 sm:grid-cols-3">
+              <TypeChoice active={skinCategory === "human"} icon={<UserRound className="h-5 w-5" aria-hidden="true" />} title="Human" body="Skin parts and human skin sets." onClick={() => selectSkinCategory("human")} />
+              <TypeChoice active={skinCategory === "shifter"} icon={<Zap className="h-5 w-5" aria-hidden="true" />} title="Shifter" body="Eren, Annie, and Colossal textures." onClick={() => selectSkinCategory("shifter")} />
+              <TypeChoice active={skinCategory === "skybox"} icon={<ImageIcon className="h-5 w-5" aria-hidden="true" />} title="Skybox" body="Six face texture set with preview." onClick={() => selectSkinCategory("skybox")} />
             </SideCard>
+            {skinCategory === "human" ? (
+              <SideCard title="Skin Type" variant="secondary" contentClassName="grid auto-rows-fr gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="sm:col-span-2 lg:col-span-4">
+                  <TypeChoice
+                    active={kind === "skin_set"}
+                    icon={skinTypeIcon("Set")}
+                    title={skinTypeLabel("Set")}
+                    body="Publish multiple skin parts together. Add Hair, Eyes, Costume, Hooks, and other texture URLs in one asset."
+                    onClick={() => setKind("skin_set")}
+                  />
+                </div>
+                {humanPartChoices.map((slot) => (
+                  <TypeChoice
+                    key={slot}
+                    active={kind === "skin_part" && part.slot === slot}
+                    compact
+                    icon={skinTypeIcon(slot)}
+                    title={skinTypeLabel(slot)}
+                    onClick={() => {
+                      setKind("skin_part");
+                      setPart((current) => targetSlotPatch(current, slot));
+                    }}
+                  />
+                ))}
+              </SideCard>
+            ) : null}
           </section>
         ) : null}
 
@@ -943,7 +1083,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
                 </Field>
               </div>
             </div>
-            <ListingPreview kind={kind} common={common} authorName={authorName} />
+            <ListingPreview kind={kind} skinCategory={skinCategory} common={common} authorName={authorName} />
           </section>
         ) : null}
 
@@ -955,7 +1095,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
                 <SkinTargetCard value={part} onChange={setPart} catalog={catalog} texturePlaceholder="https://i.imgur.com/hair.png" />
               </div>
             </section>
-          ) : (
+          ) : kind === "skin_set" ? (
             <section className="grid gap-5 border-t border-border pt-6">
               <h2 className="text-sm font-semibold uppercase text-muted-foreground">Skin Set Items</h2>
               {items.length === 0 ? (
@@ -998,7 +1138,30 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
                 />
               ) : null}
             </section>
-          )
+          ) : kind === "shifter_skin_set" ? (
+            <section className="grid gap-4 border-t border-border pt-6">
+              <h2 className="text-sm font-semibold uppercase text-muted-foreground">Shifter Textures</h2>
+              <div className="grid gap-4 lg:grid-cols-3">
+                {shifterTargets.map((target) => (
+                  <FlatTextureField
+                    key={target.key}
+                    label={target.label}
+                    value={shifter[target.key]}
+                    placeholder={`https://i.imgur.com/${target.key}.png`}
+                    onChange={(textureUrl) => setShifter((current) => ({ ...current, [target.key]: textureUrl }))}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : kind === "skybox_skin_set" ? (
+            <section className="grid gap-5 border-t border-border pt-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+              <div className="grid content-start gap-4">
+                <h2 className="text-sm font-semibold uppercase text-muted-foreground">Skybox Textures</h2>
+                <SkyboxFaceGrid value={skybox} onChange={setSkybox} />
+              </div>
+              <SkyboxViewer value={skybox} />
+            </section>
+          ) : null
         ) : null}
 
         {step === "description" ? (
@@ -1025,7 +1188,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
                 )}
               </div>
             </div>
-            <ReviewSummary kind={kind} common={common} part={part} items={items} />
+            <ReviewSummary kind={kind} common={common} part={part} items={items} shifter={shifter} skybox={skybox} />
           </section>
         ) : null}
 
@@ -1220,7 +1383,7 @@ function TagPicker({ value, onChange }: { value: string[]; onChange: (tags: stri
   );
 }
 
-function ListingPreview({ kind, common, authorName }: { kind: AssetKind; common: { title: string; shortDescription: string; thumbnailUrl: string; tags: string }; authorName: string }) {
+function ListingPreview({ kind, skinCategory, common, authorName }: { kind: AssetKind; skinCategory: SkinCategory; common: { title: string; shortDescription: string; thumbnailUrl: string; tags: string }; authorName: string }) {
   const title = common.title.trim() || "Untitled Asset";
   const thumbnailUrl = common.thumbnailUrl.trim();
   const asset: WorkshopAsset = {
@@ -1234,7 +1397,7 @@ function ListingPreview({ kind, common, authorName }: { kind: AssetKind; common:
     shortDescription: common.shortDescription.trim() || null,
     descriptionMarkdown: null,
     media: thumbnailUrl ? [{ kind: "thumbnail", url: thumbnailUrl, description: title }] : [],
-    payload: { category: "human" },
+    payload: { category: skinCategory },
     tags: splitList(common.tags),
     ownerAuthAccountId: "preview",
     authorDisplayName: authorName,
@@ -1325,7 +1488,149 @@ function TexturePreviewButton({ url, label, emptyLabel, onClick, className = "mi
   );
 }
 
-function ReviewSummary({ kind, common, part, items }: { kind: AssetKind; common: { title: string; shortDescription: string; thumbnailUrl: string; galleryUrls: string; tags: string }; part: VariantTargetForm; items: VariantTargetForm[] }) {
+function FlatTextureField({ label, value, placeholder, onChange }: { label: string; value: string; placeholder: string; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <SideCard title={label} contentClassName="grid">
+      <TexturePreviewButton url={value} label={`${label} texture`} emptyLabel={`Set ${label} texture`} onClick={() => setOpen(true)} className="!h-56 !min-h-56" />
+      <TextureUrlDialog open={open} onOpenChange={setOpen} value={value} label={label} placeholder={placeholder} onSave={onChange} />
+    </SideCard>
+  );
+}
+
+function SkyboxFaceGrid({ value, onChange }: { value: SkyboxSkinSetForm; onChange: (value: SkyboxSkinSetForm) => void }) {
+  return (
+    <div className="grid grid-cols-4 gap-3">
+      <div className="col-start-2">
+        <SkyboxFaceButton face="up" label="Top" value={value.up} onChange={(url) => onChange({ ...value, up: url })} />
+      </div>
+      <SkyboxFaceButton face="left" label="Left" value={value.left} onChange={(url) => onChange({ ...value, left: url })} />
+      <SkyboxFaceButton face="front" label="Front" value={value.front} onChange={(url) => onChange({ ...value, front: url })} />
+      <SkyboxFaceButton face="right" label="Right" value={value.right} onChange={(url) => onChange({ ...value, right: url })} />
+      <SkyboxFaceButton face="back" label="Back" value={value.back} onChange={(url) => onChange({ ...value, back: url })} />
+      <div className="col-start-2">
+        <SkyboxFaceButton face="down" label="Bottom" value={value.down} onChange={(url) => onChange({ ...value, down: url })} />
+      </div>
+    </div>
+  );
+}
+
+function SkyboxFaceButton({ face, label, value, onChange }: { face: keyof SkyboxSkinSetForm; label: string; value: string; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <TexturePreviewButton url={value} label={`${label} skybox texture`} emptyLabel={`Set ${label} texture`} onClick={() => setOpen(true)} className="aspect-square !min-h-0" />
+      <TextureUrlDialog open={open} onOpenChange={setOpen} value={value} label={`Skybox ${label}`} placeholder={`https://i.imgur.com/skybox-${face}.png`} onSave={onChange} />
+    </>
+  );
+}
+
+function SkyboxViewer({ value }: { value: SkyboxSkinSetForm }) {
+  const containerRef = useRef<ElementRef<"div"> | null>(null);
+  const urlsKey = [value.right, value.left, value.up, value.down, value.front, value.back].join("\n");
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let disposed = false;
+    let cleanup = () => undefined;
+    void import("three").then((THREE) => {
+      if (disposed) return;
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 20);
+      camera.position.set(0, 0, 0.1);
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      container.replaceChildren(renderer.domElement);
+
+      const loader = new THREE.TextureLoader();
+      const faceUrls = [value.right, value.left, value.up, value.down, value.front, value.back];
+      const materials = faceUrls.map((url) => {
+        const cleanUrl = url.trim();
+        if (!cleanUrl) return new THREE.MeshBasicMaterial({ color: 0x1f1f1f, side: THREE.BackSide });
+        const texture = loader.load(cleanUrl);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        return new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
+      });
+      const cube = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10), materials);
+      scene.add(cube);
+
+      const resize = () => {
+        const rect = container.getBoundingClientRect();
+        const width = Math.max(1, Math.floor(rect.width));
+        const height = Math.max(1, Math.floor(rect.height));
+        renderer.setSize(width, height, false);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+      };
+      const observer = new window.ResizeObserver(resize);
+      observer.observe(container);
+      resize();
+
+      let frame = 0;
+      const render = () => {
+        if (disposed) return;
+        cube.rotation.y += 0.0025;
+        cube.rotation.x = Math.sin(Date.now() / 5000) * 0.05;
+        renderer.render(scene, camera);
+        frame = window.requestAnimationFrame(render);
+      };
+      render();
+
+      cleanup = () => {
+        window.cancelAnimationFrame(frame);
+        observer.disconnect();
+        materials.forEach((material) => {
+          if ("map" in material && material.map) material.map.dispose();
+          material.dispose();
+        });
+        cube.geometry.dispose();
+        renderer.dispose();
+        renderer.domElement.remove();
+      };
+    });
+
+    return () => {
+      disposed = true;
+      cleanup();
+    };
+  }, [urlsKey, value.back, value.down, value.front, value.left, value.right, value.up]);
+
+  return (
+    <aside className="grid content-start gap-3">
+      <h2 className="text-sm font-semibold uppercase text-muted-foreground">Skybox Preview</h2>
+      <div ref={containerRef} className="aspect-square min-h-[320px] overflow-hidden border border-border bg-card/60" />
+    </aside>
+  );
+}
+
+function reviewDataSummary(kind: AssetKind, part: VariantTargetForm, items: VariantTargetForm[], shifter: ShifterSkinSetForm, skybox: SkyboxSkinSetForm) {
+  if (kind === "skin_part") return `${skinTypeLabel(part.slot)}${part.variants.length ? ` - ${part.variants.length} model${part.variants.length === 1 ? "" : "s"}` : ""}${bootsLabel(part) ? ` - ${bootsLabel(part)}` : ""}`;
+  if (kind === "skin_set") return `${items.length} set item${items.length === 1 ? "" : "s"}`;
+  if (kind === "shifter_skin_set") {
+    const count = shifterTargets.filter((target) => shifter[target.key].trim()).length;
+    return `${count} shifter texture${count === 1 ? "" : "s"}`;
+  }
+  const count = skyboxFaces.filter((face) => skybox[face.key].trim()).length;
+  return `${count} skybox face${count === 1 ? "" : "s"}`;
+}
+
+function ReviewSummary({
+  kind,
+  common,
+  part,
+  items,
+  shifter,
+  skybox,
+}: {
+  kind: AssetKind;
+  common: { title: string; shortDescription: string; thumbnailUrl: string; galleryUrls: string; tags: string };
+  part: VariantTargetForm;
+  items: VariantTargetForm[];
+  shifter: ShifterSkinSetForm;
+  skybox: SkyboxSkinSetForm;
+}) {
   return (
     <aside className="grid content-start gap-3">
       <h2 className="text-sm font-semibold uppercase text-muted-foreground">Review</h2>
@@ -1335,7 +1640,7 @@ function ReviewSummary({ kind, common, part, items }: { kind: AssetKind; common:
         <SummaryRow label="Short Description" value={common.shortDescription.trim() || "None"} />
         <SummaryRow label="Media" value={`${mediaUrls(common).length} URL${mediaUrls(common).length === 1 ? "" : "s"}`} />
         <SummaryRow label="Tags" value={splitList(common.tags).join(", ") || "None"} />
-        <SummaryRow label="Asset Data" value={kind === "skin_part" ? `${skinTypeLabel(part.slot)}${part.variants.length ? ` - ${part.variants.length} model${part.variants.length === 1 ? "" : "s"}` : ""}${bootsLabel(part) ? ` - ${bootsLabel(part)}` : ""}` : `${items.length} set item${items.length === 1 ? "" : "s"}`} />
+        <SummaryRow label="Asset Data" value={reviewDataSummary(kind, part, items, shifter, skybox)} />
       </div>
     </aside>
   );

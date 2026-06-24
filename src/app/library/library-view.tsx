@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Input } from "@aottg2/ui";
-import { Box, CalendarDays, ChevronDown, Download, Eye, FileCode2, Glasses, Grid3X3, Hammer, HardHat, Image, Map, Mountain, Palette, ScanFace, Search, Shirt, Sparkles, Swords, ThumbsUp, UploadCloud, User, Zap } from "lucide-react";
+import { Box, CalendarDays, ChevronDown, Download, Eye, FileCode2, Glasses, Grid3X3, Hammer, HardHat, Image, Map, Palette, ScanFace, Search, Shirt, Sparkles, Swords, ThumbsUp, UploadCloud, User, Zap } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
@@ -30,7 +30,6 @@ const sortOptions = [
 ];
 const categoryFilters = [
   { label: "Human", category: "human", icon: User },
-  { label: "Titan", category: "titan", icon: Mountain },
   { label: "Shifter", category: "shifter", icon: Zap },
   { label: "Skybox", category: "skybox", icon: Image },
   { label: "Custom Logic", type: "custom_logic", icon: FileCode2 },
@@ -77,6 +76,11 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
   const slot = searchParams.get("slot") ?? "";
   const sort = searchParams.get("sort") ?? "relevance";
   const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
+  const humanTypeActive = type === "skin_part" || type === "skin_set" || Boolean(slot);
+  const isHumanBrowsing = category === "human" || (!category && humanTypeActive);
+  const effectiveCategory = isHumanBrowsing ? "human" : category;
+  const effectiveType = isHumanBrowsing ? type : "";
+  const effectiveSlot = isHumanBrowsing ? slot : "";
   const [searchText, setSearchText] = useState(q);
 
   useEffect(() => {
@@ -84,9 +88,9 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
   }, [q]);
 
   const query = useQuery({
-    queryKey: ["workshop", "assets", { q, type, tag, category, slot, sort, page, pageSize }],
-    queryFn: () => listAssets({ q, type, tag, category, slot: normalizeSlotParam(slot), sort, page, pageSize }),
-    initialData: sameQuery(initialQuery, { q, type, tag, category, slot, sort, page, pageSize }) && !initialError ? initialData : undefined,
+    queryKey: ["workshop", "assets", { q, type: effectiveType, tag, category: effectiveCategory, slot: effectiveSlot, sort, page, pageSize }],
+    queryFn: () => listAssets({ q, type: effectiveType, tag, category: effectiveCategory, slot: normalizeSlotParam(effectiveSlot), sort, page, pageSize }),
+    initialData: sameQuery(initialQuery, { q, type: effectiveType, tag, category: effectiveCategory, slot: effectiveSlot, sort, page, pageSize }) && !initialError ? initialData : undefined,
   });
 
   useEffect(() => {
@@ -143,7 +147,7 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
             {categoryFilters.map((item) => (
               <SideFilterItem
                 key={item.label}
-                active={Boolean((item.category && category === item.category && !slot) || (item.type && type === item.type))}
+                active={Boolean((item.category && effectiveCategory === item.category && !effectiveSlot) || (item.type && type === item.type))}
                 icon={<item.icon className="h-4 w-4" />}
                 label={item.label}
                 onClick={() => updateParams({ category: item.category ?? "", type: item.type ?? "", slot: "", page: 1 })}
@@ -151,11 +155,13 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
             ))}
           </SideCard>
 
-          <SideCard title="Human Parts" variant="secondary" contentClassName="grid gap-1 p-2">
-            {humanParts.map((part) => (
-              <SideFilterItem key={part} active={category === "human" && slot === part} icon={renderHumanPartIcon(part)} label={part} onClick={() => updateParams({ category: "human", type: "", slot: part, page: 1 })} />
-            ))}
-          </SideCard>
+          {isHumanBrowsing ? (
+            <SideCard title="Human Parts" variant="secondary" contentClassName="grid gap-1 p-2">
+              {humanParts.map((part) => (
+                <SideFilterItem key={part} active={effectiveCategory === "human" && effectiveSlot === part} icon={renderHumanPartIcon(part)} label={part} onClick={() => updateParams({ category: "human", type: "", slot: part, page: 1 })} />
+              ))}
+            </SideCard>
+          ) : null}
         </motion.aside>
 
         <section className="min-w-0">
@@ -187,17 +193,21 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
               <Button type="submit">Search</Button>
             </form>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap gap-2">
-                {typeFilters.map((filter) => (
-                  <Button key={filter.label} type="button" variant={type === filter.value ? "default" : "ghost"} onClick={() => updateParams({ type: filter.value, page: 1 })}>
-                    {filter.label}
-                  </Button>
-                ))}
-              </div>
+              {isHumanBrowsing ? (
+                <div className="flex flex-wrap gap-2">
+                  {typeFilters.map((filter) => (
+                    <Button key={filter.label} type="button" variant={effectiveType === filter.value ? "default" : "ghost"} onClick={() => updateParams({ category: "human", type: filter.value, slot: "", page: 1 })}>
+                      {filter.label}
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <div />
+              )}
               <div className="flex flex-wrap gap-2">
                 {tag ? <ActivePill label={`Tag: ${tag}`} onClear={() => updateParams({ tag: "", page: 1 })} /> : null}
-                {category ? <ActivePill label={`Category: ${formatLabel(category)}`} onClear={() => updateParams({ category: "", slot: "", page: 1 })} /> : null}
-                {slot ? <ActivePill label={`Part: ${slot}`} onClear={() => updateParams({ slot: "", page: 1 })} /> : null}
+                {effectiveCategory ? <ActivePill label={`Category: ${formatLabel(effectiveCategory)}`} onClear={() => updateParams({ category: "", type: "", slot: "", page: 1 })} /> : null}
+                {effectiveSlot ? <ActivePill label={`Part: ${effectiveSlot}`} onClear={() => updateParams({ slot: "", page: 1 })} /> : null}
               </div>
             </div>
           </motion.div>
