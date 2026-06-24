@@ -32,10 +32,30 @@ const categoryFilters = [
   { label: "Human", category: "human", icon: User },
   { label: "Shifter", category: "shifter", icon: Zap },
   { label: "Skybox", category: "skybox", icon: Image },
-  { label: "Custom Logic", type: "custom_logic", icon: FileCode2 },
+  { label: "Custom Logics", type: "custom_logic", icon: FileCode2 },
   { label: "Maps", type: "map", icon: Map },
 ];
-const humanParts = ["Hair", "Eye", "Glass", "Face", "Skin", "Costume", "Logo", "Blades", "AHSS", "APG", "Gas", "Hoodie", "WeaponTrail", "Horse", "Thunderspears", "Hooks", "Hat", "Head", "Back"];
+const humanParts = [
+  { slot: "Hair", label: "Hair" },
+  { slot: "Eye", label: "Eyes" },
+  { slot: "Glass", label: "Glasses" },
+  { slot: "Face", label: "Face" },
+  { slot: "Skin", label: "Body Skin" },
+  { slot: "Costume", label: "Costume" },
+  { slot: "Logo", label: "Cape Logo" },
+  { slot: "Blades", label: "Blades" },
+  { slot: "AHSS", label: "AHSS" },
+  { slot: "APG", label: "APG" },
+  { slot: "Gas", label: "Gas Smoke" },
+  { slot: "Hoodie", label: "Hoodie" },
+  { slot: "WeaponTrail", label: "Blade Trail" },
+  { slot: "Horse", label: "Horse" },
+  { slot: "Thunderspears", label: "Thunderspears" },
+  { slot: "Hooks", label: "Hooks" },
+  { slot: "Hat", label: "Hat" },
+  { slot: "Head", label: "Head Accessory" },
+  { slot: "Back", label: "Back Accessory" },
+];
 const humanPartIcons = {
   Hair: Sparkles,
   Eye,
@@ -167,7 +187,7 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
           {showHumanParts ? (
             <SideCard title="Human Parts" variant="secondary" contentClassName="grid gap-1 p-2">
               {humanParts.map((part) => (
-                <SideFilterItem key={part} active={effectiveCategory === "human" && effectiveSlot === part} icon={renderHumanPartIcon(part)} label={part} onClick={() => updateParams({ category: "human", type: "", slot: part, page: 1 })} />
+                <SideFilterItem key={part.slot} active={effectiveCategory === "human" && effectiveSlot === part.slot} icon={renderHumanPartIcon(part.slot)} label={part.label} onClick={() => updateParams({ category: "human", type: "", slot: part.slot, page: 1 })} />
               ))}
             </SideCard>
           ) : null}

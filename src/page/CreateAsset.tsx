@@ -1460,7 +1460,7 @@ function GalleryPreview({ urls, title }: { urls: string[]; title: string }) {
 function TexturePreviewButton({ url, label, emptyLabel, onClick, className = "min-h-40" }: { url: string; label: string; emptyLabel?: string; onClick: () => void; className?: string }) {
   const [failed, setFailed] = useState(false);
   const cleanUrl = url.trim();
-  const emptyWords = (emptyLabel ?? `Set ${label}`).trim().split(/\s+/);
+  const emptyText = (emptyLabel ?? `Set ${label}`).trim();
 
   useEffect(() => {
     setFailed(false);
@@ -1468,12 +1468,10 @@ function TexturePreviewButton({ url, label, emptyLabel, onClick, className = "mi
 
   if (!cleanUrl || failed) {
     return (
-      <Button type="button" variant="ghost" className={`flex ${className} w-full flex-col items-center justify-center gap-2 overflow-hidden border border-border bg-muted/40 p-3 text-center text-foreground`} onClick={onClick}>
+      <Button type="button" variant="ghost" className={`flex ${className} w-full flex-wrap items-center justify-center gap-2 overflow-hidden border border-border bg-muted/40 p-3 text-center text-foreground`} onClick={onClick}>
         <ImageIcon className="h-6 w-6 shrink-0 text-current" />
-        <span className="flex max-w-full flex-col items-center font-primary text-xs font-semibold uppercase leading-none text-current">
-          {emptyWords.map((word) => (
-            <span key={word}>{word}</span>
-          ))}
+        <span className="max-w-full whitespace-normal break-words font-primary text-xs font-semibold uppercase leading-none text-current">
+          {emptyText}
         </span>
       </Button>
     );
@@ -1500,14 +1498,22 @@ function FlatTextureField({ label, value, placeholder, onChange }: { label: stri
 function SkyboxFaceGrid({ value, onChange }: { value: SkyboxSkinSetForm; onChange: (value: SkyboxSkinSetForm) => void }) {
   return (
     <div className="grid grid-cols-4 items-stretch gap-3">
-      <div className="col-start-2">
+      <div className="col-start-2 row-start-1">
         <SkyboxFaceButton face="up" label="Top" value={value.up} onChange={(url) => onChange({ ...value, up: url })} />
       </div>
-      <SkyboxFaceButton face="left" label="Left" value={value.left} onChange={(url) => onChange({ ...value, left: url })} />
-      <SkyboxFaceButton face="front" label="Front" value={value.front} onChange={(url) => onChange({ ...value, front: url })} />
-      <SkyboxFaceButton face="right" label="Right" value={value.right} onChange={(url) => onChange({ ...value, right: url })} />
-      <SkyboxFaceButton face="back" label="Back" value={value.back} onChange={(url) => onChange({ ...value, back: url })} />
-      <div className="col-start-2">
+      <div className="col-start-1 row-start-2">
+        <SkyboxFaceButton face="left" label="Left" value={value.left} onChange={(url) => onChange({ ...value, left: url })} />
+      </div>
+      <div className="col-start-2 row-start-2">
+        <SkyboxFaceButton face="front" label="Front" value={value.front} onChange={(url) => onChange({ ...value, front: url })} />
+      </div>
+      <div className="col-start-3 row-start-2">
+        <SkyboxFaceButton face="right" label="Right" value={value.right} onChange={(url) => onChange({ ...value, right: url })} />
+      </div>
+      <div className="col-start-4 row-start-2">
+        <SkyboxFaceButton face="back" label="Back" value={value.back} onChange={(url) => onChange({ ...value, back: url })} />
+      </div>
+      <div className="col-start-2 row-start-3">
         <SkyboxFaceButton face="down" label="Bottom" value={value.down} onChange={(url) => onChange({ ...value, down: url })} />
       </div>
     </div>
@@ -1518,7 +1524,7 @@ function SkyboxFaceButton({ face, label, value, onChange }: { face: keyof Skybox
   const [open, setOpen] = useState(false);
   return (
     <div className="aspect-square min-w-0">
-      <TexturePreviewButton url={value} label={`${label} skybox texture`} emptyLabel={`Set ${label} texture`} onClick={() => setOpen(true)} className="h-full !min-h-0" />
+      <TexturePreviewButton url={value} label={`${label} skybox texture`} emptyLabel={`Set ${label} texture`} onClick={() => setOpen(true)} className="aspect-square !h-auto !min-h-0" />
       <TextureUrlDialog open={open} onOpenChange={setOpen} value={value} label={`Skybox ${label}`} placeholder={`https://i.imgur.com/skybox-${face}.png`} onSave={onChange} />
     </div>
   );
