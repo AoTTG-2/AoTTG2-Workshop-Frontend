@@ -239,6 +239,8 @@ export interface WorkshopReport {
   targetId: string;
   targetOwnerAuthAccountId: string;
   reporterAuthAccountId: string;
+  targetOwnerDisplayName?: string | null;
+  reporterDisplayName?: string | null;
   reason: string;
   details?: string | null;
   snapshotJson: string;

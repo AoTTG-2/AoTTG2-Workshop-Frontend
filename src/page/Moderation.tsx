@@ -15,6 +15,7 @@ import { toast } from "../lib/toast";
 type ReportStatus = "open" | "resolved" | "dismissed";
 type ReportType = "all" | "asset" | "comment" | "account";
 type View = "reports" | "assets-hidden" | "assets-deleted" | "comments-hidden";
+type ReportAction = "hide-asset" | "delete-asset" | "hide-comment";
 
 const statusFilters: { id: ReportStatus; label: string }[] = [
   { id: "open", label: "Open" },
@@ -139,11 +140,11 @@ function ReportList({ reports, selectedId, loading, error, onSelect }: { reports
   if (error) return <EmptyPanel title="Reports unavailable" text="Could not load moderation reports." />;
   if (!reports.length) return <EmptyPanel title="No reports" text="Nothing matches this queue." />;
   return (
-    <div className="grid content-start gap-2">
+    <div className="grid content-start gap-3">
       {reports.map((report) => (
         <button key={report.id} type="button" className={listItemClass(selectedId === report.id)} onClick={() => onSelect(report.id)}>
           <ListTitle title={targetTitle(report)} badge={report.status} />
-          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 overflow-hidden text-xs leading-5 text-muted-foreground">
             <span>{report.reason}</span>
             <span>{formatDate(report.createdAt)}</span>
           </div>
@@ -158,11 +159,11 @@ function AssetList({ assets, selectedId, loading, error, onSelect }: { assets: W
   if (error) return <EmptyPanel title="Assets unavailable" text="Could not load moderated assets." />;
   if (!assets.length) return <EmptyPanel title="No assets" text="Nothing matches this queue." />;
   return (
-    <div className="grid content-start gap-2">
+    <div className="grid content-start gap-3">
       {assets.map((asset) => (
         <button key={asset.id} type="button" className={listItemClass(selectedId === asset.id)} onClick={() => onSelect(asset.id)}>
           <ListTitle title={asset.title} badge={asset.status} />
-          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 overflow-hidden text-xs leading-5 text-muted-foreground">
             <span>/{asset.creatorName}/{asset.assetSlug}</span>
             <span>{formatDate(asset.updatedAt)}</span>
           </div>
@@ -177,11 +178,11 @@ function CommentList({ comments, selectedId, loading, error, onSelect }: { comme
   if (error) return <EmptyPanel title="Comments unavailable" text="Could not load hidden comments." />;
   if (!comments.length) return <EmptyPanel title="No comments" text="Nothing matches this queue." />;
   return (
-    <div className="grid content-start gap-2">
+    <div className="grid content-start gap-3">
       {comments.map((comment) => (
         <button key={comment.id} type="button" className={listItemClass(selectedId === comment.id)} onClick={() => onSelect(comment.id)}>
           <ListTitle title={comment.body} badge={comment.status} />
-          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 overflow-hidden text-xs leading-5 text-muted-foreground">
             <span>{comment.authorDisplayName}</span>
             <span>{formatDate(comment.updatedAt)}</span>
           </div>
@@ -196,8 +197,9 @@ function ReportDetail({ report, note, onNote, onDone }: { report: WorkshopReport
   const permissionSource = workshopUser ?? profile;
   const token = getAccessToken();
   const snapshot = parseSnapshot(report?.snapshotJson);
+  const [confirmAction, setConfirmAction] = useState<ReportAction | null>(null);
   const run = useMutation({
-    mutationFn: async (action: string) => {
+    mutationFn: async (action: ReportAction | "dismiss") => {
       if (!report || !token) return;
       const assetId = snapshotValue(snapshot, "publicId") || report.targetId;
       if (action === "hide-asset") {
@@ -216,6 +218,7 @@ function ReportDetail({ report, note, onNote, onDone }: { report: WorkshopReport
     },
     onSuccess: (_, action) => {
       toast.success("Moderation updated", { description: action === "dismiss" ? "Report dismissed." : "Report resolved." });
+      setConfirmAction(null);
       onDone();
     },
     onError: (error) => toast.error("Moderation failed", { description: error instanceof Error ? error.message : "Try again." }),
@@ -224,6 +227,7 @@ function ReportDetail({ report, note, onNote, onDone }: { report: WorkshopReport
   if (!report) return <EmptyPanel title="Select a report" text="Choose a report from the queue." />;
 
   return (
+    <>
     <Card>
       <CardHeader className="gap-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -235,30 +239,43 @@ function ReportDetail({ report, note, onNote, onDone }: { report: WorkshopReport
         <div className="grid gap-2 text-sm">
           <DetailRow label="Reason" value={report.reason} />
           <DetailRow label="Details" value={report.details || "None"} />
-          <DetailRow label="Reporter" value={report.reporterAuthAccountId} />
-          <DetailRow label="Target Owner" value={report.targetOwnerAuthAccountId} />
+          <DetailRow label="Reporter" value={actorLabel(report.reporterDisplayName, report.reporterAuthAccountId)} />
+          <DetailRow label="Target Owner" value={actorLabel(report.targetOwnerDisplayName, report.targetOwnerAuthAccountId)} />
+          {report.targetType === "comment" ? <DetailRow label="Comment" value={snapshotValue(snapshot, "body") || "No comment snapshot"} /> : null}
           <DetailRow label="Snapshot" value={snapshotSummary(snapshot)} />
         </div>
         <Textarea value={note} maxLength={1000} rows={3} placeholder="Optional moderator note" onChange={(event) => onNote(event.target.value)} />
         <div className="flex flex-wrap gap-2">
-          {report.targetType === "asset" && report.status === "open" && canModerateAssets(permissionSource) && canResolveReports(permissionSource) ? <Button size="sm" variant="destructive" disabled={run.isPending} onClick={() => run.mutate("hide-asset")}><EyeOff className="h-4 w-4" />HIDE</Button> : null}
-          {report.targetType === "asset" && report.status === "open" && canModerateAssets(permissionSource) && canResolveReports(permissionSource) ? <Button size="sm" variant="destructive" disabled={run.isPending} onClick={() => run.mutate("delete-asset")}><Trash2 className="h-4 w-4" />DELETE</Button> : null}
-          {report.targetType === "comment" && report.status === "open" && canModerateComments(permissionSource) && canResolveReports(permissionSource) ? <Button size="sm" variant="destructive" disabled={run.isPending} onClick={() => run.mutate("hide-comment")}><EyeOff className="h-4 w-4" />HIDE</Button> : null}
+          {report.targetType === "asset" && report.status === "open" && canModerateAssets(permissionSource) && canResolveReports(permissionSource) ? <Button size="sm" variant="destructive" disabled={run.isPending} onClick={() => setConfirmAction("hide-asset")}><EyeOff className="h-4 w-4" />HIDE</Button> : null}
+          {report.targetType === "asset" && report.status === "open" && canModerateAssets(permissionSource) && canResolveReports(permissionSource) ? <Button size="sm" variant="destructive" disabled={run.isPending} onClick={() => setConfirmAction("delete-asset")}><Trash2 className="h-4 w-4" />DELETE</Button> : null}
+          {report.targetType === "comment" && report.status === "open" && canModerateComments(permissionSource) && canResolveReports(permissionSource) ? <Button size="sm" variant="destructive" disabled={run.isPending} onClick={() => setConfirmAction("hide-comment")}><EyeOff className="h-4 w-4" />HIDE</Button> : null}
           {canResolveReports(permissionSource) && report.status === "open" ? <Button size="sm" variant="ghost" disabled={run.isPending} onClick={() => run.mutate("dismiss")}>DISMISS</Button> : null}
         </div>
       </CardContent>
     </Card>
+    <ConfirmDialog
+      open={confirmAction !== null}
+      title={confirmTitle(confirmAction)}
+      description={confirmDescription(confirmAction)}
+      confirmLabel={confirmLabel(confirmAction)}
+      busy={run.isPending}
+      onOpenChange={(open) => { if (!open) setConfirmAction(null); }}
+      onConfirm={() => { if (confirmAction) run.mutate(confirmAction); }}
+    />
+    </>
   );
 }
 
 function AssetDetail({ asset, deleted, onDone }: { asset: WorkshopAsset | null; deleted: boolean; onDone: () => void }) {
   const token = getAccessToken();
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [slugOpen, setSlugOpen] = useState(false);
   const [slug, setSlug] = useState("");
   const restore = useMutation({
     mutationFn: (assetSlug?: string | null) => restoreModerationAsset(asset!.publicId || asset!.id, token!, assetSlug),
     onSuccess: () => {
       toast.success("Asset restored", { description: "The asset is public again." });
+      setConfirmOpen(false);
       setSlugOpen(false);
       setSlug("");
       onDone();
@@ -290,12 +307,19 @@ function AssetDetail({ asset, deleted, onDone }: { asset: WorkshopAsset | null; 
         <DetailRow label="Owner" value={asset.ownerAuthAccountId} />
         <DetailRow label="Updated" value={formatDate(asset.updatedAt)} />
         <DetailRow label="Summary" value={asset.shortDescription || asset.descriptionMarkdown || "None"} />
-        {!deleted && asset.status === "hidden" ? (
-          <Button size="sm" disabled={restore.isPending} onClick={() => restore.mutate(null)}><RotateCcw className="h-4 w-4" />RESTORE</Button>
-        ) : null}
+        {!deleted && asset.status === "hidden" ? <Button size="sm" disabled={restore.isPending} onClick={() => setConfirmOpen(true)}><RotateCcw className="h-4 w-4" />RESTORE</Button> : null}
       </CardContent>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Restore Asset?"
+        description="This will make the asset public again. Continue only if moderation is complete."
+        confirmLabel="RESTORE"
+        busy={restore.isPending}
+        onOpenChange={setConfirmOpen}
+        onConfirm={() => restore.mutate(null)}
+      />
       <Dialog open={slugOpen} onOpenChange={setSlugOpen}>
-        <DialogContent>
+        <DialogContent variant="destructive">
           <DialogHeader>
             <DialogTitle>Restore With New Link</DialogTitle>
             <DialogDescription>This asset&apos;s old link is already used. Enter a new slug to restore it.</DialogDescription>
@@ -316,10 +340,12 @@ function AssetDetail({ asset, deleted, onDone }: { asset: WorkshopAsset | null; 
 
 function CommentDetail({ comment, onDone }: { comment: WorkshopComment | null; onDone: () => void }) {
   const token = getAccessToken();
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const restore = useMutation({
     mutationFn: () => restoreModerationComment(comment!.id, token!),
     onSuccess: () => {
       toast.success("Comment restored", { description: "The comment is visible again." });
+      setConfirmOpen(false);
       onDone();
     },
     onError: (error) => toast.error("Restore failed", { description: error instanceof Error ? error.message : "Try again." }),
@@ -339,17 +365,26 @@ function CommentDetail({ comment, onDone }: { comment: WorkshopComment | null; o
         <DetailRow label="Body" value={comment.body} />
         <DetailRow label="Author" value={comment.authorDisplayName} />
         <DetailRow label="Updated" value={formatDate(comment.updatedAt)} />
-        {comment.status === "hidden" ? <Button size="sm" disabled={restore.isPending} onClick={() => restore.mutate()}><RotateCcw className="h-4 w-4" />RESTORE</Button> : null}
+        {comment.status === "hidden" ? <Button size="sm" disabled={restore.isPending} onClick={() => setConfirmOpen(true)}><RotateCcw className="h-4 w-4" />RESTORE</Button> : null}
       </CardContent>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Restore Comment?"
+        description="This will make the hidden comment visible again."
+        confirmLabel="RESTORE"
+        busy={restore.isPending}
+        onOpenChange={setConfirmOpen}
+        onConfirm={() => restore.mutate()}
+      />
     </Card>
   );
 }
 
 function ListTitle({ title, badge }: { title: string; badge: string }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="line-clamp-2 font-primary text-sm uppercase">{title}</span>
-      <Badge variant={badge === "open" ? "secondary" : "outline"}>{badge}</Badge>
+    <div className="flex min-w-0 items-start justify-between gap-3">
+      <span className="min-w-0 break-words font-primary text-sm uppercase leading-snug line-clamp-2">{title}</span>
+      <Badge className="shrink-0" variant={badge === "open" ? "secondary" : "outline"}>{badge}</Badge>
     </div>
   );
 }
@@ -372,7 +407,7 @@ function EmptyPanel({ title, text }: { title: string; text: string }) {
 }
 
 function listItemClass(active: boolean) {
-  return `grid gap-2 border p-3 text-left transition-colors hover:border-primary hover:bg-card ${active ? "border-primary bg-card" : "border-border bg-card/40"}`;
+  return `grid !h-auto !min-h-24 content-start gap-2 overflow-hidden border p-3 text-left transition-colors hover:border-primary hover:bg-card ${active ? "border-primary bg-card" : "border-border bg-card/40"}`;
 }
 
 async function invalidateModeration() {
@@ -389,6 +424,61 @@ function targetTitle(report: WorkshopReport) {
 
 function snapshotSummary(snapshot: Record<string, unknown>) {
   return snapshotValue(snapshot, "title") || snapshotValue(snapshot, "assetTitle") || snapshotValue(snapshot, "body") || snapshotValue(snapshot, "displayName") || snapshotValue(snapshot, "creatorName") || "No snapshot";
+}
+
+function actorLabel(displayName?: string | null, fallback?: string) {
+  return displayName?.trim() || fallback || "Unknown";
+}
+
+function confirmTitle(action: ReportAction | null) {
+  if (action === "delete-asset") return "Delete Asset?";
+  if (action === "hide-comment") return "Hide Comment?";
+  return "Hide Asset?";
+}
+
+function confirmDescription(action: ReportAction | null) {
+  if (action === "delete-asset") return "This removes the asset from public workshop listings and resolves the report.";
+  if (action === "hide-comment") return "This hides the reported comment and resolves the report.";
+  return "This hides the asset from public workshop listings and resolves the report.";
+}
+
+function confirmLabel(action: ReportAction | null) {
+  if (action === "delete-asset") return "DELETE";
+  if (action === "hide-comment") return "HIDE";
+  return "HIDE";
+}
+
+function ConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel,
+  busy,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  busy: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent variant="destructive">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="button" variant="destructive" disabled={busy} onClick={onConfirm}>{confirmLabel}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function snapshotValue(snapshot: Record<string, unknown>, key: string) {
