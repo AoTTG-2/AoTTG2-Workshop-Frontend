@@ -1,11 +1,11 @@
 "use client";
 
 import { Button, Card, CardContent, CardHeader, CardTitle, CommentBox, Sidebar, SidebarHeader, SidebarItem, SidebarSection, Spinner, StatCard, renderCommentMarkdown } from "@aottg2/ui";
-import { Bell, Eye, FolderOpen, MessageCircle, Pin, ThumbsUp, Download, Star } from "lucide-react";
+import { Bell, Eye, FolderOpen, MessageCircle, ThumbsUp, Download, Star } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { getAccessToken } from "../auth/storage";
 import { CreatorIdentityLink } from "../components/CreatorIdentityLink";
 import { WorkshopAssetCard } from "../components/WorkshopAssetCard";
@@ -13,7 +13,6 @@ import { queryClient } from "../lib/queryClient";
 import {
   assetPath,
   getCreatorDashboard,
-  getFeaturedAssets,
   listAssets,
   listDashboardComments,
   listFavoriteAssets,
@@ -21,14 +20,13 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
   replyToAssetComment,
-  setFeaturedAssets,
   type DashboardComment,
   type WorkshopAsset,
   type WorkshopNotification,
 } from "../lib/api/workshop";
 import { toast } from "../lib/toast";
 
-type DashboardTab = "overview" | "assets" | "favorites" | "comments" | "notifications" | "featured";
+type DashboardTab = "overview" | "assets" | "favorites" | "comments" | "notifications";
 
 const tabs: { id: DashboardTab; label: string; icon: ReactNode }[] = [
   { id: "overview", label: "Overview", icon: <Eye className="h-4 w-4" /> },
@@ -36,7 +34,6 @@ const tabs: { id: DashboardTab; label: string; icon: ReactNode }[] = [
   { id: "favorites", label: "Favorites", icon: <Star className="h-4 w-4" /> },
   { id: "comments", label: "Comments", icon: <MessageCircle className="h-4 w-4" /> },
   { id: "notifications", label: "Notifications", icon: <Bell className="h-4 w-4" /> },
-  { id: "featured", label: "Featured", icon: <Pin className="h-4 w-4" /> },
 ];
 
 export function DashboardShell() {
@@ -84,7 +81,6 @@ export function DashboardShell() {
               {tab === "favorites" ? <FavoritesPanel /> : null}
               {tab === "comments" ? <CommentsPanel /> : null}
               {tab === "notifications" ? <NotificationsPanel /> : null}
-              {tab === "featured" ? <FeaturedPanel /> : null}
             </>
           ) : null}
         </section>
@@ -171,90 +167,6 @@ function NotificationsPanel() {
     <DashboardSection title="Notifications" action={<Button variant="secondary" size="sm" disabled={!notificationsQuery.data?.unread || markAll.isPending} onClick={() => markAll.mutate()}>Mark All Read</Button>}>
       <NotificationRows notifications={notificationsQuery.data?.notifications ?? []} />
     </DashboardSection>
-  );
-}
-
-function FeaturedPanel() {
-  const token = getAccessToken();
-  const router = useRouter();
-  const assetsQuery = useQuery({
-    queryKey: ["workshop", "dashboard-assets"],
-    queryFn: () => listAssets({ mine: true, pageSize: 48 }, token),
-    enabled: Boolean(token),
-  });
-  const featuredQuery = useQuery({
-    queryKey: ["workshop", "featured-assets"],
-    queryFn: () => getFeaturedAssets(token!),
-    enabled: Boolean(token),
-  });
-  const save = useMutation({
-    mutationFn: (ids: string[]) => setFeaturedAssets(token!, ids),
-    onSuccess: async () => {
-      await invalidateDashboard();
-      toast.success("Featured assets saved", { description: "Your public creator page was updated." });
-    },
-    onError: (error) => toast.error("Could not save featured assets", { description: error instanceof Error ? error.message : "Try again." }),
-  });
-
-  const featured = useMemo(() => featuredQuery.data?.assets ?? [], [featuredQuery.data?.assets]);
-  const featuredIds = useMemo(() => new Set(featured.map((asset) => asset.id)), [featured]);
-  const available = (assetsQuery.data?.assets ?? []).filter((asset) => !featuredIds.has(asset.id));
-
-  function setNext(ids: string[]) {
-    save.mutate(ids);
-  }
-
-  function move(asset: WorkshopAsset, direction: -1 | 1) {
-    const ids = featured.map((item) => item.id);
-    const index = ids.indexOf(asset.id);
-    const nextIndex = index + direction;
-    if (index < 0 || nextIndex < 0 || nextIndex >= ids.length) return;
-    [ids[index], ids[nextIndex]] = [ids[nextIndex], ids[index]];
-    setNext(ids);
-  }
-
-  if (assetsQuery.isLoading || featuredQuery.isLoading) return <LoadingPanel />;
-  if (assetsQuery.isError || featuredQuery.isError) return <EmptyPanel title="Featured unavailable" text="Could not load featured assets." />;
-
-  return (
-    <div className="grid gap-5">
-      <DashboardSection title="Featured Assets">
-        {featured.length ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {featured.map((asset, index) => (
-              <AssetActionCard
-                key={asset.id}
-                asset={asset}
-                onOpen={() => router.push(assetPath(asset))}
-                actions={
-                  <>
-                    <Button size="sm" variant="secondary" disabled={index === 0 || save.isPending} onClick={() => move(asset, -1)}>Up</Button>
-                    <Button size="sm" variant="secondary" disabled={index === featured.length - 1 || save.isPending} onClick={() => move(asset, 1)}>Down</Button>
-                    <Button size="sm" variant="ghost" disabled={save.isPending} onClick={() => setNext(featured.filter((item) => item.id !== asset.id).map((item) => item.id))}>Remove</Button>
-                  </>
-                }
-              />
-            ))}
-          </div>
-        ) : (
-          <EmptyPanel title="No featured assets" text="Pin assets from your uploads." />
-        )}
-      </DashboardSection>
-
-      <DashboardSection title="Your Assets">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {available.map((asset) => (
-            <AssetActionCard
-              key={asset.id}
-              asset={asset}
-              onOpen={() => router.push(assetPath(asset))}
-              actions={<Button size="sm" disabled={featured.length >= 6 || save.isPending} onClick={() => setNext([...featured.map((item) => item.id), asset.id])}>Feature</Button>}
-            />
-          ))}
-        </div>
-        {available.length === 0 ? <div className="border border-border bg-card/40 p-4 text-sm text-muted-foreground">No more assets available.</div> : null}
-      </DashboardSection>
-    </div>
   );
 }
 
@@ -370,15 +282,6 @@ function AssetGrid({ assets, empty, onOpen }: { assets: WorkshopAsset[]; empty: 
   );
 }
 
-function AssetActionCard({ asset, actions, onOpen }: { asset: WorkshopAsset; actions: ReactNode; onOpen: () => void }) {
-  return (
-    <div className="grid gap-2">
-      <WorkshopAssetCard asset={asset} onOpen={onOpen} />
-      <div className="flex flex-wrap gap-2">{actions}</div>
-    </div>
-  );
-}
-
 function DashboardSection({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
     <section className="grid gap-3">
@@ -417,7 +320,6 @@ async function invalidateDashboard() {
     queryClient.invalidateQueries({ queryKey: ["workshop", "dashboard"] }),
     queryClient.invalidateQueries({ queryKey: ["workshop", "dashboard-comments"] }),
     queryClient.invalidateQueries({ queryKey: ["workshop", "notifications"] }),
-    queryClient.invalidateQueries({ queryKey: ["workshop", "featured-assets"] }),
   ]);
 }
 

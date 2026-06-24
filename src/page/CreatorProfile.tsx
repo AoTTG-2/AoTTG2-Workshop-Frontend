@@ -1,10 +1,10 @@
 "use client";
 
-import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, StatCard } from "@aottg2/ui";
-import { useQuery } from "@tanstack/react-query";
-import { Download, Flag, FolderOpen, MessageCircle, ThumbsUp, Users } from "lucide-react";
+import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Spinner, StatCard, Tabs, TabsList, TabsTrigger } from "@aottg2/ui";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Download, Flag, FolderOpen, MessageCircle, Search, ThumbsUp, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { FaDiscord, FaFacebookF, FaInstagram, FaYoutube } from "react-icons/fa";
 import { FaXTwitter } from "react-icons/fa6";
 import { FiLink } from "react-icons/fi";
@@ -16,15 +16,23 @@ import { useAuth } from "../auth/useAuth";
 import { ReportDialog } from "../components/ReportDialog";
 import { WorkshopAssetCard } from "../components/WorkshopAssetCard";
 import { AUTH_FRONTEND_PROFILE_URL } from "../lib/config";
-import { assetPath, reportWorkshopAccount, type PublicCreator, type WorkshopAsset } from "../lib/api/workshop";
+import { assetPath, getFeaturedAssets, listAssets, reportWorkshopAccount, setFeaturedAssets, type PublicCreator, type WorkshopAsset } from "../lib/api/workshop";
 import { toast } from "../lib/toast";
+
+const maxFeaturedAssets = 6;
+type ProfileAssetTab = "featured" | "latest";
 
 export function CreatorProfile({ creator }: { creator: PublicCreator }) {
   const { isAuthenticated, isLoading, profile: viewerProfile } = useAuth();
+  const queryClient = useQueryClient();
   const profile = creator.profile;
   const [reportOpen, setReportOpen] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
+  const [assetTab, setAssetTab] = useState<ProfileAssetTab>("featured");
+  const [featuredPickerOpen, setFeaturedPickerOpen] = useState(false);
+  const [featuredAssets, setFeaturedAssetsState] = useState(creator.featuredAssets);
   const socialLinks = socialLinksFromProfile(profile?.socials);
+  const token = getAccessToken();
   const presetsQuery = useQuery({
     queryKey: ["auth", "profile-presets"],
     queryFn: async () => {
@@ -41,6 +49,31 @@ export function CreatorProfile({ creator }: { creator: PublicCreator }) {
   const avatarUrl = presetImageUrl(avatarPreset);
   const bannerUrl = presetImageUrl(bannerPreset);
   const isOwnProfile = viewerProfile?.accountId === creator.authAccountId;
+  const canManageFeatured = Boolean(isOwnProfile && token);
+  const featuredQuery = useQuery({
+    queryKey: ["workshop", "featured-assets"],
+    queryFn: () => getFeaturedAssets(token!),
+    enabled: canManageFeatured,
+  });
+  const saveFeatured = useMutation({
+    mutationFn: (ids: string[]) => setFeaturedAssets(token!, ids),
+    onSuccess: async (data) => {
+      setFeaturedAssetsState(data.assets);
+      await queryClient.invalidateQueries({ queryKey: ["workshop", "featured-assets"] });
+      setFeaturedPickerOpen(false);
+      toast.success("Featured assets saved", { description: "Your public creator page was updated." });
+    },
+    onError: (error) => toast.error("Could not save featured assets", { description: error instanceof Error ? error.message : "Try again." }),
+  });
+  const shownFeaturedAssets = featuredAssets;
+
+  useEffect(() => {
+    setFeaturedAssetsState(creator.featuredAssets);
+  }, [creator.featuredAssets]);
+
+  useEffect(() => {
+    if (featuredQuery.data) setFeaturedAssetsState(featuredQuery.data.assets);
+  }, [featuredQuery.data]);
 
   async function submitReport(reason: string, details: string | null) {
     const token = getAccessToken();
@@ -124,10 +157,33 @@ export function CreatorProfile({ creator }: { creator: PublicCreator }) {
           <StatCard label="Comments" value={formatCount(creator.stats.commentCount)} icon={<MessageCircle className="h-5 w-5" />} />
         </section>
 
-        <AssetSection title="Featured" assets={creator.featuredAssets} empty="No featured assets yet." />
-        <AssetSection title="Latest" assets={creator.latestAssets} empty="No assets yet." />
+        <Tabs value={assetTab} onValueChange={(value) => setAssetTab(value as ProfileAssetTab)}>
+          <TabsList>
+            <TabsTrigger value="featured">Featured</TabsTrigger>
+            <TabsTrigger value="latest">Latest</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {assetTab === "featured" ? (
+          <AssetSection
+            title="Featured"
+            assets={shownFeaturedAssets}
+            empty="No featured assets yet."
+            action={canManageFeatured ? <Button type="button" variant="secondary" onClick={() => setFeaturedPickerOpen(true)}>Manage Featured</Button> : null}
+          />
+        ) : (
+          <AssetSection title="Latest" assets={creator.latestAssets} empty="No assets yet." />
+        )}
       </div>
       <ReportDialog open={reportOpen} title="Report Creator" description="Send this creator account to the moderation queue." busy={reportBusy} onOpenChange={setReportOpen} onSubmit={submitReport} />
+      {canManageFeatured ? (
+        <FeaturedAssetPickerDialog
+          open={featuredPickerOpen}
+          onOpenChange={setFeaturedPickerOpen}
+          selectedAssets={shownFeaturedAssets}
+          saving={saveFeatured.isPending}
+          onSave={(ids) => saveFeatured.mutate(ids)}
+        />
+      ) : null}
     </main>
   );
 }
@@ -156,11 +212,14 @@ function SocialLinks({ links }: { links: string[] }) {
   );
 }
 
-function AssetSection({ title, assets, empty }: { title: string; assets: WorkshopAsset[]; empty: string }) {
+function AssetSection({ title, assets, empty, action }: { title: string; assets: WorkshopAsset[]; empty: string; action?: ReactNode }) {
   const router = useRouter();
   return (
     <section className="grid gap-3">
-      <h2 className="font-primary text-xl font-semibold uppercase">{title}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-primary text-xl font-semibold uppercase">{title}</h2>
+        {action}
+      </div>
       {assets.length ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {assets.map((asset) => (
@@ -171,6 +230,96 @@ function AssetSection({ title, assets, empty }: { title: string; assets: Worksho
         <div className="border border-border bg-card/40 p-4 text-sm text-muted-foreground">{empty}</div>
       )}
     </section>
+  );
+}
+
+function FeaturedAssetPickerDialog({
+  open,
+  onOpenChange,
+  selectedAssets,
+  saving,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  selectedAssets: WorkshopAsset[];
+  saving: boolean;
+  onSave: (ids: string[]) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [draftIds, setDraftIds] = useState<string[]>([]);
+  const token = getAccessToken();
+  const selectedIds = useMemo(() => new Set(draftIds), [draftIds]);
+  const assetsQuery = useQuery({
+    queryKey: ["workshop", "featured-asset-picker", query],
+    queryFn: () => listAssets({ mine: true, q: query, pageSize: 48 }, token),
+    enabled: open && Boolean(token),
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    setQuery("");
+    setDraftIds(selectedAssets.map((asset) => asset.id));
+  }, [open, selectedAssets]);
+
+  function toggleAsset(asset: WorkshopAsset) {
+    setDraftIds((current) => {
+      if (current.includes(asset.id)) return current.filter((id) => id !== asset.id);
+      if (current.length >= maxFeaturedAssets) {
+        toast.info(`Choose up to ${maxFeaturedAssets} featured assets.`, { description: "Remove one before selecting another." });
+        return current;
+      }
+      return [...current, asset.id];
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>Manage Featured Assets</DialogTitle>
+          <DialogDescription>Choose up to {maxFeaturedAssets} assets for your public profile.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <label className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input className="h-10 pl-9 text-sm" placeholder="Search your assets" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <span className="sr-only">Search assets</span>
+          </label>
+          {assetsQuery.isLoading ? (
+            <div className="grid min-h-48 place-items-center border border-border bg-card/40">
+              <Spinner size="sm" variant="primary" label="Loading assets" />
+            </div>
+          ) : assetsQuery.isError ? (
+            <div className="border border-border bg-card/40 p-6 text-sm text-muted-foreground">Could not load your assets.</div>
+          ) : assetsQuery.data?.assets.length ? (
+            <div className="grid max-h-[62vh] gap-4 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
+              {assetsQuery.data.assets.map((asset) => {
+                const selected = selectedIds.has(asset.id);
+                return (
+                  <div key={asset.id} className={`relative z-0 hover:z-50 focus-within:z-50 ${selected ? "ring-2 ring-primary" : ""}`}>
+                    <WorkshopAssetCard asset={asset} onOpen={() => toggleAsset(asset)} />
+                    {selected ? (
+                      <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-background/65">
+                        <span className="border border-primary bg-primary px-3 py-1 font-primary text-sm font-semibold uppercase text-primary-foreground shadow">SELECTED</span>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="border border-border bg-card/40 p-6 text-sm text-muted-foreground">No matching assets yet.</div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
+          <Button type="button" onClick={() => onSave(draftIds)} disabled={saving}>
+            {saving ? "Saving..." : "Save Featured"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
