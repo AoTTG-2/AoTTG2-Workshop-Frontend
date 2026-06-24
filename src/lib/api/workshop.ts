@@ -68,6 +68,8 @@ export interface WorkshopAsset {
   tags: string[];
   ownerAuthAccountId: string;
   authorDisplayName: string;
+  authorCreatorName?: string | null;
+  authorAvatarKey?: string | null;
   createdAt: string;
   updatedAt: string;
   engagement?: AssetEngagement;
@@ -176,6 +178,8 @@ export interface DashboardComment {
   status: "visible" | "deleted" | "hidden" | string;
   authorAuthAccountId: string;
   authorDisplayName: string;
+  authorCreatorName?: string | null;
+  authorAvatarKey?: string | null;
   createdAt: string;
 }
 
@@ -244,6 +248,8 @@ export interface WorkshopComment {
   status: "visible" | "deleted" | "hidden";
   authorAuthAccountId: string;
   authorDisplayName: string;
+  authorCreatorName?: string | null;
+  authorAvatarKey?: string | null;
   createdAt: string;
   updatedAt: string;
   replies: WorkshopComment[];

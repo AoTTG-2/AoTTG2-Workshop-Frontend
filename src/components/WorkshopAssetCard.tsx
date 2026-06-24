@@ -4,6 +4,7 @@ import { Spinner, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } fro
 import { CalendarDays, Download, ThumbsUp } from "lucide-react";
 import { type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useState } from "react";
 import { AssetTag, AssetTagButton } from "./AssetTag";
+import { CreatorIdentityLink } from "./CreatorIdentityLink";
 import type { SkinPartPayload, SkinSetPayload, WorkshopAsset, WorkshopMedia } from "../lib/api/workshop";
 
 interface WorkshopAssetCardProps {
@@ -57,7 +58,16 @@ export function WorkshopAssetCard({ asset, interactive = true, onOpen, onTagSele
               </Tooltip>
             </TooltipProvider>
           </div>
-          <span className="shrink-0 font-normal text-muted-foreground">by {asset.authorDisplayName}</span>
+          <CreatorIdentityLink
+            className="max-w-[45%] shrink-0 text-xs"
+            nameClassName="truncate"
+            displayName={asset.authorDisplayName}
+            creatorName={asset.authorCreatorName ?? asset.creatorName}
+            showAvatar={false}
+            showNoCreatorPill={false}
+            prefixBy
+            stopPropagation
+          />
         </div>
         <p className="line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">{asset.shortDescription || plainPreview(asset.descriptionMarkdown) || summarizeAsset(asset)}</p>
         <div className="mt-auto flex flex-wrap gap-1.5">
@@ -75,7 +85,7 @@ export function WorkshopAssetCard({ asset, interactive = true, onOpen, onTagSele
         <div className="flex items-center justify-between gap-3 pt-3 text-xs font-semibold uppercase text-muted-foreground">
           <div className="flex min-w-0 items-center gap-3">
             <StatIcon icon={<Download className="h-3.5 w-3.5" />} label={formatStatLabel(asset.engagement?.downloadCount ?? 0, "download")} value={asset.engagement?.downloadCount ?? 0} />
-            <StatIcon icon={<ThumbsUp className="h-3.5 w-3.5" />} label={formatStatLabel(asset.engagement?.likeCount ?? 0, "thank")} value={asset.engagement?.likeCount ?? 0} />
+            <StatIcon icon={<ThumbsUp className="h-3.5 w-3.5" />} label={`${asset.engagement?.likeCount ?? 0} Thanks`} value={asset.engagement?.likeCount ?? 0} />
             {asset.status !== "visible" ? <span className="text-destructive">{asset.status}</span> : null}
           </div>
           <span className="ml-auto inline-flex shrink-0 items-center gap-1" title={formatDate(asset.createdAt)}>

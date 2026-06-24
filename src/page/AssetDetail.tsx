@@ -1,19 +1,22 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Button, CommentBox, CommentSection, Spinner, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, renderCommentMarkdown, type CommentItem } from "@aottg2/ui";
+import { Button, CommentBox, CommentSection, Spinner, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, type CommentItem } from "@aottg2/ui";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChevronLeft, ChevronRight, Copy, Download, Eye, Flag, Link as LinkIcon, MessageCircle, MoreHorizontal, Pencil, Star, ThumbsUp, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { authApi, authAssetUrl } from "../auth/api";
 import { getAccessToken } from "../auth/storage";
+import type { ProfilePreset } from "../auth/types";
 import { useAuth } from "../auth/useAuth";
 import { canModerateAssets, canModerateComments } from "../auth/workshopPermissions";
 import { AssetTag, AssetTagLink } from "../components/AssetTag";
+import { CreatorIdentityLink, CreatorMention } from "../components/CreatorIdentityLink";
 import { ReportDialog } from "../components/ReportDialog";
 import { SideCard } from "../components/SideCard";
 import { assetPath, createAssetComment, deleteWorkshopAsset, deleteWorkshopComment, getAsset, getAssetBySeoPath, hideModerationComment, listAssetComments, listAssetUsedBy, replyToAssetComment, reportWorkshopAsset, reportWorkshopComment, setAssetFavorite, setAssetLike, trackAssetDownload, trackAssetView, type SkinPartPayload, type SkinSetItem, type SkinSetPayload, type WorkshopAsset, type WorkshopComment, type WorkshopMedia } from "../lib/api/workshop";
@@ -214,10 +217,10 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
     try {
       const result = await setAssetLike(asset.publicId || asset.id, nextLiked, token);
       setDisplayAsset((current) => ({ ...current, engagement: result.engagement, viewerEngagement: result.viewerEngagement ?? current.viewerEngagement }));
-      toast.success(nextLiked ? `Liked ${asset.title}` : `Removed like from ${asset.title}`, { description: nextLiked ? "Thanks sent." : "Thanks removed." });
+      toast.success(nextLiked ? `Sent Thanks to ${asset.title}` : `Removed Thanks from ${asset.title}`, { description: nextLiked ? "Thanks sent." : "Thanks removed." });
     } catch (error) {
       setDisplayAsset(previousAsset);
-      toast.error("Could not update thank", { description: error instanceof Error ? error.message : "Try again." });
+      toast.error("Could not update Thanks", { description: error instanceof Error ? error.message : "Try again." });
     }
   }
 
@@ -294,7 +297,7 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
             {asset.shortDescription ? <p className="mt-3 line-clamp-1 max-w-2xl text-base text-foreground">{asset.shortDescription}</p> : null}
             <div className="mt-3 flex flex-wrap items-center gap-4 text-xs font-semibold uppercase text-muted-foreground">
               <EngagementStat icon={<Download className="h-4 w-4" />} label="download" value={asset.engagement?.downloadCount ?? 0} />
-              <EngagementStat icon={<ThumbsUp className="h-4 w-4" />} label="thank" value={asset.engagement?.likeCount ?? 0} />
+              <EngagementStat icon={<ThumbsUp className="h-4 w-4" />} label="Thanks" value={asset.engagement?.likeCount ?? 0} />
               <EngagementStat icon={<Eye className="h-4 w-4" />} label="view" value={asset.engagement?.viewCount ?? 0} />
               <EngagementStat icon={<MessageCircle className="h-4 w-4" />} label="comment" value={asset.engagement?.commentCount ?? 0} />
             </div>
@@ -307,12 +310,12 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
               </Button>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <motion.button type="button" className={`workshop-control-free workshop-reaction-button group ml-3 inline-flex items-center gap-2 px-2 py-1 text-lg font-semibold hover:text-primary hover:drop-shadow-[0_0_8px_currentColor] ${liked ? "text-primary drop-shadow-[0_0_8px_currentColor]" : "text-muted-foreground"}`} aria-label={liked ? "Remove thank" : "Thank"} whileTap={reactionTap(reduceMotion)} animate={reactionBurst(likeBurst, reduceMotion)} transition={reactionTransition} onClick={() => void toggleLike()} onAnimationComplete={() => setLikeBurst(false)}>
+                  <motion.button type="button" className={`workshop-control-free workshop-reaction-button group ml-3 inline-flex items-center gap-2 px-2 py-1 text-lg font-semibold hover:text-primary hover:drop-shadow-[0_0_8px_currentColor] ${liked ? "text-primary drop-shadow-[0_0_8px_currentColor]" : "text-muted-foreground"}`} aria-label={liked ? "Remove Thanks" : "Send Thanks"} whileTap={reactionTap(reduceMotion)} animate={reactionBurst(likeBurst, reduceMotion)} transition={reactionTransition} onClick={() => void toggleLike()} onAnimationComplete={() => setLikeBurst(false)}>
                     <ThumbsUp className="workshop-reaction-icon h-7 w-7 fill-none transition-colors" aria-hidden="true" />
                     {formatCount(asset.engagement?.likeCount ?? 0)}
                   </motion.button>
                 </TooltipTrigger>
-                <TooltipContent>{liked ? "Remove thank" : "Thank"}</TooltipContent>
+                <TooltipContent>{liked ? "Remove Thanks" : "Send Thanks"}</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -396,9 +399,12 @@ function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: Workshop
           </motion.div>
 
           <motion.div initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.14)}>
-            <SideCard title="Creator" variant="secondary">
-              <div className="text-sm font-semibold text-foreground">{asset.authorDisplayName}</div>
-              <div className="mt-1 text-xs text-muted-foreground">Owner</div>
+            <SideCard title="Created By" variant="secondary">
+              <CreatorIdentityLink
+                displayName={asset.authorDisplayName}
+                creatorName={asset.authorCreatorName ?? asset.creatorName}
+                avatarKey={asset.authorAvatarKey}
+              />
             </SideCard>
           </motion.div>
 
@@ -450,6 +456,20 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
     queryFn: () => listAssetComments(assetCommentId),
     enabled: Boolean(assetCommentId),
   });
+  const rawComments = useMemo(() => commentsQuery.data?.comments ?? [], [commentsQuery.data?.comments]);
+  const needsAvatars = rawComments.some(hasAvatarKey);
+  const presetsQuery = useQuery({
+    queryKey: ["auth", "profile-presets"],
+    queryFn: async () => {
+      const result = await authApi.getProfilePresets();
+      if (!result.ok) throw new Error(result.data.error ?? "Failed to load profile presets");
+      return result.data;
+    },
+    enabled: needsAvatars,
+    staleTime: 60 * 60 * 1000,
+  });
+  const avatarByKey = useMemo(() => new Map((presetsQuery.data?.avatars ?? []).map((preset) => [preset.key, preset])), [presetsQuery.data?.avatars]);
+  const mentionAuthors = useMemo(() => collectMentionAuthors(rawComments), [rawComments]);
   const [body, setBody] = useState("");
   const [replyBody, setReplyBody] = useState("");
   const [replyTo, setReplyTo] = useState<{ commentId: string; rowId: string; author: string } | null>(null);
@@ -578,6 +598,7 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
   function toItem(comment: WorkshopComment, parent = comment): CommentItem {
     const tombstone = comment.status === "deleted" || comment.status === "hidden";
     const canWrite = isAuthenticated && !tombstone;
+    const avatarUrl = presetImageUrl(comment.authorAvatarKey ? avatarByKey.get(comment.authorAvatarKey) : undefined);
     const actions = canWrite
       ? [
           { label: "Reply", onSelect: () => startReply(parent.id, comment.id, comment.authorDisplayName) },
@@ -589,17 +610,21 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
 
     return {
       id: comment.id,
-      author: { name: comment.authorDisplayName },
+      author: {
+        name: <CreatorMention displayName={comment.authorDisplayName} creatorName={comment.authorCreatorName}>{comment.authorDisplayName}</CreatorMention>,
+        avatarUrl,
+        fallback: initials(comment.authorDisplayName),
+      },
       createdAt: formatDate(comment.createdAt),
       editedAt: comment.updatedAt !== comment.createdAt ? formatDate(comment.updatedAt) : undefined,
-      body: renderCommentMarkdown(comment.body),
+      body: renderCommentMarkdownWithMentions(comment.body, mentionAuthors),
       deleted: tombstone,
       actions,
       replies: comment.replies.map((reply) => toItem(reply, comment)),
     };
   }
 
-  const comments = commentsQuery.data?.comments.map((comment) => toItem(comment)) ?? [];
+  const comments = rawComments.map((comment) => toItem(comment));
 
   return (
     <>
@@ -658,11 +683,116 @@ function AssetComments({ asset, onAssetRefresh }: { asset: WorkshopAsset; onAsse
   );
 }
 
+interface MentionAuthor {
+  displayName: string;
+  creatorName?: string | null;
+}
+
+function hasAvatarKey(comment: WorkshopComment): boolean {
+  return Boolean(comment.authorAvatarKey) || comment.replies.some(hasAvatarKey);
+}
+
+function collectMentionAuthors(comments: WorkshopComment[]) {
+  const authors = new Map<string, MentionAuthor>();
+  function visit(comment: WorkshopComment) {
+    if (comment.status === "visible" && comment.authorDisplayName && comment.authorDisplayName !== "[deleted]") {
+      const key = comment.authorDisplayName.toLowerCase();
+      if (!authors.has(key)) authors.set(key, { displayName: comment.authorDisplayName, creatorName: comment.authorCreatorName });
+    }
+    comment.replies.forEach(visit);
+  }
+  comments.forEach(visit);
+  return [...authors.values()];
+}
+
+function renderCommentMarkdownWithMentions(value: string, mentions: MentionAuthor[]) {
+  if (!value.trim()) return <span className="text-muted-foreground">Nothing to preview.</span>;
+  return value.split(/\n{2,}/).map((paragraph, paragraphIndex) => (
+    <p className="mb-2 last:mb-0" key={paragraphIndex}>
+      {paragraph.split("\n").map((line, lineIndex, lines) => (
+        <span key={lineIndex}>
+          {renderInlineCommentMarkdown(line, mentions)}
+          {lineIndex < lines.length - 1 ? <br /> : null}
+        </span>
+      ))}
+    </p>
+  ));
+}
+
+function renderInlineCommentMarkdown(value: string, mentions: MentionAuthor[]) {
+  const tokens = [
+    { regex: /^`([^`]+)`/, render: (match: RegExpExecArray, key: string) => <code className="bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground" key={key}>{match[1]}</code> },
+    { regex: /^\[([^\]]+)\]\(([^)]+)\)/, render: (match: RegExpExecArray, key: string) => <a className="font-medium text-primary underline underline-offset-4" href={safeCommentUrl(match[2])} key={key} rel="noreferrer" target="_blank">{match[1]}</a> },
+    { regex: /^\*\*([^*]+)\*\*/, render: (match: RegExpExecArray, key: string) => <strong className="font-semibold text-foreground" key={key}>{match[1]}</strong> },
+    { regex: /^~~([^~]+)~~/, render: (match: RegExpExecArray, key: string) => <del key={key}>{match[1]}</del> },
+    { regex: /^\*([^*]+)\*/, render: (match: RegExpExecArray, key: string) => <em key={key}>{match[1]}</em> },
+  ];
+  const output: ReactNode[] = [];
+  let rest = value;
+  let index = 0;
+  while (rest.length) {
+    const token = tokens.find((item) => item.regex.test(rest));
+    const match = token?.regex.exec(rest);
+    if (token && match) {
+      output.push(token.render(match, `token-${index}`));
+      rest = rest.slice(match[0].length);
+      index += 1;
+      continue;
+    }
+    const nextSpecial = rest.slice(1).search(/[`*~[]/) + 1;
+    const take = nextSpecial > 0 ? nextSpecial : rest.length;
+    output.push(...linkCommentMentions(rest.slice(0, take), mentions, index));
+    rest = rest.slice(take);
+    index += 1;
+  }
+  return output;
+}
+
+function linkCommentMentions(text: string, mentions: MentionAuthor[], keyStart: number) {
+  const names = mentions.map((mention) => mention.displayName).filter(Boolean).sort((a, b) => b.length - a.length);
+  if (!names.length) return [text];
+  const byName = new Map(mentions.map((mention) => [mention.displayName.toLowerCase(), mention]));
+  const regex = new RegExp(`@(${names.map(escapeRegex).join("|")})(?=$|[\\s.,!?;:)\\]])`, "gi");
+  const output: ReactNode[] = [];
+  let lastIndex = 0;
+  let tokenIndex = keyStart;
+  for (const match of text.matchAll(regex)) {
+    if (match.index === undefined) continue;
+    if (match.index > lastIndex) output.push(text.slice(lastIndex, match.index));
+    const mention = byName.get(match[1].toLowerCase());
+    output.push(
+      <CreatorMention key={`mention-${tokenIndex}`} displayName={match[1]} creatorName={mention?.creatorName}>
+        @{match[1]}
+      </CreatorMention>,
+    );
+    lastIndex = match.index + match[0].length;
+    tokenIndex += 1;
+  }
+  if (lastIndex < text.length) output.push(text.slice(lastIndex));
+  return output.length ? output : [text];
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function safeCommentUrl(value: string) {
+  return /^https?:\/\//i.test(value) ? value : "#";
+}
+
+function presetImageUrl(preset?: ProfilePreset) {
+  return preset?.imageUrl ? authAssetUrl(preset.imageUrl) : undefined;
+}
+
+function initials(value: string) {
+  return value.trim().slice(0, 2).toUpperCase() || "?";
+}
+
 function EngagementStat({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       {icon}
-      {formatCount(value)} {value === 1 ? label : `${label}s`}
+      {formatCount(value)} {label === "Thanks" ? "Thanks" : value === 1 ? label : `${label}s`}
     </span>
   );
 }

@@ -1,3 +1,5 @@
+"use client";
+
 import { Card, CardContent, CardTitle } from "@aottg2/ui";
 import AppFrame from "./app-frame";
 

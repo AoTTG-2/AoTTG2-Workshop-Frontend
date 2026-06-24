@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { getAccessToken } from "../auth/storage";
+import { CreatorIdentityLink } from "../components/CreatorIdentityLink";
 import { WorkshopAssetCard } from "../components/WorkshopAssetCard";
 import { queryClient } from "../lib/queryClient";
 import {
@@ -291,7 +292,13 @@ function CommentRow({ comment, compact }: { comment: DashboardComment; compact?:
           <CardTitle className="text-base">{comment.assetTitle}</CardTitle>
           <span className="text-xs text-muted-foreground">{formatDate(comment.createdAt)}</span>
         </div>
-        <div className="text-sm text-muted-foreground">by {comment.authorDisplayName}</div>
+        <CreatorIdentityLink
+          className="text-sm"
+          avatarClassName="h-7 w-7"
+          displayName={comment.authorDisplayName}
+          creatorName={comment.authorCreatorName}
+          avatarKey={comment.authorAvatarKey}
+        />
       </CardHeader>
       <CardContent className="grid gap-3">
         <div className={`prose prose-sm max-w-none text-foreground ${compact ? "line-clamp-3" : ""}`}>{renderCommentMarkdown(comment.body)}</div>
