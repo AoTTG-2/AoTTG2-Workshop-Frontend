@@ -71,9 +71,8 @@ export interface SkinSetPayload {
 
 export interface ShifterSkinSetPayload {
   category?: "shifter" | string;
-  eren?: string | null;
-  annie?: string | null;
-  colossal?: string | null;
+  target?: "eren" | "annie" | "colossal" | string;
+  textureUrl?: string | null;
 }
 
 export interface SkyboxSkinSetPayload {
@@ -134,6 +133,7 @@ export interface AssetListQuery {
   tag?: string;
   category?: string;
   slot?: string;
+  target?: string;
   sort?: string;
   mine?: boolean;
   page?: number;
@@ -508,6 +508,7 @@ export async function listAssets(query: AssetListQuery = {}, accessToken?: strin
   if (query.tag?.trim()) params.set("tag", query.tag.trim());
   if (query.category?.trim()) params.set("category", query.category.trim());
   if (query.slot?.trim()) params.set("slot", query.slot.trim());
+  if (query.target?.trim()) params.set("target", query.target.trim());
   if (query.sort?.trim()) params.set("sort", query.sort.trim());
   if (query.mine) params.set("mine", "true");
   if (query.page && query.page > 1) params.set("page", String(query.page));

@@ -57,6 +57,11 @@ const humanPartIcons = {
   Head: ScanFace,
   Back: Grid3X3,
 } satisfies Record<string, typeof User>;
+const shifterTargets = [
+  { label: "Eren", target: "eren" },
+  { label: "Annie", target: "annie" },
+  { label: "Colossal", target: "colossal" },
+];
 
 interface LibraryViewProps {
   initialData: AssetListResponse;
@@ -74,13 +79,17 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
   const tag = searchParams.get("tag") ?? "";
   const category = searchParams.get("category") ?? "";
   const slot = searchParams.get("slot") ?? "";
+  const target = searchParams.get("target") ?? "";
   const sort = searchParams.get("sort") ?? "relevance";
   const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
   const humanTypeActive = type === "skin_part" || type === "skin_set" || Boolean(slot);
   const isHumanBrowsing = category === "human" || (!category && humanTypeActive);
+  const showHumanParts = isHumanBrowsing || (!category && !type && !slot && !target);
+  const showShifterTypes = category === "shifter";
   const effectiveCategory = isHumanBrowsing ? "human" : category;
   const effectiveType = isHumanBrowsing ? type : "";
   const effectiveSlot = isHumanBrowsing ? slot : "";
+  const effectiveTarget = showShifterTypes ? target : "";
   const [searchText, setSearchText] = useState(q);
 
   useEffect(() => {
@@ -88,9 +97,9 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
   }, [q]);
 
   const query = useQuery({
-    queryKey: ["workshop", "assets", { q, type: effectiveType, tag, category: effectiveCategory, slot: effectiveSlot, sort, page, pageSize }],
-    queryFn: () => listAssets({ q, type: effectiveType, tag, category: effectiveCategory, slot: normalizeSlotParam(effectiveSlot), sort, page, pageSize }),
-    initialData: sameQuery(initialQuery, { q, type: effectiveType, tag, category: effectiveCategory, slot: effectiveSlot, sort, page, pageSize }) && !initialError ? initialData : undefined,
+    queryKey: ["workshop", "assets", { q, type: effectiveType, tag, category: effectiveCategory, slot: effectiveSlot, target: effectiveTarget, sort, page, pageSize }],
+    queryFn: () => listAssets({ q, type: effectiveType, tag, category: effectiveCategory, slot: normalizeSlotParam(effectiveSlot), target: effectiveTarget, sort, page, pageSize }),
+    initialData: sameQuery(initialQuery, { q, type: effectiveType, tag, category: effectiveCategory, slot: effectiveSlot, target: effectiveTarget, sort, page, pageSize }) && !initialError ? initialData : undefined,
   });
 
   useEffect(() => {
@@ -103,7 +112,7 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
     router.push(isAuthenticated ? "/library/publish" : "/login?next=%2Flibrary%2Fpublish");
   }
 
-  function updateParams(next: { q?: string; type?: string; tag?: string; category?: string; slot?: string; sort?: string; page?: number }) {
+  function updateParams(next: { q?: string; type?: string; tag?: string; category?: string; slot?: string; target?: string; sort?: string; page?: number }) {
     const params = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(next)) {
       if (value === "" || value === undefined || value === 1 || (key === "sort" && value === "relevance")) {
@@ -112,7 +121,7 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
         params.set(key, String(value));
       }
     }
-    if (next.q !== undefined || next.type !== undefined || next.tag !== undefined || next.category !== undefined || next.slot !== undefined || next.sort !== undefined) {
+    if (next.q !== undefined || next.type !== undefined || next.tag !== undefined || next.category !== undefined || next.slot !== undefined || next.target !== undefined || next.sort !== undefined) {
       params.delete("page");
     }
     router.push(`/library${params.size ? `?${params}` : ""}`);
@@ -143,22 +152,29 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
       <div className="grid gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
         <motion.aside className="grid content-start gap-4" initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.03)}>
           <SideCard title="Category" contentClassName="grid gap-1 p-2">
-            <SideFilterItem active={!category && !type && !slot} icon={<Grid3X3 className="h-4 w-4" />} label="All content" onClick={() => updateParams({ category: "", type: "", slot: "", page: 1 })} />
+            <SideFilterItem active={!category && !type && !slot && !target} icon={<Grid3X3 className="h-4 w-4" />} label="All content" onClick={() => updateParams({ category: "", type: "", slot: "", target: "", page: 1 })} />
             {categoryFilters.map((item) => (
               <SideFilterItem
                 key={item.label}
-                active={Boolean((item.category && effectiveCategory === item.category && !effectiveSlot) || (item.type && type === item.type))}
+                active={Boolean((item.category && effectiveCategory === item.category && !effectiveSlot && !effectiveTarget) || (item.type && type === item.type))}
                 icon={<item.icon className="h-4 w-4" />}
                 label={item.label}
-                onClick={() => updateParams({ category: item.category ?? "", type: item.type ?? "", slot: "", page: 1 })}
+                onClick={() => updateParams({ category: item.category ?? "", type: item.type ?? "", slot: "", target: "", page: 1 })}
               />
             ))}
           </SideCard>
 
-          {isHumanBrowsing ? (
+          {showHumanParts ? (
             <SideCard title="Human Parts" variant="secondary" contentClassName="grid gap-1 p-2">
               {humanParts.map((part) => (
                 <SideFilterItem key={part} active={effectiveCategory === "human" && effectiveSlot === part} icon={renderHumanPartIcon(part)} label={part} onClick={() => updateParams({ category: "human", type: "", slot: part, page: 1 })} />
+              ))}
+            </SideCard>
+          ) : null}
+          {showShifterTypes ? (
+            <SideCard title="Shifter Type" variant="secondary" contentClassName="grid gap-1 p-2">
+              {shifterTargets.map((item) => (
+                <SideFilterItem key={item.target} active={effectiveTarget === item.target} icon={<Zap className="h-4 w-4" />} label={item.label} onClick={() => updateParams({ category: "shifter", type: "", slot: "", target: item.target, page: 1 })} />
               ))}
             </SideCard>
           ) : null}
@@ -206,8 +222,9 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
               )}
               <div className="flex flex-wrap gap-2">
                 {tag ? <ActivePill label={`Tag: ${tag}`} onClear={() => updateParams({ tag: "", page: 1 })} /> : null}
-                {effectiveCategory ? <ActivePill label={`Category: ${formatLabel(effectiveCategory)}`} onClear={() => updateParams({ category: "", type: "", slot: "", page: 1 })} /> : null}
+                {effectiveCategory ? <ActivePill label={`Category: ${formatLabel(effectiveCategory)}`} onClear={() => updateParams({ category: "", type: "", slot: "", target: "", page: 1 })} /> : null}
                 {effectiveSlot ? <ActivePill label={`Part: ${effectiveSlot}`} onClear={() => updateParams({ slot: "", page: 1 })} /> : null}
+                {effectiveTarget ? <ActivePill label={`Shifter: ${formatLabel(effectiveTarget)}`} onClear={() => updateParams({ target: "", page: 1 })} /> : null}
               </div>
             </div>
           </motion.div>
@@ -322,5 +339,5 @@ function sortLabel(sort: string) {
 }
 
 function sameQuery(left: AssetListQuery, right: AssetListQuery) {
-  return (left.q ?? "") === (right.q ?? "") && (left.type ?? "") === (right.type ?? "") && (left.tag ?? "") === (right.tag ?? "") && (left.category ?? "") === (right.category ?? "") && (left.slot ?? "") === (right.slot ?? "") && (left.sort ?? "") === (right.sort ?? "") && (left.page ?? 1) === (right.page ?? 1);
+  return (left.q ?? "") === (right.q ?? "") && (left.type ?? "") === (right.type ?? "") && (left.tag ?? "") === (right.tag ?? "") && (left.category ?? "") === (right.category ?? "") && (left.slot ?? "") === (right.slot ?? "") && (left.target ?? "") === (right.target ?? "") && (left.sort ?? "") === (right.sort ?? "") && (left.page ?? 1) === (right.page ?? 1);
 }

@@ -844,9 +844,8 @@ function AssetSummary({ asset }: { asset: WorkshopAsset }) {
   if (asset.type === "shifter_skin_set" && isShifterSkinSetPayload(asset.payload)) {
     return (
       <dl className="grid gap-2 text-sm">
-        <SummaryRow label="Eren" value={asset.payload.eren} />
-        <SummaryRow label="Annie" value={asset.payload.annie} />
-        <SummaryRow label="Colossal" value={asset.payload.colossal} />
+        <SummaryRow label="Target" value={formatLabel(asset.payload.target ?? "shifter")} />
+        <SummaryRow label="Texture URL" value={asset.payload.textureUrl} />
       </dl>
     );
   }
@@ -1045,8 +1044,7 @@ function summarizeAsset(asset: WorkshopAsset) {
   }
 
   if (asset.type === "shifter_skin_set" && isShifterSkinSetPayload(asset.payload)) {
-    const count = [asset.payload.eren, asset.payload.annie, asset.payload.colossal].filter(Boolean).length;
-    return `${count} shifter texture${count === 1 ? "" : "s"}`;
+    return `${formatLabel(asset.payload.target ?? "shifter")} Shifter`;
   }
 
   if (asset.type === "skybox_skin_set" && isSkyboxSkinSetPayload(asset.payload)) {
@@ -1068,7 +1066,7 @@ function collectTextureUrls(asset: WorkshopAsset) {
   }
 
   if (asset.type === "shifter_skin_set" && isShifterSkinSetPayload(asset.payload)) {
-    return [asset.payload.eren, asset.payload.annie, asset.payload.colossal].filter((url): url is string => Boolean(url));
+    return asset.payload.textureUrl ? [asset.payload.textureUrl] : [];
   }
 
   if (asset.type === "skybox_skin_set" && isSkyboxSkinSetPayload(asset.payload)) {
@@ -1108,7 +1106,7 @@ function isSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkinSet
 }
 
 function isShifterSkinSetPayload(payload: WorkshopAsset["payload"]): payload is ShifterSkinSetPayload {
-  return "eren" in payload || "annie" in payload || "colossal" in payload;
+  return "target" in payload || "textureUrl" in payload;
 }
 
 function isSkyboxSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkyboxSkinSetPayload {

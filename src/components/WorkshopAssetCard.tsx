@@ -186,8 +186,7 @@ function summarizeAsset(asset: WorkshopAsset) {
   }
 
   if (asset.type === "shifter_skin_set" && isShifterSkinSetPayload(asset.payload)) {
-    const count = [asset.payload.eren, asset.payload.annie, asset.payload.colossal].filter(Boolean).length;
-    return `${count} shifter texture${count === 1 ? "" : "s"}`;
+    return `${formatLabel(asset.payload.target ?? "shifter")} Shifter`;
   }
 
   if (asset.type === "skybox_skin_set" && isSkyboxSkinSetPayload(asset.payload)) {
@@ -218,7 +217,7 @@ function isSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkinSet
 }
 
 function isShifterSkinSetPayload(payload: WorkshopAsset["payload"]): payload is ShifterSkinSetPayload {
-  return "eren" in payload || "annie" in payload || "colossal" in payload;
+  return "target" in payload || "textureUrl" in payload;
 }
 
 function isSkyboxSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkyboxSkinSetPayload {

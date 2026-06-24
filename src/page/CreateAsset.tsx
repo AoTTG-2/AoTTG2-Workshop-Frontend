@@ -39,9 +39,8 @@ interface VariantTargetForm {
 }
 
 interface ShifterSkinSetForm {
-  eren: string;
-  annie: string;
-  colossal: string;
+  target: "eren" | "annie" | "colossal";
+  textureUrl: string;
 }
 
 interface SkyboxSkinSetForm {
@@ -479,15 +478,12 @@ function prepareSetItem(value: VariantTargetForm, catalog: VariantCatalog) {
 function prepareShifterSkinSet(value: ShifterSkinSetForm, catalog: VariantCatalog) {
   const payload = {
     category: "shifter" as const,
-    eren: value.eren.trim(),
-    annie: value.annie.trim(),
-    colossal: value.colossal.trim(),
+    target: value.target,
+    textureUrl: value.textureUrl.trim(),
   };
-  if (!payload.eren && !payload.annie && !payload.colossal) throw new Error("Add at least one shifter texture");
-  shifterTargets.forEach((target) => {
-    const url = payload[target.key];
-    if (url) validateTextureUrl(url, catalog);
-  });
+  if (!shifterTargets.some((target) => target.key === payload.target)) throw new Error("target is required");
+  if (!payload.textureUrl) throw new Error("Texture URL is required");
+  validateTextureUrl(payload.textureUrl, catalog);
   return payload;
 }
 
@@ -593,7 +589,7 @@ function targetFromSkinPart(payload: SkinPartPayload | Record<string, unknown>):
 }
 
 function displayTargetFromAsset(asset: WorkshopAsset): VariantTargetForm {
-  return targetFromSkinPart(asset.payload);
+  return targetFromSkinPart(asset.payload as SkinPartPayload);
 }
 
 function targetsFromSkinSet(payload: SkinSetPayload | Record<string, unknown>): VariantTargetForm[] {
@@ -614,10 +610,10 @@ function targetsFromSkinSet(payload: SkinSetPayload | Record<string, unknown>): 
 
 function shifterFromAsset(payload: ShifterSkinSetPayload | Record<string, unknown>): ShifterSkinSetForm {
   const data = payload as ShifterSkinSetPayload;
+  const target = shifterTargets.some((item) => item.key === data.target) ? data.target as ShifterSkinSetForm["target"] : "eren";
   return {
-    eren: data.eren ?? "",
-    annie: data.annie ?? "",
-    colossal: data.colossal ?? "",
+    target,
+    textureUrl: data.textureUrl ?? "",
   };
 }
 
@@ -693,10 +689,10 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
   const [kind, setKind] = useState<AssetKind>(() => editableAsset?.type ?? "skin_part");
   const [step, setStep] = useState<WizardStep>(() => (isEdit ? "listing" : "type"));
   const [common, setCommon] = useState(() => commonFromAsset(editableAsset));
-  const [part, setPart] = useState<VariantTargetForm>(() => (editableAsset?.type === "skin_part" ? targetFromSkinPart(editableAsset.payload) : { slot: "Hair", textureUrl: "", variants: [] }));
-  const [items, setItems] = useState<VariantTargetForm[]>(() => (editableAsset?.type === "skin_set" ? targetsFromSkinSet(editableAsset.payload) : []));
-  const [shifter, setShifter] = useState<ShifterSkinSetForm>(() => (editableAsset?.type === "shifter_skin_set" ? shifterFromAsset(editableAsset.payload) : { eren: "", annie: "", colossal: "" }));
-  const [skybox, setSkybox] = useState<SkyboxSkinSetForm>(() => (editableAsset?.type === "skybox_skin_set" ? skyboxFromAsset(editableAsset.payload) : { front: "", back: "", left: "", right: "", up: "", down: "" }));
+  const [part, setPart] = useState<VariantTargetForm>(() => (editableAsset?.type === "skin_part" ? targetFromSkinPart(editableAsset.payload as SkinPartPayload) : { slot: "Hair", textureUrl: "", variants: [] }));
+  const [items, setItems] = useState<VariantTargetForm[]>(() => (editableAsset?.type === "skin_set" ? targetsFromSkinSet(editableAsset.payload as SkinSetPayload) : []));
+  const [shifter, setShifter] = useState<ShifterSkinSetForm>(() => (editableAsset?.type === "shifter_skin_set" ? shifterFromAsset(editableAsset.payload as ShifterSkinSetPayload) : { target: "eren", textureUrl: "" }));
+  const [skybox, setSkybox] = useState<SkyboxSkinSetForm>(() => (editableAsset?.type === "skybox_skin_set" ? skyboxFromAsset(editableAsset.payload as SkyboxSkinSetPayload) : { front: "", back: "", left: "", right: "", up: "", down: "" }));
   const [newSetItem, setNewSetItem] = useState<VariantTargetForm | null>(null);
   const [newSetItemSourceOpen, setNewSetItemSourceOpen] = useState(false);
   const [newSetItemSlotOpen, setNewSetItemSlotOpen] = useState(false);
@@ -1055,6 +1051,12 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
                   />
                 ))}
               </SideCard>
+            ) : skinCategory === "shifter" ? (
+              <SideCard title="Shifter Type" variant="secondary" contentClassName="grid auto-rows-fr gap-3 sm:grid-cols-3">
+                {shifterTargets.map((target) => (
+                  <TypeChoice key={target.key} active={shifter.target === target.key} compact icon={<Zap className="h-5 w-5" aria-hidden="true" />} title={target.label} onClick={() => setShifter((current) => ({ ...current, target: target.key }))} />
+                ))}
+              </SideCard>
             ) : null}
           </section>
         ) : null}
@@ -1140,17 +1142,14 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
             </section>
           ) : kind === "shifter_skin_set" ? (
             <section className="grid gap-4 border-t border-border pt-6">
-              <h2 className="text-sm font-semibold uppercase text-muted-foreground">Shifter Textures</h2>
-              <div className="grid gap-4 lg:grid-cols-3">
-                {shifterTargets.map((target) => (
-                  <FlatTextureField
-                    key={target.key}
-                    label={target.label}
-                    value={shifter[target.key]}
-                    placeholder={`https://i.imgur.com/${target.key}.png`}
-                    onChange={(textureUrl) => setShifter((current) => ({ ...current, [target.key]: textureUrl }))}
-                  />
-                ))}
+              <h2 className="text-sm font-semibold uppercase text-muted-foreground">Shifter Texture</h2>
+              <div className="w-full justify-self-center lg:w-[calc((100%-1rem)/2)]">
+                <FlatTextureField
+                  label={`${shifterTargets.find((target) => target.key === shifter.target)?.label ?? "Shifter"} Shifter`}
+                  value={shifter.textureUrl}
+                  placeholder={`https://i.imgur.com/${shifter.target}.png`}
+                  onChange={(textureUrl) => setShifter((current) => ({ ...current, textureUrl }))}
+                />
               </div>
             </section>
           ) : kind === "skybox_skin_set" ? (
@@ -1500,7 +1499,7 @@ function FlatTextureField({ label, value, placeholder, onChange }: { label: stri
 
 function SkyboxFaceGrid({ value, onChange }: { value: SkyboxSkinSetForm; onChange: (value: SkyboxSkinSetForm) => void }) {
   return (
-    <div className="grid grid-cols-4 gap-3">
+    <div className="grid grid-cols-4 items-stretch gap-3">
       <div className="col-start-2">
         <SkyboxFaceButton face="up" label="Top" value={value.up} onChange={(url) => onChange({ ...value, up: url })} />
       </div>
@@ -1518,15 +1517,18 @@ function SkyboxFaceGrid({ value, onChange }: { value: SkyboxSkinSetForm; onChang
 function SkyboxFaceButton({ face, label, value, onChange }: { face: keyof SkyboxSkinSetForm; label: string; value: string; onChange: (value: string) => void }) {
   const [open, setOpen] = useState(false);
   return (
-    <>
-      <TexturePreviewButton url={value} label={`${label} skybox texture`} emptyLabel={`Set ${label} texture`} onClick={() => setOpen(true)} className="aspect-square !min-h-0" />
+    <div className="aspect-square min-w-0">
+      <TexturePreviewButton url={value} label={`${label} skybox texture`} emptyLabel={`Set ${label} texture`} onClick={() => setOpen(true)} className="h-full !min-h-0" />
       <TextureUrlDialog open={open} onOpenChange={setOpen} value={value} label={`Skybox ${label}`} placeholder={`https://i.imgur.com/skybox-${face}.png`} onSave={onChange} />
-    </>
+    </div>
   );
 }
 
 function SkyboxViewer({ value }: { value: SkyboxSkinSetForm }) {
   const containerRef = useRef<ElementRef<"div"> | null>(null);
+  const yawRef = useRef(0);
+  const pitchRef = useRef(0);
+  const dragRef = useRef({ active: false, x: 0, y: 0 });
   const urlsKey = [value.right, value.left, value.up, value.down, value.front, value.back].join("\n");
 
   useEffect(() => {
@@ -1542,6 +1544,8 @@ function SkyboxViewer({ value }: { value: SkyboxSkinSetForm }) {
       camera.position.set(0, 0, 0.1);
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.domElement.style.cursor = "grab";
+      renderer.domElement.style.touchAction = "none";
       container.replaceChildren(renderer.domElement);
 
       const loader = new THREE.TextureLoader();
@@ -1568,11 +1572,36 @@ function SkyboxViewer({ value }: { value: SkyboxSkinSetForm }) {
       observer.observe(container);
       resize();
 
+      const clampPitch = (value: number) => Math.max(-1.2, Math.min(1.2, value));
+      const onPointerDown = (event: { clientX: number; clientY: number; pointerId: number }) => {
+        dragRef.current = { active: true, x: event.clientX, y: event.clientY };
+        renderer.domElement.style.cursor = "grabbing";
+        renderer.domElement.setPointerCapture(event.pointerId);
+      };
+      const onPointerMove = (event: { clientX: number; clientY: number }) => {
+        if (!dragRef.current.active) return;
+        const dx = event.clientX - dragRef.current.x;
+        const dy = event.clientY - dragRef.current.y;
+        dragRef.current = { active: true, x: event.clientX, y: event.clientY };
+        yawRef.current += dx * 0.006;
+        pitchRef.current = clampPitch(pitchRef.current + dy * 0.006);
+      };
+      const onPointerUp = (event: { pointerId: number }) => {
+        dragRef.current.active = false;
+        renderer.domElement.style.cursor = "grab";
+        if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
+      };
+      renderer.domElement.addEventListener("pointerdown", onPointerDown);
+      renderer.domElement.addEventListener("pointermove", onPointerMove);
+      renderer.domElement.addEventListener("pointerup", onPointerUp);
+      renderer.domElement.addEventListener("pointercancel", onPointerUp);
+
       let frame = 0;
       const render = () => {
         if (disposed) return;
-        cube.rotation.y += 0.0025;
-        cube.rotation.x = Math.sin(Date.now() / 5000) * 0.05;
+        if (!dragRef.current.active) yawRef.current += 0.0025;
+        cube.rotation.y = yawRef.current;
+        cube.rotation.x = pitchRef.current;
         renderer.render(scene, camera);
         frame = window.requestAnimationFrame(render);
       };
@@ -1581,6 +1610,10 @@ function SkyboxViewer({ value }: { value: SkyboxSkinSetForm }) {
       cleanup = () => {
         window.cancelAnimationFrame(frame);
         observer.disconnect();
+        renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+        renderer.domElement.removeEventListener("pointermove", onPointerMove);
+        renderer.domElement.removeEventListener("pointerup", onPointerUp);
+        renderer.domElement.removeEventListener("pointercancel", onPointerUp);
         materials.forEach((material) => {
           if ("map" in material && material.map) material.map.dispose();
           material.dispose();
@@ -1609,8 +1642,8 @@ function reviewDataSummary(kind: AssetKind, part: VariantTargetForm, items: Vari
   if (kind === "skin_part") return `${skinTypeLabel(part.slot)}${part.variants.length ? ` - ${part.variants.length} model${part.variants.length === 1 ? "" : "s"}` : ""}${bootsLabel(part) ? ` - ${bootsLabel(part)}` : ""}`;
   if (kind === "skin_set") return `${items.length} set item${items.length === 1 ? "" : "s"}`;
   if (kind === "shifter_skin_set") {
-    const count = shifterTargets.filter((target) => shifter[target.key].trim()).length;
-    return `${count} shifter texture${count === 1 ? "" : "s"}`;
+    const target = shifterTargets.find((item) => item.key === shifter.target)?.label ?? "Shifter";
+    return `${target} Shifter`;
   }
   const count = skyboxFaces.filter((face) => skybox[face.key].trim()).length;
   return `${count} skybox face${count === 1 ? "" : "s"}`;
