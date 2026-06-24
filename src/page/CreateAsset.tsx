@@ -155,6 +155,30 @@ const fallbackCatalog: VariantCatalog = {
     Head: Array.from({ length: 8 }, (_, i) => `Head${i}`).map(toCatalogOption),
     Back: Array.from({ length: 8 }, (_, i) => `Back${i}`).map(toCatalogOption),
   },
+  textureUrlAllowlist: [
+    "i.imgur.com/",
+    "imgur.com/",
+    "image.ibb.co/",
+    "i.ibb.co/",
+    "i.reddit.it/",
+    "cdn.discordapp.com/attachments/",
+    "media.discordapp.net/attachments/",
+    "images-ext-2.discordapp.net/external/",
+    "gyazo.com/",
+    "puu.sh/",
+    "i.postimg.cc/",
+    "postimg./",
+    "deviantart.com/",
+    "photobucket.com/",
+    "aotcorehome.files.wordpress.com/",
+    "s1.ax1x.com/",
+    "s27.postimg.io/",
+    "1.bp.blogspot.com/",
+    "tiebapic.baidu.com/",
+    "s25.postimg.gg/",
+    "imgse.com/",
+  ],
+  textureFileExtensions: [".jpg", ".png", ".jpeg"],
 };
 
 const httpUrl = z
@@ -191,7 +215,7 @@ const commonSchema = z
 const itemSchema = z
   .object({
     slot: z.string().min(1, "Slot is required"),
-    textureUrl: httpUrl,
+    textureUrl: z.string().trim().min(1, "Texture URL is required"),
     variants: z.array(z.string()),
     hookTiling: z.string().trim().optional(),
     boots: z.boolean().optional(),
@@ -200,7 +224,7 @@ const itemSchema = z
 const skinPartSchema = commonSchema
   .extend({
     slot: z.string().min(1, "Slot is required"),
-    textureUrl: httpUrl,
+    textureUrl: z.string().trim().min(1, "Texture URL is required"),
     variants: z.array(z.string()),
     hookTiling: z.string().trim().optional(),
     boots: z.boolean().optional(),
@@ -222,6 +246,48 @@ function mediaFromCommon(common: { thumbnailUrl: string; galleryUrls: string }) 
     ...(common.thumbnailUrl.trim() ? [{ kind: "thumbnail", url: common.thumbnailUrl.trim() }] : []),
     ...splitList(common.galleryUrls).map((url) => ({ kind: "gallery", url })),
   ];
+}
+
+function validateListingMedia(common: { thumbnailUrl: string }) {
+  if (!common.thumbnailUrl.trim()) throw new Error("Thumbnail URL is required");
+  httpUrl.parse(common.thumbnailUrl);
+}
+
+function validatePublishMedia(common: { thumbnailUrl: string; galleryUrls: string }) {
+  validateListingMedia(common);
+  const galleryUrls = splitList(common.galleryUrls);
+  if (galleryUrls.length === 0) throw new Error("Add at least one gallery image");
+  galleryUrls.forEach((url) => httpUrl.parse(url));
+}
+
+function catalogTextureAllowlist(catalog: VariantCatalog) {
+  return (catalog.textureUrlAllowlist?.length ? catalog.textureUrlAllowlist : fallbackCatalog.textureUrlAllowlist ?? [])
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean)
+    .map(stripTexturePrefix);
+}
+
+function stripTexturePrefix(value: string) {
+  let next = value;
+  for (const prefix of ["https://", "http://", "www."]) {
+    if (next.startsWith(prefix)) next = next.slice(prefix.length);
+  }
+  return next;
+}
+
+function validateTextureUrl(value: string, catalog: VariantCatalog) {
+  const lower = value.trim().toLowerCase();
+  if (!httpUrl.safeParse(lower).success) throw new Error("Texture URL must be a valid http(s) URL");
+
+  const extensions = catalog.textureFileExtensions?.length ? catalog.textureFileExtensions : fallbackCatalog.textureFileExtensions ?? [".jpg", ".png", ".jpeg"];
+  if (!extensions.some((extension) => lower.endsWith(extension.toLowerCase()))) {
+    throw new Error(`Texture URL must end with ${extensions.join(", ")}`);
+  }
+
+  const normalized = stripTexturePrefix(lower);
+  if (!catalogTextureAllowlist(catalog).some((entry) => normalized.startsWith(entry))) {
+    throw new Error("Texture URL host is not allowed for Workshop skins");
+  }
 }
 
 function normalizeSlug(value: string | undefined) {
@@ -275,6 +341,7 @@ function bootsPayload(value: { slot: string; boots?: boolean }) {
 
 function prepareTarget(value: VariantTargetForm, catalog: VariantCatalog) {
   const data = itemSchema.parse(value);
+  validateTextureUrl(data.textureUrl, catalog);
   if (!isCompatibilitySlot(data.slot, catalog)) {
     return { slot: data.slot, textureUrl: data.textureUrl, variantScope: "all" as const, ...hookTilingPayload(data) };
   }
@@ -486,7 +553,10 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
   }
 
   function validateStep() {
-    if (step === "listing") commonSchema.parse(common);
+    if (step === "listing") {
+      commonSchema.parse(common);
+      validateListingMedia(common);
+    }
     if (step === "data") {
       if (kind === "skin_part") prepareTarget(part, catalog);
       else {
@@ -509,6 +579,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
   function buildAsset() {
     if (kind === "skin_part") {
       const data = skinPartSchema.parse({ ...common, ...part });
+      validatePublishMedia(data);
       const target = prepareTarget(data, catalog);
       const assetSlug = normalizeSlug(data.assetSlug);
       return {
@@ -527,6 +598,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
     }
 
     const data = commonSchema.parse(common);
+    validatePublishMedia(data);
     if (items.length === 0) throw new Error("Add at least one set item");
     const assetSlug = normalizeSlug(data.assetSlug);
     return {
@@ -713,8 +785,9 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
                 <Textarea maxLength={144} value={common.shortDescription} onChange={(event) => setCommon({ ...common, shortDescription: event.target.value })} />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Thumbnail URL">
+                <Field label="Thumbnail URL *">
                   <Input className="h-10 text-sm" placeholder="https://i.imgur.com/thumb.png" value={common.thumbnailUrl} onChange={(event) => setCommon({ ...common, thumbnailUrl: event.target.value })} />
+                  <p className="text-xs text-muted-foreground">Required for publishing.</p>
                 </Field>
                 <Field label="Tags">
                   <Input className="h-10 text-sm" placeholder="hair, levi, red" value={common.tags} onChange={(event) => setCommon({ ...common, tags: event.target.value })} />
@@ -760,12 +833,13 @@ export function CreateAsset({ mode = "create", initialAsset = null }: { mode?: "
           <section className="grid gap-6 border-t border-border pt-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="grid content-start gap-4">
               <h2 className="text-sm font-semibold uppercase text-muted-foreground">Publish Preview</h2>
-              <Field label="Gallery URLs">
+              <Field label="Gallery URLs *">
                 <Textarea
                   placeholder="https://i.imgur.com/preview-1.png&#10;https://i.imgur.com/preview-2.png"
                   value={common.galleryUrls}
                   onChange={(event) => setCommon({ ...common, galleryUrls: event.target.value })}
                 />
+                <p className="text-xs text-muted-foreground">Add at least one image URL.</p>
               </Field>
               <GalleryPreview urls={splitList(common.galleryUrls)} title={common.title.trim() || "Untitled Asset"} />
               <MarkdownEditor value={common.descriptionMarkdown} onChange={(descriptionMarkdown) => setCommon({ ...common, descriptionMarkdown })} />

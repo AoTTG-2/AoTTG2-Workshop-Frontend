@@ -238,6 +238,8 @@ export interface VariantCatalog {
   humanSkinParts: string[];
   humanCompatibilitySlots?: string[];
   humanCompatibilityVariants?: Record<string, WorkshopVariantOption[]>;
+  textureUrlAllowlist?: string[];
+  textureFileExtensions?: string[];
 }
 
 export interface WorkshopComment {
