@@ -555,6 +555,11 @@ export async function listModerationReports(accessToken: string, status = "open"
   return workshopJson<ReportListResponse>(`/moderation/reports?${params.toString()}`, { headers: { authorization: `Bearer ${accessToken}` } });
 }
 
+export async function listModerationAssets(accessToken: string, status: "hidden" | "deleted", page = 1, pageSize = 24): Promise<AssetListResponse> {
+  const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+  return workshopJson<AssetListResponse>(`/moderation/assets?${params.toString()}`, { headers: { authorization: `Bearer ${accessToken}` } });
+}
+
 export async function resolveModerationReport(reportId: string, accessToken: string, note?: string | null): Promise<WorkshopReport> {
   return workshopJson<WorkshopReport>(`/moderation/reports/${encodeURIComponent(reportId)}/resolve`, jsonAuthInit("PUT", accessToken, { note }));
 }
@@ -567,8 +572,8 @@ export async function hideModerationAsset(assetId: string, accessToken: string):
   return workshopJson<WorkshopAsset>(`/moderation/assets/${encodeURIComponent(assetId)}/hide`, { method: "PUT", headers: { authorization: `Bearer ${accessToken}` } });
 }
 
-export async function restoreModerationAsset(assetId: string, accessToken: string): Promise<WorkshopAsset> {
-  return workshopJson<WorkshopAsset>(`/moderation/assets/${encodeURIComponent(assetId)}/restore`, { method: "PUT", headers: { authorization: `Bearer ${accessToken}` } });
+export async function restoreModerationAsset(assetId: string, accessToken: string, assetSlug?: string | null): Promise<WorkshopAsset> {
+  return workshopJson<WorkshopAsset>(`/moderation/assets/${encodeURIComponent(assetId)}/restore`, jsonAuthInit("PUT", accessToken, { assetSlug: assetSlug || null }));
 }
 
 export async function listModerationComments(accessToken: string, status: "reported" | "hidden" = "reported", page = 1, pageSize = 24): Promise<CommentListResponse> {
