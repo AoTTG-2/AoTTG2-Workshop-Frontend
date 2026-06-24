@@ -2,7 +2,7 @@
 
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label } from "@aottg2/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Gauge, LogIn, LogOut, Moon, ShieldAlert, Sun, UserCircle } from "lucide-react";
+import { Gauge, LogIn, LogOut, ShieldAlert, UserCircle } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
@@ -46,21 +46,19 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
 interface AppShellProps {
   children: ReactNode;
-  theme: "light" | "dark";
-  onToggleTheme: () => void;
 }
 
-export function AppShell({ children, theme, onToggleTheme }: AppShellProps) {
+export function AppShell({ children }: AppShellProps) {
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <TopBar theme={theme} onToggleTheme={onToggleTheme} />
+      <TopBar />
       <ScrollToTop />
       <div className="route-shell min-h-screen bg-background pt-14 lg:pt-16">{children}</div>
     </div>
   );
 }
 
-function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggleTheme">) {
+function TopBar() {
   const { isAuthenticated, isLoading, profile, workshopUser, logout, refreshProfile } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
@@ -69,7 +67,6 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
   const [creatorNameInput, setCreatorNameInput] = useState("");
   const [creatorNameAccepted, setCreatorNameAccepted] = useState(false);
   const [creatorNameBusy, setCreatorNameBusy] = useState(false);
-  const nextTheme = theme === "dark" ? "light" : "dark";
   const accountLabel = isLoading ? "ACCOUNT" : isAuthenticated ? profile?.displayName ?? "ACCOUNT" : "LOGIN";
   const libraryActive = pathname === "/library" || pathname === "/";
   const creatorsActive = pathname === "/creators";
@@ -152,12 +149,6 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
     window.location.href = websiteLogoutUrl("/");
   }
 
-  function switchTheme() {
-    onToggleTheme();
-    closeFocusedMenu();
-    setMobileOpen(false);
-  }
-
   return (
     <header className="fixed top-0 z-[1000] w-full overflow-visible">
       <div className="aottg2-texture relative z-[1000] flex h-14 w-full items-center justify-between px-4 shadow-lg lg:h-16 lg:px-8">
@@ -187,12 +178,9 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
             hasUnreadNotifications={hasUnreadNotifications}
             isAuthenticated={isAuthenticated}
             isLoading={isLoading}
-            theme={theme}
-            nextTheme={nextTheme}
             onDashboardOrLogin={goDashboardOrLogin}
             onProfileOrLogin={goProfileOrLogin}
             onLogout={handleLogout}
-            onToggleTheme={switchTheme}
           />
         </nav>
 
@@ -208,7 +196,6 @@ function TopBar({ theme, onToggleTheme }: Pick<AppShellProps, "theme" | "onToggl
           {canAccessModeration ? <MobileNavButton active={moderationActive} onClick={() => go("/moderation")}>Moderation</MobileNavButton> : null}
           {!isLoading && isAuthenticated ? <MobileNavButton onClick={goProfileOrLogin}>Profile</MobileNavButton> : null}
           <MobileNavButton active={accountActive} disabled={isLoading} showDot={hasUnreadNotifications} onClick={goDashboardOrLogin}>{isLoading ? "Account" : isAuthenticated ? "Dashboard" : "Login"}</MobileNavButton>
-          <MobileNavButton onClick={switchTheme}>Switch to {nextTheme === "dark" ? "Dark" : "Light"} Mode</MobileNavButton>
           {!isLoading && isAuthenticated ? <MobileNavButton onClick={handleLogout}>Logout</MobileNavButton> : null}
         </nav>
       ) : null}
@@ -245,17 +232,12 @@ interface AccountMenuProps {
   hasUnreadNotifications: boolean;
   isAuthenticated: boolean;
   isLoading: boolean;
-  theme: "light" | "dark";
-  nextTheme: "light" | "dark";
   onDashboardOrLogin: () => void;
   onProfileOrLogin: () => void;
   onLogout: () => void | Promise<void>;
-  onToggleTheme: () => void;
 }
 
-function AccountMenu({ accountActive, accountLabel, hasUnreadNotifications, isAuthenticated, isLoading, theme, nextTheme, onDashboardOrLogin, onProfileOrLogin, onLogout, onToggleTheme }: AccountMenuProps) {
-  const nextThemeLabel = nextTheme === "dark" ? "Switch to Dark Mode" : "Switch to Light Mode";
-
+function AccountMenu({ accountActive, accountLabel, hasUnreadNotifications, isAuthenticated, isLoading, onDashboardOrLogin, onProfileOrLogin, onLogout }: AccountMenuProps) {
   return (
     <div className="group relative z-[1101] flex h-full items-center">
       <button
@@ -268,7 +250,7 @@ function AccountMenu({ accountActive, accountLabel, hasUnreadNotifications, isAu
         {hasUnreadNotifications ? <NotificationDot className="absolute -right-2 -top-1" /> : null}
       </button>
       <div className="invisible fixed right-4 top-11 z-[1100] w-56 pt-1 opacity-0 transition-[opacity,visibility] duration-150 ease-out group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 lg:right-8">
-        <div role="menu" className={`aottg2-theme aottg2-palette-workshop aottg2-menu-content overflow-hidden rounded-none bg-popover p-1 text-popover-foreground shadow-md ${theme}`}>
+        <div role="menu" className="aottg2-theme aottg2-palette-workshop aottg2-menu-content dark overflow-hidden rounded-none bg-popover p-1 text-popover-foreground shadow-md">
           <MenuLabel>Account</MenuLabel>
           {isLoading ? (
             <MenuItem disabled onClick={() => {}}>
@@ -294,12 +276,6 @@ function AccountMenu({ accountActive, accountLabel, hasUnreadNotifications, isAu
               Logout
             </MenuItem>
           ) : null}
-          <MenuSeparator />
-          <MenuLabel>Appearance</MenuLabel>
-          <MenuItem onClick={onToggleTheme}>
-            <MenuIcon>{nextTheme === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}</MenuIcon>
-            {nextThemeLabel}
-          </MenuItem>
         </div>
       </div>
     </div>
@@ -312,10 +288,6 @@ function MenuIcon({ children }: { children: ReactNode }) {
 
 function MenuLabel({ children }: { children: ReactNode }) {
   return <div className="aottg2-emboss-bg aottg2-cta-primary -mx-1 -mt-1 mb-1 px-3 py-2 font-primary text-xs uppercase leading-none tracking-wider text-primary-foreground">{children}</div>;
-}
-
-function MenuSeparator() {
-  return <div className="-mx-1 my-1 h-px bg-muted" role="separator" />;
 }
 
 function MenuItem({ children, disabled = false, onClick }: { children: ReactNode; disabled?: boolean; onClick: () => void | Promise<void> }) {
