@@ -48,6 +48,11 @@ export function ModerationShell() {
     queryFn: () => listModerationReports(token!, status, type === "all" ? undefined : type, page, pageSize),
     enabled: Boolean(token && canAccess && view === "reports"),
   });
+  const openReportsQuery = useQuery({
+    queryKey: ["workshop", "moderation", "reports", "open-dot"],
+    queryFn: () => listModerationReports(token!, "open", undefined, 1, 1),
+    enabled: Boolean(token && canAccess),
+  });
   const assetsQuery = useQuery({
     queryKey: ["workshop", "moderation", "assets", view, page],
     queryFn: () => listModerationAssets(token!, view === "assets-deleted" ? "deleted" : "hidden", page, pageSize),
@@ -62,6 +67,7 @@ export function ModerationShell() {
   const reports = useMemo(() => reportsQuery.data?.reports ?? [], [reportsQuery.data?.reports]);
   const assets = useMemo(() => assetsQuery.data?.assets ?? [], [assetsQuery.data?.assets]);
   const comments = useMemo(() => commentsQuery.data?.comments ?? [], [commentsQuery.data?.comments]);
+  const hasOpenReports = (openReportsQuery.data?.total ?? 0) > 0;
   const selectedReport = useMemo(() => reports.find((item) => item.id === selectedId) ?? reports[0] ?? null, [reports, selectedId]);
   const selectedAsset = useMemo(() => assets.find((item) => item.id === selectedId) ?? assets[0] ?? null, [assets, selectedId]);
   const selectedComment = useMemo(() => comments.find((item) => item.id === selectedId) ?? comments[0] ?? null, [comments, selectedId]);
@@ -103,7 +109,10 @@ export function ModerationShell() {
           <SidebarSection>
             {statusFilters.map((item) => (
               <SidebarItem key={item.id} active={view === "reports" && status === item.id} icon={<Archive className="h-4 w-4" />} onClick={() => showReports(item.id, type)}>
-                {item.label}
+                <span className="flex min-w-0 items-center gap-2">
+                  <span>{item.label}</span>
+                  {item.id === "open" && hasOpenReports ? <NotificationDot /> : null}
+                </span>
               </SidebarItem>
             ))}
           </SidebarSection>
@@ -161,7 +170,7 @@ function ReportList({ reports, selectedId, loading, error, onSelect }: { reports
     <div className="grid content-start gap-3">
       {reports.map((report) => (
         <button key={report.id} type="button" className={listItemClass(selectedId === report.id)} onClick={() => onSelect(report.id)}>
-          <ListTitle title={targetTitle(report)} badge={report.status} />
+          <ListTitle title={targetTitle(report)} badge={report.status} dot={report.status === "open"} />
           <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 overflow-hidden text-xs leading-5 text-muted-foreground">
             <span>{report.reason}</span>
             <span>{formatDate(report.createdAt)}</span>
@@ -398,13 +407,20 @@ function CommentDetail({ comment, onDone }: { comment: WorkshopComment | null; o
   );
 }
 
-function ListTitle({ title, badge }: { title: string; badge: string }) {
+function ListTitle({ title, badge, dot = false }: { title: string; badge: string; dot?: boolean }) {
   return (
     <div className="flex min-w-0 items-start justify-between gap-3">
-      <span className="min-w-0 break-words font-primary text-sm uppercase leading-snug line-clamp-2">{title}</span>
+      <span className="flex min-w-0 items-start gap-2">
+        {dot ? <NotificationDot className="mt-1.5 shrink-0" /> : null}
+        <span className="min-w-0 break-words font-primary text-sm uppercase leading-snug line-clamp-2">{title}</span>
+      </span>
       <Badge className="shrink-0" variant={badge === "open" ? "secondary" : "outline"}>{badge}</Badge>
     </div>
   );
+}
+
+function NotificationDot({ className = "" }: { className?: string }) {
+  return <span className={`inline-block h-2 w-2 rounded-full bg-red-500 ${className}`} aria-hidden="true" />;
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
