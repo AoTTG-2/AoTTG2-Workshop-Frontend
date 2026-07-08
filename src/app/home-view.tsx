@@ -58,7 +58,7 @@ export function HomeView({ trending, popular }: { trending: WorkshopAsset[]; pop
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Button asChild size="lg">
-                <Link href="/library"><Search className="h-4 w-4" aria-hidden="true" />Discover</Link>
+                <Link href="/discover"><Search className="h-4 w-4" aria-hidden="true" />Discover</Link>
               </Button>
               <Button asChild size="lg" variant="secondary">
                 <Link href="/library/publish"><UploadCloud className="h-4 w-4" aria-hidden="true" />Publish</Link>
