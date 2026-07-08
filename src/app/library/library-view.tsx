@@ -2,16 +2,18 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Input } from "@aottg2/ui";
-import { Box, CalendarDays, ChevronDown, Download, Eye, FileCode2, Glasses, Grid3X3, Hammer, HardHat, Image, Map, Palette, ScanFace, Search, Shirt, Sparkles, Swords, ThumbsUp, UploadCloud, User, Zap } from "lucide-react";
+import { Box, CalendarDays, ChevronDown, Download, Eye, Glasses, Grid3X3, Hammer, HardHat, Image, Palette, ScanFace, Search, Shirt, Sparkles, Swords, ThumbsUp, UploadCloud, User, Zap } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useAuth } from "../../auth/useAuth";
+import { BrowseAssetGrid, BrowseSectionSkeleton, BrowseSectionState } from "../../components/BrowseSection";
 import { Pagination } from "../../components/Pagination";
 import { SideCard } from "../../components/SideCard";
 import { WorkshopAssetCard } from "../../components/WorkshopAssetCard";
 import { assetPath, listAssets, type AssetListQuery, type AssetListResponse } from "../../lib/api/workshop";
 import { toast } from "../../lib/toast";
+import { EXPERIENCE_TYPE_FILTERS } from "../../lib/workshop/taxonomy";
 
 const pageSize = 24;
 const typeFilters = [
@@ -28,12 +30,11 @@ const sortOptions = [
   { label: "Most Thanked", value: "most_liked", icon: ThumbsUp },
   { label: "Most Viewed", value: "most_viewed", icon: Eye },
 ];
-const categoryFilters = [
+const categoryFilters: Array<{ label: string; category?: string; type?: string; icon: typeof User }> = [
   { label: "Human", category: "human", icon: User },
   { label: "Shifter", category: "shifter", icon: Zap },
   { label: "Skybox", category: "skybox", icon: Image },
-  { label: "Custom Logics", type: "custom_logic", icon: FileCode2 },
-  { label: "Maps", type: "map", icon: Map },
+  ...EXPERIENCE_TYPE_FILTERS.map((item) => ({ label: item.label, type: item.type, icon: item.icon })),
 ];
 const humanParts = [
   { slot: "Hair", label: "Hair" },
@@ -107,7 +108,7 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
   const showHumanParts = isHumanBrowsing || (!category && !type && !slot && !target);
   const showShifterTypes = category === "shifter";
   const effectiveCategory = isHumanBrowsing ? "human" : category;
-  const effectiveType = isHumanBrowsing ? type : "";
+  const effectiveType = type;
   const effectiveSlot = isHumanBrowsing ? slot : "";
   const effectiveTarget = showShifterTypes ? target : "";
   const [searchText, setSearchText] = useState(q);
@@ -249,22 +250,23 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
             </div>
           </motion.div>
 
-          {query.isLoading ? <AssetGridSkeleton /> : null}
-          {query.isError ? <StateMessage title="Library unavailable" message="Assets could not be loaded. Check the Workshop API and try again." /> : null}
-          {query.data && query.data.assets.length === 0 ? <StateMessage title="No assets found" message="Try a different search, category, part, or tag filter." /> : null}
+          {query.isLoading ? <BrowseSectionSkeleton /> : null}
+          {query.isError ? <BrowseSectionState title="Library unavailable" message="Assets could not be loaded. Check the Workshop API and try again." /> : null}
+          {query.data && query.data.assets.length === 0 ? <BrowseSectionState title="No assets found" message="Try a different search, category, part, or tag filter." /> : null}
           {query.data && query.data.assets.length > 0 ? (
             <>
               <motion.div className="mb-3 flex items-center justify-between gap-3 text-sm text-muted-foreground" initial={motionInitial(reduceMotion, 6)} animate={motionAnimate} transition={motionTransition(0.09)}>
                 <span>Showing {query.data.assets.length} of {query.data.total} assets</span>
                 <span>{sortLabel(sort)} first</span>
               </motion.div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {query.data.assets.map((asset, index) => (
+              <BrowseAssetGrid
+                assets={query.data.assets}
+                renderAsset={(asset, index) => (
                   <motion.div key={asset.id} className="relative z-0 hover:z-50 focus-within:z-50" initial={motionInitial(reduceMotion, 10)} animate={motionAnimate} transition={motionTransition(Math.min(index, 12) * 0.025)}>
                     <WorkshopAssetCard asset={asset} onOpen={() => router.push(assetPath(asset))} onTagSelect={(nextTag) => updateParams({ tag: nextTag, page: 1 })} />
                   </motion.div>
-                ))}
-              </div>
+                )}
+              />
               <motion.div className="mt-8" initial={motionInitial(reduceMotion, 6)} animate={motionAnimate} transition={motionTransition(0.12)}>
                 <Pagination page={page} total={query.data.total} pageSize={pageSize} onPage={(nextPage) => updateParams({ page: nextPage })} />
               </motion.div>
@@ -300,34 +302,6 @@ function ActivePill({ label, onClear }: { label: string; onClear: () => void }) 
     <button type="button" className="min-h-8 border border-border px-2 text-xs font-semibold uppercase text-muted-foreground hover:text-primary" onClick={onClear}>
       {label} x
     </button>
-  );
-}
-
-function AssetGridSkeleton() {
-  return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {Array.from({ length: 9 }, (_, index) => (
-        <div key={index} className="grid border border-border bg-card/60">
-          <div className="aspect-video animate-pulse bg-muted" />
-          <div className="grid gap-3 p-3">
-            <div className="h-4 animate-pulse bg-muted" />
-            <div className="h-10 animate-pulse bg-muted" />
-            <div className="h-7 animate-pulse bg-muted" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function StateMessage({ title, message }: { title: string; message: string }) {
-  return (
-    <div className="grid min-h-60 place-items-center border border-border bg-card/40 p-6 text-center">
-      <div>
-        <h2 className="font-primary text-2xl uppercase text-foreground">{title}</h2>
-        <p className="mt-2 text-sm text-muted-foreground">{message}</p>
-      </div>
-    </div>
   );
 }
 

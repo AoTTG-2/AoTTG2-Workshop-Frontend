@@ -1,8 +1,9 @@
-import type { ShifterSkinSetPayload, SkinPartPayload, SkinSetItem, SkinSetPayload, SkyboxSkinSetPayload, WorkshopAsset } from "@/lib/api/workshop";
+import type { AddonPayload, CustomLogicPayload, MapPayload, ShifterSkinSetPayload, SkinPartPayload, SkinSetItem, SkinSetPayload, SkyboxSkinSetPayload, WorkshopAsset } from "@/lib/api/workshop";
+import { assetTypeLabel, isSkinAssetType } from "@/lib/workshop/taxonomy";
 import { formatLabel } from "./format";
 
 export function assetCategory(asset: WorkshopAsset) {
-  if ((asset.type === "skin_part" || asset.type === "skin_set" || asset.type === "shifter_skin_set" || asset.type === "skybox_skin_set") && "category" in asset.payload && typeof asset.payload.category === "string") {
+  if (isSkinAssetType(asset.type) && "category" in asset.payload && typeof asset.payload.category === "string") {
     return asset.payload.category;
   }
 
@@ -31,7 +32,31 @@ export function summarizeAsset(asset: WorkshopAsset) {
     return `${count} skybox face${count === 1 ? "" : "s"}`;
   }
 
-  return formatLabel(asset.type);
+  if (asset.type === "full_preset") {
+    return "Full character preset";
+  }
+
+  if (asset.type === "custom_logic" && isCustomLogicPayload(asset.payload)) {
+    const count = asset.payload.files?.length ?? 0;
+    const lines = asset.payload.metadata?.totalLines;
+    return lines ? `${count} logic ${count === 1 ? "file" : "files"} - ${lines} lines` : `${count} logic ${count === 1 ? "file" : "files"}`;
+  }
+
+  if (asset.type === "map" && isMapPayload(asset.payload)) {
+    const objectCount = asset.payload.metadata?.objectCount;
+    const environment = asset.payload.metadata?.environment;
+    if (objectCount && environment) return `${objectCount} objects - ${formatLabel(environment)}`;
+    if (objectCount) return `${objectCount} map objects`;
+    return "Playable map";
+  }
+
+  if (asset.type === "addon" && isAddonPayload(asset.payload)) {
+    const count = asset.payload.files?.length ?? 0;
+    const provides = asset.payload.metadata?.provides?.[0];
+    return provides ? `${count} addon ${count === 1 ? "file" : "files"} - ${provides}` : `${count} addon ${count === 1 ? "file" : "files"}`;
+  }
+
+  return assetTypeLabel(asset.type);
 }
 
 export function collectTextureUrls(asset: WorkshopAsset) {
@@ -90,4 +115,16 @@ export function isShifterSkinSetPayload(payload: WorkshopAsset["payload"]): payl
 
 export function isSkyboxSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkyboxSkinSetPayload {
   return "front" in payload || "back" in payload || "left" in payload || "right" in payload || "up" in payload || "down" in payload;
+}
+
+export function isCustomLogicPayload(payload: WorkshopAsset["payload"]): payload is CustomLogicPayload {
+  return "files" in payload || "metadata" in payload;
+}
+
+export function isMapPayload(payload: WorkshopAsset["payload"]): payload is MapPayload {
+  return "content" in payload || "screenshots" in payload || "metadata" in payload;
+}
+
+export function isAddonPayload(payload: WorkshopAsset["payload"]): payload is AddonPayload {
+  return "files" in payload || "metadata" in payload;
 }

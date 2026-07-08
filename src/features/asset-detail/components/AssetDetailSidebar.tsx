@@ -4,7 +4,8 @@ import { AssetTag, AssetTagLink } from "@/components/AssetTag";
 import { CreatorIdentityLink } from "@/components/CreatorIdentityLink";
 import { SideCard } from "@/components/SideCard";
 import type { WorkshopAsset } from "@/lib/api/workshop";
-import { formatDate, formatLabel } from "../format";
+import { assetTypeLabel } from "@/lib/workshop/taxonomy";
+import { formatDate } from "../format";
 import { motionAnimate, motionInitial, motionTransition } from "../motion";
 import { AssetSummary, SummaryRow, UsedBySetsCard } from "./AssetSummary";
 
@@ -15,7 +16,7 @@ export function AssetDetailSidebar({ asset, category, reduceMotion, summary, tex
         <SideCard title="Tags" variant="secondary">
         <div className="flex flex-wrap gap-2">
           <AssetTag variant="category" size="md">
-            {formatLabel(category)}
+            {assetTypeLabel(category)}
           </AssetTag>
           {asset.tags.length > 0 ? (
             asset.tags.map((tag, index) => (
@@ -45,8 +46,8 @@ export function AssetDetailSidebar({ asset, category, reduceMotion, summary, tex
       <motion.div initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.17)}>
         <SideCard title="Details" variant="secondary">
           <dl className="grid gap-2 text-sm">
-            <SummaryRow label="Type" value={formatLabel(asset.type)} />
-            <SummaryRow label="Category" value={formatLabel(category)} />
+            <SummaryRow label="Type" value={assetTypeLabel(asset.type)} />
+            <SummaryRow label="Category" value={assetTypeLabel(category)} />
             <SummaryRow label="Summary" value={summary} />
             <SummaryRow label="Published" value={formatDate(asset.createdAt)} />
             <SummaryRow label="Updated" value={formatDate(asset.updatedAt)} />

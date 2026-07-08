@@ -5,8 +5,10 @@ import { CalendarDays, Download, ThumbsUp } from "lucide-react";
 import { type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useState } from "react";
 import { AssetTag, AssetTagButton } from "./AssetTag";
 import { CreatorIdentityLink } from "./CreatorIdentityLink";
-import type { ShifterSkinSetPayload, SkinPartPayload, SkinSetPayload, SkyboxSkinSetPayload, WorkshopAsset, WorkshopMedia } from "../lib/api/workshop";
+import { assetCategory, summarizeAsset } from "../features/asset-detail/summary";
+import type { WorkshopAsset, WorkshopMedia } from "../lib/api/workshop";
 import { thumbnailDisplayUrls } from "../lib/media";
+import { assetTypeLabel } from "../lib/workshop/taxonomy";
 
 interface WorkshopAssetCardProps {
   asset: WorkshopAsset;
@@ -72,7 +74,7 @@ export function WorkshopAssetCard({ asset, interactive = true, onOpen, onTagSele
         </div>
         <p className="line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">{asset.shortDescription || plainPreview(asset.descriptionMarkdown) || summarizeAsset(asset)}</p>
         <div className="mt-auto flex flex-wrap gap-1.5">
-          <AssetTag variant="category">{formatLabel(category)}</AssetTag>
+          <AssetTag variant="category">{assetTypeLabel(category)}</AssetTag>
           {asset.tags.slice(0, 3).map((assetTag, index) =>
             onTagSelect ? (
               <AssetTagButton key={`${assetTag}-${index}`} onClick={(event) => handleTagClick(event, assetTag)}>
@@ -164,75 +166,11 @@ function selectPreview(media: WorkshopMedia[]) {
   return media.find((item) => item.kind === "thumbnail") ?? media.find((item) => item.kind === "gallery") ?? media[0];
 }
 
-function assetCategory(asset: WorkshopAsset) {
-  if ((asset.type === "skin_part" || asset.type === "skin_set" || asset.type === "shifter_skin_set" || asset.type === "skybox_skin_set") && "category" in asset.payload && typeof asset.payload.category === "string") {
-    return asset.payload.category;
-  }
-
-  return asset.type;
-}
-
-function summarizeAsset(asset: WorkshopAsset) {
-  if (asset.type === "skin_part" && isSkinPartPayload(asset.payload)) {
-    if (isGroupedSlot(asset.payload.slot)) return summarizeGroupedSlot(asset.payload);
-    const variants = asset.payload.variantScope === "specific" && asset.payload.variants?.length ? `: ${asset.payload.variants.join(", ")}` : "";
-    const boots = asset.payload.slot === "Costume" ? ` - Boots ${asset.payload.boots === false ? "Off" : "On"}` : "";
-    return `${asset.payload.slot ?? "Skin part"}${variants}${boots}`;
-  }
-
-  if (asset.type === "skin_set" && isSkinSetPayload(asset.payload)) {
-    const count = asset.payload.items?.length ?? 0;
-    return `${count} set ${count === 1 ? "item" : "items"}`;
-  }
-
-  if (asset.type === "shifter_skin_set" && isShifterSkinSetPayload(asset.payload)) {
-    return `${formatLabel(asset.payload.target ?? "shifter")} Shifter`;
-  }
-
-  if (asset.type === "skybox_skin_set" && isSkyboxSkinSetPayload(asset.payload)) {
-    const count = [asset.payload.front, asset.payload.back, asset.payload.left, asset.payload.right, asset.payload.up, asset.payload.down].filter(Boolean).length;
-    return `${count} skybox face${count === 1 ? "" : "s"}`;
-  }
-
-  return formatLabel(asset.type);
-}
-
-function isSkinPartPayload(payload: WorkshopAsset["payload"]): payload is SkinPartPayload {
-  return "slot" in payload || "textureUrl" in payload;
-}
-
-function isGroupedSlot(slot: string | undefined) {
-  return slot === "Blades" || slot === "AHSS" || slot === "APG" || slot === "Thunderspears" || slot === "Hooks";
-}
-
-function summarizeGroupedSlot(payload: SkinPartPayload) {
-  const left = Boolean(payload.textureUrls?.left);
-  const right = Boolean(payload.textureUrls?.right);
-  const side = payload.mirror ? "Mirror" : left && right ? "Both sides" : left ? "Left only" : right ? "Right only" : "No side";
-  return `${payload.slot ?? "Grouped part"} - ${side}`;
-}
-
-function isSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkinSetPayload {
-  return "items" in payload;
-}
-
-function isShifterSkinSetPayload(payload: WorkshopAsset["payload"]): payload is ShifterSkinSetPayload {
-  return "target" in payload || "textureUrl" in payload;
-}
-
-function isSkyboxSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkyboxSkinSetPayload {
-  return "front" in payload || "back" in payload || "left" in payload || "right" in payload || "up" in payload || "down" in payload;
-}
-
 function plainPreview(value?: string | null) {
   return (value ?? "")
     .replace(/[#*_`>~-]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function formatLabel(value: string) {
-  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function formatDate(value: string) {

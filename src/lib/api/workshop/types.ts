@@ -18,7 +18,16 @@ export interface PublicProfile {
   createdAt: string;
 }
 
-export type WorkshopAssetType = "skin_part" | "skin_set" | "shifter_skin_set" | "skybox_skin_set";
+export type WorkshopAssetType =
+  | "skin_part"
+  | "skin_set"
+  | "titan_skin_set"
+  | "shifter_skin_set"
+  | "skybox_skin_set"
+  | "full_preset"
+  | "map"
+  | "custom_logic"
+  | "addon";
 
 export interface WorkshopMedia {
   kind: "thumbnail" | "gallery" | string;
@@ -81,6 +90,52 @@ export interface SkyboxSkinSetPayload {
   down?: string | null;
 }
 
+export interface CustomLogicFile {
+  namespace?: string;
+  filename?: string;
+  content?: string;
+}
+
+export interface CustomLogicPayload {
+  files?: CustomLogicFile[];
+  metadata?: {
+    hasMainClass?: boolean;
+    hasComponents?: boolean;
+    totalLines?: number;
+    usesBuiltins?: string[];
+    minGameVersion?: string | null;
+  } | null;
+}
+
+export interface MapPayload {
+  content?: string;
+  metadata?: {
+    objectCount?: number;
+    objectTypes?: string[];
+    hasLogic?: boolean;
+    logicLines?: number | null;
+    customAssets?: string[] | null;
+    recommendedPlayers?: string | null;
+    environment?: string | null;
+  } | null;
+  screenshots?: string[];
+}
+
+export interface AddonFile {
+  filename?: string;
+  content?: string;
+  contentType?: string | null;
+}
+
+export interface AddonPayload {
+  files?: AddonFile[];
+  metadata?: {
+    minGameVersion?: string | null;
+    usesBuiltins?: string[];
+    provides?: string[];
+  } | null;
+}
+
 export interface WorkshopAsset {
   id: string;
   publicId: string;
@@ -92,7 +147,7 @@ export interface WorkshopAsset {
   descriptionMarkdown?: string | null;
   shortDescription?: string | null;
   media: WorkshopMedia[];
-  payload: SkinPartPayload | SkinSetPayload | ShifterSkinSetPayload | SkyboxSkinSetPayload | Record<string, unknown>;
+  payload: SkinPartPayload | SkinSetPayload | ShifterSkinSetPayload | SkyboxSkinSetPayload | CustomLogicPayload | MapPayload | AddonPayload | Record<string, unknown>;
   tags: string[];
   ownerAuthAccountId: string;
   authorDisplayName: string;
