@@ -94,6 +94,11 @@ export interface CustomLogicFile {
   namespace?: string;
   filename?: string;
   content?: string;
+  uploadId?: string;
+  key?: string;
+  objectKey?: string;
+  sizeBytes?: number;
+  contentType?: string | null;
 }
 
 export interface CustomLogicPayload {
@@ -109,6 +114,7 @@ export interface CustomLogicPayload {
 
 export interface MapPayload {
   content?: string;
+  file?: UploadedFileReference | null;
   metadata?: {
     objectCount?: number;
     objectTypes?: string[];
@@ -124,6 +130,19 @@ export interface MapPayload {
 export interface AddonFile {
   filename?: string;
   content?: string;
+  contentType?: string | null;
+  uploadId?: string;
+  key?: string;
+  objectKey?: string;
+  sizeBytes?: number;
+}
+
+export interface UploadedFileReference {
+  uploadId?: string;
+  key?: string;
+  objectKey?: string;
+  filename?: string;
+  sizeBytes?: number;
   contentType?: string | null;
 }
 

@@ -12,10 +12,10 @@ import { SkyboxFaceGrid, SkyboxViewer } from "./SkyboxFields";
 import { SlotPickerDialog } from "./SlotPickerDialog";
 import { VariantPickerDialog } from "./VariantPickerDialog";
 
-export function DataStep({ addNewSetItem, addNewSetItemAsset, addon, catalog, customLogic, items, kind, map, newSetItem, newSetItemAssetOpen, newSetItemSlotOpen, newSetItemSourceOpen, newSetItemVariantInitialPhase, newSetItemVariantOpen, part, selectNewSetItemSlot, setAddon, setCustomLogic, setItems, setMap, setNewSetItem, setNewSetItemAssetOpen, setNewSetItemSlotOpen, setNewSetItemSourceOpen, setNewSetItemVariantOpen, setPart, setShifter, setSkybox, shifter, skybox, startAddSetItem, startAddSetItemAsset, startAddSetItemUrl, toggleNewSetItemVariant, updateItem }: DataStepProps) {
-  if (kind === "map") return <MapDataFields map={map} setMap={setMap} />;
-  if (kind === "custom_logic") return <CustomLogicDataFields customLogic={customLogic} setCustomLogic={setCustomLogic} />;
-  if (kind === "addon") return <AddonDataFields addon={addon} setAddon={setAddon} />;
+export function DataStep({ addNewSetItem, addNewSetItemAsset, addon, catalog, customLogic, items, kind, map, newSetItem, newSetItemAssetOpen, newSetItemSlotOpen, newSetItemSourceOpen, newSetItemVariantInitialPhase, newSetItemVariantOpen, onUploadBusyChange, part, selectNewSetItemSlot, setAddon, setCustomLogic, setItems, setMap, setNewSetItem, setNewSetItemAssetOpen, setNewSetItemSlotOpen, setNewSetItemSourceOpen, setNewSetItemVariantOpen, setPart, setShifter, setSkybox, shifter, skybox, startAddSetItem, startAddSetItemAsset, startAddSetItemUrl, toggleNewSetItemVariant, updateItem }: DataStepProps) {
+  if (kind === "map") return <MapDataFields map={map} setMap={setMap} onUploadBusyChange={(busy) => onUploadBusyChange("map", busy)} />;
+  if (kind === "custom_logic") return <CustomLogicDataFields customLogic={customLogic} setCustomLogic={setCustomLogic} onUploadBusyChange={(key, busy) => onUploadBusyChange(`custom-logic-${key}`, busy)} />;
+  if (kind === "addon") return <AddonDataFields addon={addon} setAddon={setAddon} onUploadBusyChange={(key, busy) => onUploadBusyChange(`addon-${key}`, busy)} />;
 
   if (kind === "skin_part") {
     return (
@@ -84,6 +84,7 @@ interface DataStepProps {
   newSetItemSourceOpen: boolean;
   newSetItemVariantInitialPhase: "models" | "boots";
   newSetItemVariantOpen: boolean;
+  onUploadBusyChange: (key: string, busy: boolean) => void;
   part: VariantTargetForm;
   selectNewSetItemSlot: (slot: string) => void;
   setAddon: (addon: AddonForm) => void;

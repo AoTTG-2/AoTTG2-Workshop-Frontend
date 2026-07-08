@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { Button, Checkbox, Input, Textarea } from "@aottg2/ui";
 import type { AddonFileForm, AddonForm, CustomLogicFileForm, CustomLogicForm, MapForm } from "../types";
 import { Field } from "./Field";
+import { WorkshopFileUploadControl } from "./WorkshopFileUploadControl";
 
-export function MapDataFields({ map, setMap }: { map: MapForm; setMap: (map: MapForm) => void }) {
+export function MapDataFields({ map, onUploadBusyChange, setMap }: { map: MapForm; onUploadBusyChange: (busy: boolean) => void; setMap: (map: MapForm) => void }) {
   return (
     <section className="grid gap-5 border-t border-border pt-6">
       <h2 className="text-sm font-semibold uppercase text-muted-foreground">Map Data</h2>
+      <WorkshopFileUploadControl accept=".map,.txt,text/plain" assetType="map" label="Map File" onBusyChange={onUploadBusyChange} />
       <Field label="Map Content *">
         <Textarea className="min-h-64 font-mono text-xs" placeholder="Paste AoTTG2 map data here." value={map.content} onChange={(event) => setMap({ ...map, content: event.target.value })} />
       </Field>
@@ -25,13 +28,13 @@ export function MapDataFields({ map, setMap }: { map: MapForm; setMap: (map: Map
   );
 }
 
-export function CustomLogicDataFields({ customLogic, setCustomLogic }: { customLogic: CustomLogicForm; setCustomLogic: (customLogic: CustomLogicForm) => void }) {
+export function CustomLogicDataFields({ customLogic, onUploadBusyChange, setCustomLogic }: { customLogic: CustomLogicForm; onUploadBusyChange: (key: number, busy: boolean) => void; setCustomLogic: (customLogic: CustomLogicForm) => void }) {
   return (
     <section className="grid gap-5 border-t border-border pt-6">
       <h2 className="text-sm font-semibold uppercase text-muted-foreground">Custom Logic Files</h2>
       <div className="grid gap-4">
         {customLogic.files.map((file, index) => (
-          <LogicFileCard key={index} file={file} index={index} onChange={(nextFile) => updateLogicFile(customLogic, setCustomLogic, index, nextFile)} onRemove={customLogic.files.length > 1 ? () => setCustomLogic({ ...customLogic, files: customLogic.files.filter((_, fileIndex) => fileIndex !== index) }) : undefined} />
+          <LogicFileCard key={index} file={file} index={index} onChange={(nextFile) => updateLogicFile(customLogic, setCustomLogic, index, nextFile)} onUploadBusyChange={(busy) => onUploadBusyChange(index, busy)} onRemove={customLogic.files.length > 1 ? () => setCustomLogic({ ...customLogic, files: customLogic.files.filter((_, fileIndex) => fileIndex !== index) }) : undefined} />
         ))}
       </div>
       <div><Button type="button" variant="secondary" onClick={() => setCustomLogic({ ...customLogic, files: [...customLogic.files, { namespace: "Main", filename: "logic.cs", content: "" }] })}>Add logic file</Button></div>
@@ -43,13 +46,13 @@ export function CustomLogicDataFields({ customLogic, setCustomLogic }: { customL
   );
 }
 
-export function AddonDataFields({ addon, setAddon }: { addon: AddonForm; setAddon: (addon: AddonForm) => void }) {
+export function AddonDataFields({ addon, onUploadBusyChange, setAddon }: { addon: AddonForm; onUploadBusyChange: (key: number, busy: boolean) => void; setAddon: (addon: AddonForm) => void }) {
   return (
     <section className="grid gap-5 border-t border-border pt-6">
       <h2 className="text-sm font-semibold uppercase text-muted-foreground">Addon Files</h2>
       <div className="grid gap-4">
         {addon.files.map((file, index) => (
-          <AddonFileCard key={index} file={file} index={index} onChange={(nextFile) => updateAddonFile(addon, setAddon, index, nextFile)} onRemove={addon.files.length > 1 ? () => setAddon({ ...addon, files: addon.files.filter((_, fileIndex) => fileIndex !== index) }) : undefined} />
+          <AddonFileCard key={index} file={file} index={index} onChange={(nextFile) => updateAddonFile(addon, setAddon, index, nextFile)} onUploadBusyChange={(busy) => onUploadBusyChange(index, busy)} onRemove={addon.files.length > 1 ? () => setAddon({ ...addon, files: addon.files.filter((_, fileIndex) => fileIndex !== index) }) : undefined} />
         ))}
       </div>
       <div><Button type="button" variant="secondary" onClick={() => setAddon({ ...addon, files: [...addon.files, { filename: "addon.json", content: "", contentType: "application/json" }] })}>Add addon file</Button></div>
@@ -62,13 +65,20 @@ export function AddonDataFields({ addon, setAddon }: { addon: AddonForm; setAddo
   );
 }
 
-function LogicFileCard({ file, index, onChange, onRemove }: { file: CustomLogicFileForm; index: number; onChange: (file: CustomLogicFileForm) => void; onRemove?: () => void }) {
+function LogicFileCard({ file, index, onChange, onRemove, onUploadBusyChange }: { file: CustomLogicFileForm; index: number; onChange: (file: CustomLogicFileForm) => void; onRemove?: () => void; onUploadBusyChange: (busy: boolean) => void }) {
+  const [uploadBusy, setUploadBusy] = useState(false);
+  function updateUploadBusy(busy: boolean) {
+    setUploadBusy(busy);
+    onUploadBusyChange(busy);
+  }
+
   return (
     <div className="grid gap-4 border border-border bg-card/50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="font-primary text-sm uppercase text-foreground">Logic File {index + 1}</h3>
-        {onRemove ? <Button type="button" variant="ghost" onClick={onRemove}>Remove</Button> : null}
+        {onRemove ? <Button type="button" variant="ghost" disabled={uploadBusy} onClick={onRemove}>Remove</Button> : null}
       </div>
+      <WorkshopFileUploadControl accept=".cs,.cl,.json,.txt,text/plain,application/json" assetType="custom_logic" label="Logic File Upload" onBusyChange={updateUploadBusy} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Namespace"><Input className="h-10 text-sm" placeholder="Main" value={file.namespace} onChange={(event) => onChange({ ...file, namespace: event.target.value })} /></Field>
         <Field label="Filename *"><Input className="h-10 text-sm" placeholder="main.cs" value={file.filename} onChange={(event) => onChange({ ...file, filename: event.target.value })} /></Field>
@@ -78,13 +88,20 @@ function LogicFileCard({ file, index, onChange, onRemove }: { file: CustomLogicF
   );
 }
 
-function AddonFileCard({ file, index, onChange, onRemove }: { file: AddonFileForm; index: number; onChange: (file: AddonFileForm) => void; onRemove?: () => void }) {
+function AddonFileCard({ file, index, onChange, onRemove, onUploadBusyChange }: { file: AddonFileForm; index: number; onChange: (file: AddonFileForm) => void; onRemove?: () => void; onUploadBusyChange: (busy: boolean) => void }) {
+  const [uploadBusy, setUploadBusy] = useState(false);
+  function updateUploadBusy(busy: boolean) {
+    setUploadBusy(busy);
+    onUploadBusyChange(busy);
+  }
+
   return (
     <div className="grid gap-4 border border-border bg-card/50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="font-primary text-sm uppercase text-foreground">Addon File {index + 1}</h3>
-        {onRemove ? <Button type="button" variant="ghost" onClick={onRemove}>Remove</Button> : null}
+        {onRemove ? <Button type="button" variant="ghost" disabled={uploadBusy} onClick={onRemove}>Remove</Button> : null}
       </div>
+      <WorkshopFileUploadControl accept=".cs,.cl,.json,.txt,text/plain,application/json" assetType="addon" label="Addon File Upload" onBusyChange={updateUploadBusy} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Filename *"><Input className="h-10 text-sm" placeholder="addon.json" value={file.filename} onChange={(event) => onChange({ ...file, filename: event.target.value })} /></Field>
         <Field label="Content Type"><Input className="h-10 text-sm" placeholder="application/json" value={file.contentType} onChange={(event) => onChange({ ...file, contentType: event.target.value })} /></Field>

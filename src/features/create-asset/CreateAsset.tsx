@@ -59,12 +59,14 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
   const [creatorNameAccepted, setCreatorNameAccepted] = useState(false);
   const [creatorNameBusy, setCreatorNameBusy] = useState(false);
   const [pendingAsset, setPendingAsset] = useState<unknown>(null);
+  const [uploadBusyByKey, setUploadBusyByKey] = useState<Record<string, boolean>>({});
   const [publishAttestations, setPublishAttestations] = useState(createPublishAttestationState);
   const [officialUseContactAllowed, setOfficialUseContactAllowed] = useState(() => editableAsset?.officialUseContactAllowed === true);
   const stepIndex = Math.max(steps.findIndex((item) => item.key === step), 0);
   const normalizedCreatorName = normalizeSlug(creatorNameInput);
   const canSetCreatorName = Boolean(normalizedCreatorName) && normalizedCreatorName.length <= 32 && creatorNameAccepted && !creatorNameBusy;
   const canSubmitPublish = stepIndex < steps.length - 1 || allRequiredPublishAttestationsAccepted(publishAttestations);
+  const hasActiveUpload = Object.values(uploadBusyByKey).some(Boolean);
   const humanPartChoices = catalog.humanSkinParts.filter((slot) => slot && !legacyGroupedSlots.has(slot));
   const accountId = workshopUser?.authAccountId ?? profile?.accountId;
   const permissionSource = workshopUser ?? profile;
@@ -154,6 +156,10 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
     setPublishAttestations((current) => ({ ...current, [id]: checked }));
   }
 
+  function updateUploadBusy(key: string, busy: boolean) {
+    setUploadBusyByKey((current) => (current[key] === busy ? current : { ...current, [key]: busy }));
+  }
+
   function goNext() {
     try {
       validateStep();
@@ -166,6 +172,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isLoading) return;
+    if (hasActiveUpload) return toast.info("Upload in progress", { description: "Wait for the file upload to finish before continuing.", id: "create-asset-error" });
     if (stepIndex < steps.length - 1) return goNext();
     try {
       if (!allRequiredPublishAttestationsAccepted(publishAttestations)) {
@@ -227,7 +234,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
         <StepNav steps={steps} step={step} stepIndex={stepIndex} isEdit={isEdit} onStep={setStep} />
         {step === "type" ? <TypeStep humanPartChoices={humanPartChoices} kind={kind} part={part} setKind={setKind} setPart={setPart} setShifter={setShifter} shifter={shifter} skinCategory={skinCategory} selectSkinCategory={selectSkinCategory} /> : null}
         {step === "listing" ? <ListingStep authorName={authorName} common={common} isEdit={isEdit} kind={kind} setCommon={setCommon} skinCategory={skinCategory} /> : null}
-        {step === "data" ? <DataStep addNewSetItem={() => { if (newSetItem) { setItems((current) => [...current, newSetItem]); setNewSetItem(null); setNewSetItemVariantOpen(false); } }} addNewSetItemAsset={addNewSetItemAsset} addon={addon} catalog={catalog} customLogic={customLogic} items={items} kind={kind} map={map} newSetItem={newSetItem} newSetItemAssetOpen={newSetItemAssetOpen} newSetItemSlotOpen={newSetItemSlotOpen} newSetItemSourceOpen={newSetItemSourceOpen} newSetItemVariantInitialPhase={newSetItemVariantInitialPhase} newSetItemVariantOpen={newSetItemVariantOpen} part={part} selectNewSetItemSlot={selectNewSetItemSlot} setAddon={setAddon} setCustomLogic={setCustomLogic} setItems={setItems} setMap={setMap} setNewSetItem={setNewSetItem} setNewSetItemAssetOpen={setNewSetItemAssetOpen} setNewSetItemSlotOpen={setNewSetItemSlotOpen} setNewSetItemSourceOpen={setNewSetItemSourceOpen} setNewSetItemVariantOpen={setNewSetItemVariantOpen} setPart={setPart} setShifter={setShifter} setSkybox={setSkybox} shifter={shifter} skybox={skybox} startAddSetItem={startAddSetItem} startAddSetItemAsset={() => { setNewSetItemSourceOpen(false); setNewSetItemAssetOpen(true); }} startAddSetItemUrl={() => { setNewSetItemSourceOpen(false); setNewSetItemSlotOpen(true); }} toggleNewSetItemVariant={(variant) => setNewSetItem((current) => current ? { ...current, variants: current.variants.includes(variant) ? current.variants.filter((item) => item !== variant) : [...current.variants, variant] } : current)} updateItem={updateItem} /> : null}
+        {step === "data" ? <DataStep addNewSetItem={() => { if (newSetItem) { setItems((current) => [...current, newSetItem]); setNewSetItem(null); setNewSetItemVariantOpen(false); } }} addNewSetItemAsset={addNewSetItemAsset} addon={addon} catalog={catalog} customLogic={customLogic} items={items} kind={kind} map={map} newSetItem={newSetItem} newSetItemAssetOpen={newSetItemAssetOpen} newSetItemSlotOpen={newSetItemSlotOpen} newSetItemSourceOpen={newSetItemSourceOpen} newSetItemVariantInitialPhase={newSetItemVariantInitialPhase} newSetItemVariantOpen={newSetItemVariantOpen} onUploadBusyChange={updateUploadBusy} part={part} selectNewSetItemSlot={selectNewSetItemSlot} setAddon={setAddon} setCustomLogic={setCustomLogic} setItems={setItems} setMap={setMap} setNewSetItem={setNewSetItem} setNewSetItemAssetOpen={setNewSetItemAssetOpen} setNewSetItemSlotOpen={setNewSetItemSlotOpen} setNewSetItemSourceOpen={setNewSetItemSourceOpen} setNewSetItemVariantOpen={setNewSetItemVariantOpen} setPart={setPart} setShifter={setShifter} setSkybox={setSkybox} shifter={shifter} skybox={skybox} startAddSetItem={startAddSetItem} startAddSetItemAsset={() => { setNewSetItemSourceOpen(false); setNewSetItemAssetOpen(true); }} startAddSetItemUrl={() => { setNewSetItemSourceOpen(false); setNewSetItemSlotOpen(true); }} toggleNewSetItemVariant={(variant) => setNewSetItem((current) => current ? { ...current, variants: current.variants.includes(variant) ? current.variants.filter((item) => item !== variant) : [...current.variants, variant] } : current)} updateItem={updateItem} /> : null}
         {step === "description" ? (
           <>
             <DescriptionStep addon={addon} common={common} customLogic={customLogic} items={items} kind={kind} map={map} part={part} setCommon={setCommon} shifter={shifter} skybox={skybox} />
@@ -237,7 +244,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
         <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-6">
           <Button type="button" variant="ghost" onClick={() => router.push(cancelPath)}>Cancel</Button>
           {stepIndex > 0 ? <Button type="button" variant="secondary" onClick={() => setStep(steps[Math.max(stepIndex - 1, 0)].key)}>Back</Button> : null}
-          <Button type="submit" disabled={mutation.isPending || !canSubmitPublish}>{stepIndex < steps.length - 1 ? "Next" : mutation.isPending ? (isEdit ? "Saving..." : "Creating...") : isEdit ? "Save Changes" : "Publish Asset"}</Button>
+          <Button type="submit" disabled={mutation.isPending || hasActiveUpload || !canSubmitPublish}>{stepIndex < steps.length - 1 ? "Next" : mutation.isPending ? (isEdit ? "Saving..." : "Creating...") : isEdit ? "Save Changes" : "Publish Asset"}</Button>
         </div>
       </form>
       <CreatorNameDialog busy={creatorNameBusy} canSave={canSetCreatorName} creatorNameAccepted={creatorNameAccepted} creatorNameInput={creatorNameInput} onAcceptedChange={setCreatorNameAccepted} onConfirm={() => void confirmCreatorName()} onInputChange={setCreatorNameInput} onOpenChange={updateCreatorDialogOpen} open={creatorDialogOpen} />

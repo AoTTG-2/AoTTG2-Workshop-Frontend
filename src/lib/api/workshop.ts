@@ -9,3 +9,4 @@ export * from "./workshop/me";
 export * from "./workshop/moderation";
 export * from "./workshop/moderation-types";
 export * from "./workshop/types";
+export * from "./workshop/uploads";
