@@ -96,7 +96,8 @@ function TopBar() {
   const [creatorNameAccepted, setCreatorNameAccepted] = useState(false);
   const [creatorNameBusy, setCreatorNameBusy] = useState(false);
   const accountLabel = isLoading ? "ACCOUNT" : isAuthenticated ? profile?.displayName ?? "ACCOUNT" : "LOGIN";
-  const libraryActive = pathname === "/library" || pathname === "/";
+  const discoverActive = pathname === "/discover" || pathname === "/";
+  const skinsActive = pathname === "/skins";
   const creatorsActive = pathname === "/creators";
   const moderationActive = pathname === "/moderation";
   const accountActive = pathname === "/dashboard" || pathname === "/login";
@@ -197,8 +198,11 @@ function TopBar() {
         </button>
 
         <nav className="hidden flex-row items-center gap-6 font-primary text-foreground md:flex" aria-label="Primary navigation">
-          <button type="button" className={`workshop-control-free transition-colors duration-150 ease-out hover:text-primary ${libraryActive ? "text-primary" : ""}`} onClick={() => go("/library")}>
-            LIBRARY
+          <button type="button" className={`workshop-control-free transition-colors duration-150 ease-out hover:text-primary ${discoverActive ? "text-primary" : ""}`} onClick={() => go("/discover")}>
+            DISCOVER
+          </button>
+          <button type="button" className={`workshop-control-free transition-colors duration-150 ease-out hover:text-primary ${skinsActive ? "text-primary" : ""}`} onClick={() => go("/skins")}>
+            SKINS
           </button>
           <button type="button" className={`workshop-control-free transition-colors duration-150 ease-out hover:text-primary ${creatorsActive ? "text-primary" : ""}`} onClick={() => go("/creators")}>
             CREATORS
@@ -231,7 +235,8 @@ function TopBar() {
 
       {mobileOpen ? (
         <nav id="mobile-navigation" className="grid bg-background font-primary text-foreground shadow-[0_18px_30px_rgb(0_0_0_/_0.24)] md:hidden" aria-label="Mobile navigation">
-          <MobileNavButton active={libraryActive} onClick={() => go("/library")}>Library</MobileNavButton>
+          <MobileNavButton active={discoverActive} onClick={() => go("/discover")}>Discover</MobileNavButton>
+          <MobileNavButton active={skinsActive} onClick={() => go("/skins")}>Skins</MobileNavButton>
           <MobileNavButton active={creatorsActive} onClick={() => go("/creators")}>Creators</MobileNavButton>
           {canAccessModeration ? <MobileNavButton active={moderationActive} showDot={hasOpenReports} onClick={() => go("/moderation")}>Moderation</MobileNavButton> : null}
           {!isLoading && isAuthenticated ? <MobileNavButton onClick={goProfileOrLogin}>Profile</MobileNavButton> : null}

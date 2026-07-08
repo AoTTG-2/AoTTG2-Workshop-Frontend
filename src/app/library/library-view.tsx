@@ -13,7 +13,8 @@ import { SideCard } from "../../components/SideCard";
 import { WorkshopAssetCard } from "../../components/WorkshopAssetCard";
 import { assetPath, listAssets, type AssetListQuery, type AssetListResponse } from "../../lib/api/workshop";
 import { toast } from "../../lib/toast";
-import { EXPERIENCE_TYPE_FILTERS } from "../../lib/workshop/taxonomy";
+import { listAssetsByTypes } from "../../lib/workshop/asset-groups";
+import { EXPERIENCE_TYPE_FILTERS, isSkinAssetType, SKIN_ASSET_TYPES } from "../../lib/workshop/taxonomy";
 
 const pageSize = 24;
 const typeFilters = [
@@ -36,6 +37,7 @@ const categoryFilters: Array<{ label: string; category?: string; type?: string; 
   { label: "Skybox", category: "skybox", icon: Image },
   ...EXPERIENCE_TYPE_FILTERS.map((item) => ({ label: item.label, type: item.type, icon: item.icon })),
 ];
+const skinCategoryFilters = categoryFilters.filter((item) => !item.type);
 const humanParts = [
   { slot: "Hair", label: "Hair" },
   { slot: "Eye", label: "Eyes" },
@@ -88,21 +90,37 @@ interface LibraryViewProps {
   initialData: AssetListResponse;
   initialQuery: AssetListQuery & { page: number; pageSize: number };
   initialError: boolean;
+  mode?: "library" | "skins";
+  basePath?: string;
+  title?: string;
+  description?: string;
+  defaultSort?: string;
 }
 
-export function LibraryView({ initialData, initialError, initialQuery }: LibraryViewProps) {
+export function LibraryView({
+  initialData,
+  initialError,
+  initialQuery,
+  mode = "library",
+  basePath = "/library",
+  title = "Library",
+  description = "Browse shared AoTTG2 skins, sets, maps, and custom logic.",
+  defaultSort = "relevance",
+}: LibraryViewProps) {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const reduceMotion = useReducedMotion();
   const q = searchParams.get("q") ?? "";
-  const type = searchParams.get("type") ?? "";
+  const requestedType = searchParams.get("type") ?? "";
+  const type = mode === "skins" && !isSkinAssetType(requestedType) ? "" : requestedType;
   const tag = searchParams.get("tag") ?? "";
   const category = searchParams.get("category") ?? "";
   const slot = searchParams.get("slot") ?? "";
   const target = searchParams.get("target") ?? "";
-  const sort = searchParams.get("sort") ?? "relevance";
+  const sort = searchParams.get("sort") ?? defaultSort;
   const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
+  const filters = mode === "skins" ? skinCategoryFilters : categoryFilters;
   const humanTypeActive = type === "skin_part" || type === "skin_set" || Boolean(slot);
   const isHumanBrowsing = category === "human" || (!category && humanTypeActive);
   const showHumanParts = isHumanBrowsing || (!category && !type && !slot && !target);
@@ -118,8 +136,11 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
   }, [q]);
 
   const query = useQuery({
-    queryKey: ["workshop", "assets", { q, type: effectiveType, tag, category: effectiveCategory, slot: effectiveSlot, target: effectiveTarget, sort, page, pageSize }],
-    queryFn: () => listAssets({ q, type: effectiveType, tag, category: effectiveCategory, slot: normalizeSlotParam(effectiveSlot), target: effectiveTarget, sort, page, pageSize }),
+    queryKey: ["workshop", "assets", mode, { q, type: effectiveType, tag, category: effectiveCategory, slot: effectiveSlot, target: effectiveTarget, sort, page, pageSize }],
+    queryFn: () => {
+      const browseQuery = { q, type: effectiveType, tag, category: effectiveCategory, slot: normalizeSlotParam(effectiveSlot), target: effectiveTarget, sort, page, pageSize };
+      return mode === "skins" ? listAssetsByTypes(SKIN_ASSET_TYPES, browseQuery) : listAssets(browseQuery);
+    },
     initialData: sameQuery(initialQuery, { q, type: effectiveType, tag, category: effectiveCategory, slot: effectiveSlot, target: effectiveTarget, sort, page, pageSize }) && !initialError ? initialData : undefined,
   });
 
@@ -145,7 +166,7 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
     if (next.q !== undefined || next.type !== undefined || next.tag !== undefined || next.category !== undefined || next.slot !== undefined || next.target !== undefined || next.sort !== undefined) {
       params.delete("page");
     }
-    router.push(`/library${params.size ? `?${params}` : ""}`);
+    router.push(`${basePath}${params.size ? `?${params}` : ""}`);
   }
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -161,8 +182,8 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
       <motion.div className="mb-6 flex flex-wrap items-start justify-between gap-4" initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0)}>
         <div>
-          <h1 className="font-primary text-balance text-3xl font-semibold uppercase leading-none tracking-tight">Library</h1>
-          <p className="mt-2 max-w-2xl text-pretty text-sm text-muted-foreground">Browse shared AoTTG2 skins, sets, maps, and custom logic.</p>
+          <h1 className="font-primary text-balance text-3xl font-semibold uppercase leading-none tracking-tight">{title}</h1>
+          <p className="mt-2 max-w-2xl text-pretty text-sm text-muted-foreground">{description}</p>
         </div>
         <Button className="min-h-10 transition-transform active:scale-[0.96]" onClick={handleAddAsset}>
           <UploadCloud className="h-4 w-4" aria-hidden="true" />
@@ -174,7 +195,7 @@ export function LibraryView({ initialData, initialError, initialQuery }: Library
         <motion.aside className="grid content-start gap-4" initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.03)}>
           <SideCard title="Category" contentClassName="grid gap-1 p-2">
             <SideFilterItem active={!category && !type && !slot && !target} icon={<Grid3X3 className="h-4 w-4" />} label="All content" onClick={() => updateParams({ category: "", type: "", slot: "", target: "", page: 1 })} />
-            {categoryFilters.map((item) => (
+            {filters.map((item) => (
               <SideFilterItem
                 key={item.label}
                 active={Boolean((item.category && effectiveCategory === item.category && !effectiveSlot && !effectiveTarget) || (item.type && type === item.type))}
