@@ -1,4 +1,4 @@
-import type { AddonPayload, CustomLogicPayload, MapPayload, ShifterSkinSetPayload, SkinPartPayload, SkinSetPayload, SkyboxSkinSetPayload, WorkshopAsset } from "@/lib/api/workshop";
+import type { AddonFile, AddonPayload, CustomLogicFile, CustomLogicPayload, MapPayload, ShifterSkinSetPayload, SkinPartPayload, SkinSetPayload, SkyboxSkinSetPayload, UploadedFileReference, WorkshopAsset } from "@/lib/api/workshop";
 import { targetSlotPatch } from "./catalog";
 import { shifterTargets } from "./constants";
 import type { AddonForm, AssetKind, CommonAssetForm, CustomLogicForm, MapForm, ShifterSkinSetForm, SkinCategory, SkyboxSkinSetForm, VariantTargetForm } from "./types";
@@ -63,17 +63,29 @@ export function mapFromAsset(payload: MapPayload | Record<string, unknown>): Map
 export function customLogicFromAsset(payload: CustomLogicPayload | Record<string, unknown>): CustomLogicForm {
   const data = payload as CustomLogicPayload;
   const files = Array.isArray(data.files) && data.files.length > 0
-    ? data.files.map((file) => ({ namespace: file.namespace ?? "", filename: file.filename ?? "", content: file.content ?? "" }))
-    : [{ namespace: "Main", filename: "main.cs", content: "" }];
+    ? data.files.map((file) => ({ namespace: file.namespace ?? "", file: uploadedFileReferenceFromBundle(file) }))
+    : [{ namespace: "Main", file: null }];
   return { files, usesBuiltins: data.metadata?.usesBuiltins?.join(", ") ?? "", minGameVersion: data.metadata?.minGameVersion ?? "" };
 }
 
 export function addonFromAsset(payload: AddonPayload | Record<string, unknown>): AddonForm {
   const data = payload as AddonPayload;
   const files = Array.isArray(data.files) && data.files.length > 0
-    ? data.files.map((file) => ({ filename: file.filename ?? "", content: file.content ?? "", contentType: file.contentType ?? "" }))
-    : [{ filename: "addon.json", content: "", contentType: "application/json" }];
+    ? data.files.map((file) => ({ file: uploadedFileReferenceFromBundle(file) }))
+    : [{ file: null }];
   return { files, usesBuiltins: data.metadata?.usesBuiltins?.join(", ") ?? "", provides: data.metadata?.provides?.join(", ") ?? "", minGameVersion: data.metadata?.minGameVersion ?? "" };
+}
+
+function uploadedFileReferenceFromBundle(file: CustomLogicFile | AddonFile): UploadedFileReference | null {
+  if (!file.uploadId) return null;
+  return {
+    uploadId: file.uploadId,
+    key: file.key,
+    objectKey: file.objectKey,
+    filename: file.filename,
+    sizeBytes: file.sizeBytes,
+    contentType: file.contentType,
+  };
 }
 
 export function blankEditablePart(asset: WorkshopAsset | null): VariantTargetForm {

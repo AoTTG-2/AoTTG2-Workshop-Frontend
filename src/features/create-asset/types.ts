@@ -47,8 +47,7 @@ export interface MapForm {
 
 export interface CustomLogicFileForm {
   namespace: string;
-  filename: string;
-  content: string;
+  file: UploadedFileReference | null;
 }
 
 export interface CustomLogicForm {
@@ -58,9 +57,7 @@ export interface CustomLogicForm {
 }
 
 export interface AddonFileForm {
-  filename: string;
-  content: string;
-  contentType: string;
+  file: UploadedFileReference | null;
 }
 
 export interface AddonForm {

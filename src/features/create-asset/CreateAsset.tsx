@@ -46,8 +46,8 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
   const [shifter, setShifter] = useState<ShifterSkinSetForm>(() => (editableAsset?.type === "shifter_skin_set" ? shifterFromAsset(editableAsset.payload as ShifterSkinSetPayload) : { target: "eren", textureUrl: "" }));
   const [skybox, setSkybox] = useState<SkyboxSkinSetForm>(() => (editableAsset?.type === "skybox_skin_set" ? skyboxFromAsset(editableAsset.payload as SkyboxSkinSetPayload) : { front: "", back: "", left: "", right: "", up: "", down: "" }));
   const [map, setMap] = useState<MapForm>(() => (editableAsset?.type === "map" ? mapFromAsset(editableAsset.payload as MapPayload) : { content: "", file: null, objectCount: "", objectTypes: "", hasLogic: false, logicLines: "", customAssets: "", recommendedPlayers: "", environment: "" }));
-  const [customLogic, setCustomLogic] = useState<CustomLogicForm>(() => (editableAsset?.type === "custom_logic" ? customLogicFromAsset(editableAsset.payload as CustomLogicPayload) : { files: [{ namespace: "Main", filename: "main.cs", content: "" }], usesBuiltins: "", minGameVersion: "" }));
-  const [addon, setAddon] = useState<AddonForm>(() => (editableAsset?.type === "addon" ? addonFromAsset(editableAsset.payload as AddonPayload) : { files: [{ filename: "addon.json", content: "", contentType: "application/json" }], usesBuiltins: "", provides: "", minGameVersion: "" }));
+  const [customLogic, setCustomLogic] = useState<CustomLogicForm>(() => (editableAsset?.type === "custom_logic" ? customLogicFromAsset(editableAsset.payload as CustomLogicPayload) : { files: [{ namespace: "Main", file: null }], usesBuiltins: "", minGameVersion: "" }));
+  const [addon, setAddon] = useState<AddonForm>(() => (editableAsset?.type === "addon" ? addonFromAsset(editableAsset.payload as AddonPayload) : { files: [{ file: null }], usesBuiltins: "", provides: "", minGameVersion: "" }));
   const [newSetItem, setNewSetItem] = useState<VariantTargetForm | null>(null);
   const [newSetItemSourceOpen, setNewSetItemSourceOpen] = useState(false);
   const [newSetItemSlotOpen, setNewSetItemSlotOpen] = useState(false);

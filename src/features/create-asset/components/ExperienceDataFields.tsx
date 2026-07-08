@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { Button, Checkbox, Input, Textarea } from "@aottg2/ui";
+import { Button, Checkbox, Input } from "@aottg2/ui";
 import type { AddonFileForm, AddonForm, CustomLogicFileForm, CustomLogicForm, MapForm } from "../types";
 import { Field } from "./Field";
 import { WorkshopFileUploadControl } from "./WorkshopFileUploadControl";
+
+const maxBundleFiles = 5;
 
 export function MapDataFields({ map, onUploadBusyChange, setMap }: { map: MapForm; onUploadBusyChange: (busy: boolean) => void; setMap: (map: MapForm) => void }) {
   return (
@@ -34,7 +36,7 @@ export function CustomLogicDataFields({ customLogic, onUploadBusyChange, setCust
           <LogicFileCard key={index} file={file} index={index} onChange={(nextFile) => updateLogicFile(customLogic, setCustomLogic, index, nextFile)} onUploadBusyChange={(busy) => onUploadBusyChange(index, busy)} onRemove={customLogic.files.length > 1 ? () => setCustomLogic({ ...customLogic, files: customLogic.files.filter((_, fileIndex) => fileIndex !== index) }) : undefined} />
         ))}
       </div>
-      <div><Button type="button" variant="secondary" onClick={() => setCustomLogic({ ...customLogic, files: [...customLogic.files, { namespace: "Main", filename: "logic.cs", content: "" }] })}>Add logic file</Button></div>
+      <div><Button type="button" variant="secondary" disabled={customLogic.files.length >= maxBundleFiles} onClick={() => setCustomLogic({ ...customLogic, files: [...customLogic.files, { namespace: "Main", file: null }] })}>Add logic file</Button></div>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Uses Builtins"><Input className="h-10 text-sm" placeholder="Game, Hooks, UI" value={customLogic.usesBuiltins} onChange={(event) => setCustomLogic({ ...customLogic, usesBuiltins: event.target.value })} /></Field>
         <Field label="Minimum Game Version"><Input className="h-10 text-sm" placeholder="0.0.0" value={customLogic.minGameVersion} onChange={(event) => setCustomLogic({ ...customLogic, minGameVersion: event.target.value })} /></Field>
@@ -52,7 +54,7 @@ export function AddonDataFields({ addon, onUploadBusyChange, setAddon }: { addon
           <AddonFileCard key={index} file={file} index={index} onChange={(nextFile) => updateAddonFile(addon, setAddon, index, nextFile)} onUploadBusyChange={(busy) => onUploadBusyChange(index, busy)} onRemove={addon.files.length > 1 ? () => setAddon({ ...addon, files: addon.files.filter((_, fileIndex) => fileIndex !== index) }) : undefined} />
         ))}
       </div>
-      <div><Button type="button" variant="secondary" onClick={() => setAddon({ ...addon, files: [...addon.files, { filename: "addon.json", content: "", contentType: "application/json" }] })}>Add addon file</Button></div>
+      <div><Button type="button" variant="secondary" disabled={addon.files.length >= maxBundleFiles} onClick={() => setAddon({ ...addon, files: [...addon.files, { file: null }] })}>Add addon file</Button></div>
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Provides"><Input className="h-10 text-sm" placeholder="hook, command" value={addon.provides} onChange={(event) => setAddon({ ...addon, provides: event.target.value })} /></Field>
         <Field label="Uses Builtins"><Input className="h-10 text-sm" placeholder="Game, Hooks" value={addon.usesBuiltins} onChange={(event) => setAddon({ ...addon, usesBuiltins: event.target.value })} /></Field>
@@ -75,12 +77,8 @@ function LogicFileCard({ file, index, onChange, onRemove, onUploadBusyChange }: 
         <h3 className="font-primary text-sm uppercase text-foreground">Logic File {index + 1}</h3>
         {onRemove ? <Button type="button" variant="ghost" disabled={uploadBusy} onClick={onRemove}>Remove</Button> : null}
       </div>
-      <WorkshopFileUploadControl accept=".cs,.cl,.json,.txt,text/plain,application/json" assetType="custom_logic" label="Logic File Upload" onBusyChange={updateUploadBusy} />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Namespace"><Input className="h-10 text-sm" placeholder="Main" value={file.namespace} onChange={(event) => onChange({ ...file, namespace: event.target.value })} /></Field>
-        <Field label="Filename *"><Input className="h-10 text-sm" placeholder="main.cs" value={file.filename} onChange={(event) => onChange({ ...file, filename: event.target.value })} /></Field>
-      </div>
-      <Field label="Content *"><Textarea className="min-h-52 font-mono text-xs" value={file.content} onChange={(event) => onChange({ ...file, content: event.target.value })} /></Field>
+      <WorkshopFileUploadControl accept=".cs,.cl,.txt,text/plain" assetType="custom_logic" label="Logic File Upload" onBusyChange={updateUploadBusy} onReferenceChange={(reference) => onChange({ ...file, file: reference })} reference={file.file} required={!file.file} />
+      <Field label="Namespace"><Input className="h-10 text-sm" placeholder="Main" value={file.namespace} onChange={(event) => onChange({ ...file, namespace: event.target.value })} /></Field>
     </div>
   );
 }
@@ -98,12 +96,7 @@ function AddonFileCard({ file, index, onChange, onRemove, onUploadBusyChange }: 
         <h3 className="font-primary text-sm uppercase text-foreground">Addon File {index + 1}</h3>
         {onRemove ? <Button type="button" variant="ghost" disabled={uploadBusy} onClick={onRemove}>Remove</Button> : null}
       </div>
-      <WorkshopFileUploadControl accept=".cs,.cl,.json,.txt,text/plain,application/json" assetType="addon" label="Addon File Upload" onBusyChange={updateUploadBusy} />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Filename *"><Input className="h-10 text-sm" placeholder="addon.json" value={file.filename} onChange={(event) => onChange({ ...file, filename: event.target.value })} /></Field>
-        <Field label="Content Type"><Input className="h-10 text-sm" placeholder="application/json" value={file.contentType} onChange={(event) => onChange({ ...file, contentType: event.target.value })} /></Field>
-      </div>
-      <Field label="Content *"><Textarea className="min-h-52 font-mono text-xs" value={file.content} onChange={(event) => onChange({ ...file, content: event.target.value })} /></Field>
+      <WorkshopFileUploadControl accept=".cs,.cl,.json,.txt,text/plain,application/json" assetType="addon" label="Addon File Upload" onBusyChange={updateUploadBusy} onReferenceChange={(reference) => onChange({ ...file, file: reference })} reference={file.file} required={!file.file} />
     </div>
   );
 }

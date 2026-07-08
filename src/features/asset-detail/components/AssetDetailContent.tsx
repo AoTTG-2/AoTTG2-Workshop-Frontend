@@ -11,13 +11,13 @@ import { useAuth } from "@/auth/useAuth";
 import { canModerateAssets } from "@/auth/workshopPermissions";
 import { AssetTag } from "@/components/AssetTag";
 import { ReportDialog } from "@/components/ReportDialog";
-import { assetPath, createAssetDownloadUrl, deleteWorkshopAsset, listAssetUsedBy, reportWorkshopAsset, setAssetFavorite, setAssetLike, trackAssetDownload, type MapPayload, type UploadedFileReference, type WorkshopAsset } from "@/lib/api/workshop";
+import { assetPath, createAssetDownloadUrl, deleteWorkshopAsset, listAssetUsedBy, reportWorkshopAsset, setAssetFavorite, setAssetLike, trackAssetDownload, type AddonPayload, type CustomLogicPayload, type MapPayload, type UploadedFileReference, type WorkshopAsset } from "@/lib/api/workshop";
 import { toast } from "@/lib/toast";
 import { optimisticEngagement } from "../engagement";
 import { markdownComponents } from "../markdown";
 import { mediaForGallery } from "../media";
 import { motionAnimate, motionInitial, motionTransition, replayReaction } from "../motion";
-import { assetCategory, collectTextureUrls, isMapPayload, summarizeAsset } from "../summary";
+import { assetCategory, collectTextureUrls, isAddonPayload, isCustomLogicPayload, isMapPayload, summarizeAsset } from "../summary";
 import { AssetComments } from "./AssetComments";
 import { AssetDetailGallery } from "./AssetDetailGallery";
 import { AssetDetailHeader } from "./AssetDetailHeader";
@@ -102,17 +102,22 @@ export function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: W
   }
 
   async function importAsset() {
-    if (asset.type === "map" && isMapPayload(asset.payload) && hasDownloadReference(asset.payload.file)) {
+    const downloadReferences = collectDownloadReferences(asset);
+    if (downloadReferences.length > 0) {
       try {
-        const result = await createAssetDownloadUrl(asset.publicId || asset.id, asset.payload.file, getAccessToken());
-        if (result.engagement) {
-          setDisplayAsset((current) => ({ ...current, engagement: result.engagement?.engagement ?? current.engagement, viewerEngagement: result.engagement?.viewerEngagement ?? current.viewerEngagement }));
-        } else {
-          await onRefresh();
+        const results = await Promise.all(downloadReferences.map((reference) => createAssetDownloadUrl(asset.publicId || asset.id, reference, getAccessToken())));
+        const engagement = [...results].reverse().find((result) => result.engagement)?.engagement;
+        if (engagement) setDisplayAsset((current) => ({ ...current, engagement: engagement.engagement ?? current.engagement, viewerEngagement: engagement.viewerEngagement ?? current.viewerEngagement }));
+        else await onRefresh();
+
+        if (results.length === 1) {
+          window.location.assign(results[0].url);
+          return;
         }
-        window.location.assign(result.url);
+
+        await copyText("download URLs", results.map((result) => result.url).join("\n"));
       } catch (error) {
-        toast.error("Could not download map", { description: error instanceof Error ? error.message : "Try again." });
+        toast.error("Could not create download URL", { description: error instanceof Error ? error.message : "Try again." });
       }
       return;
     }
@@ -284,6 +289,17 @@ export function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: W
       <ReportDialog open={reportOpen} title="Report Asset" description="Send this asset to the moderation queue." busy={reportBusy} onOpenChange={setReportOpen} onSubmit={submitAssetReport} />
     </main>
   );
+}
+
+function collectDownloadReferences(asset: WorkshopAsset) {
+  if (asset.type === "map" && isMapPayload(asset.payload)) return hasDownloadReference(asset.payload.file) ? [asset.payload.file] : [];
+  if (asset.type === "custom_logic" && isCustomLogicPayload(asset.payload)) return collectFileBundleReferences(asset.payload);
+  if (asset.type === "addon" && isAddonPayload(asset.payload)) return collectFileBundleReferences(asset.payload);
+  return [];
+}
+
+function collectFileBundleReferences(payload: CustomLogicPayload | AddonPayload) {
+  return (payload.files ?? []).filter(hasDownloadReference);
 }
 
 function hasDownloadReference(file: MapPayload["file"]): file is UploadedFileReference & { uploadId: string } {
