@@ -11,31 +11,22 @@ export interface DiscoverData {
   featuredSkins: DiscoverSectionData;
   featuredExperiences: DiscoverSectionData;
   trendingExperiences: DiscoverSectionData;
-  newUploads: DiscoverSectionData;
+  trendingSkins: DiscoverSectionData;
   newSkins: DiscoverSectionData;
   newExperiences: DiscoverSectionData;
 }
 
 export async function loadDiscoverData(): Promise<DiscoverData> {
-  const [featuredSkins, featuredExperiences, trendingExperiences, newUploads, newSkins, newExperiences] = await Promise.all([
-    loadTypeGroup(SKIN_ASSET_TYPES, "popular", 12),
+  const [featuredExperiences, featuredSkins, trendingExperiences, trendingSkins, newExperiences, newSkins] = await Promise.all([
     loadTypeGroup(EXPERIENCE_ASSET_TYPES, "popular", 12),
+    loadTypeGroup(SKIN_ASSET_TYPES, "popular", 12),
     loadTypeGroup(EXPERIENCE_ASSET_TYPES, "trending", 24),
-    loadSingle({ sort: "newest", pageSize: 24 }),
-    loadTypeGroup(SKIN_ASSET_TYPES, "newest", 12),
+    loadTypeGroup(SKIN_ASSET_TYPES, "trending", 24),
     loadTypeGroup(EXPERIENCE_ASSET_TYPES, "newest", 12),
+    loadTypeGroup(SKIN_ASSET_TYPES, "newest", 12),
   ]);
 
-  return { featuredSkins, featuredExperiences, trendingExperiences, newUploads, newSkins, newExperiences };
-}
-
-async function loadSingle(query: { sort: "newest" | "popular" | "trending"; pageSize: number }): Promise<DiscoverSectionData> {
-  try {
-    const data = await listAssets(query);
-    return { assets: data.assets, error: false };
-  } catch {
-    return { assets: [], error: true };
-  }
+  return { featuredSkins, featuredExperiences, trendingExperiences, trendingSkins, newSkins, newExperiences };
 }
 
 async function loadTypeGroup(types: readonly WorkshopAssetType[], sort: "newest" | "popular" | "trending", pageSize: number): Promise<DiscoverSectionData> {

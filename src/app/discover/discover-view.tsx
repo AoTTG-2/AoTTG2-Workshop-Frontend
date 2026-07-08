@@ -28,7 +28,7 @@ export function DiscoverView({ data }: { data: DiscoverData }) {
       <motion.header className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5" initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0)}>
         <div className="min-w-0">
           <h1 className="font-primary text-balance text-3xl font-semibold uppercase leading-none tracking-tight">Discover</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Popular Workshop picks and the newest skins, maps, custom logic, and addons.</p>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Featured and trending skins, maps, custom logic, and addons.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="secondary">
@@ -40,27 +40,19 @@ export function DiscoverView({ data }: { data: DiscoverData }) {
         </div>
       </motion.header>
 
-      <DiscoverGridSection
-        title="New Uploads"
-        description="Fresh posts from every public Workshop type."
-        viewAllHref="/discover"
-        section={data.newUploads}
-        renderAsset={renderAsset}
-      />
-
       <div className="grid gap-8 xl:grid-cols-2">
-        <DiscoverRailSection
-          title="Featured Skins"
-          description="Popular skin uploads and sets."
-          viewAllHref="/skins?sort=popular"
-          section={data.featuredSkins}
-          renderAsset={renderAsset}
-        />
         <DiscoverRailSection
           title="Featured Experiences"
           description="Popular maps, custom logic, and addons."
           viewAllHref="/experiences?sort=popular"
           section={data.featuredExperiences}
+          renderAsset={renderAsset}
+        />
+        <DiscoverRailSection
+          title="Featured Skins"
+          description="Popular skin uploads and sets."
+          viewAllHref="/skins?sort=popular"
+          section={data.featuredSkins}
           renderAsset={renderAsset}
         />
       </div>
@@ -73,19 +65,27 @@ export function DiscoverView({ data }: { data: DiscoverData }) {
         renderAsset={renderAsset}
       />
 
+      <DiscoverGridSection
+        title="Trending Skins"
+        description="Skin uploads and sets getting recent activity."
+        viewAllHref="/skins?sort=trending"
+        section={data.trendingSkins}
+        renderAsset={renderAsset}
+      />
+
       <div className="grid gap-8 xl:grid-cols-2">
-        <DiscoverRailSection
-          title="New Skins"
-          description="Latest skin uploads."
-          viewAllHref="/skins?sort=newest"
-          section={data.newSkins}
-          renderAsset={renderAsset}
-        />
         <DiscoverRailSection
           title="New Experiences"
           description="Latest maps, custom logic, and addons."
           viewAllHref="/experiences?sort=newest"
           section={data.newExperiences}
+          renderAsset={renderAsset}
+        />
+        <DiscoverRailSection
+          title="New Skins"
+          description="Latest skin uploads."
+          viewAllHref="/skins?sort=newest"
+          section={data.newSkins}
           renderAsset={renderAsset}
         />
       </div>

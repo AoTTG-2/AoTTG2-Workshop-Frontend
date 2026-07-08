@@ -6,7 +6,7 @@ import { DiscoverView } from "./discover-view";
 
 export const metadata: Metadata = {
   title: "Discover | AoTTG2 Workshop",
-  description: "Discover popular and new AoTTG2 Workshop skins, maps, custom logic, and addons.",
+  description: "Discover featured, trending, and new AoTTG2 Workshop skins, maps, custom logic, and addons.",
   alternates: { canonical: "/discover" },
 };
 
@@ -19,14 +19,14 @@ export default async function DiscoverPage() {
     "@type": "CollectionPage",
     name: "AoTTG2 Workshop Discover",
     url: absoluteUrl("/discover"),
-    description: "Popular and new AoTTG2 Workshop skins, maps, custom logic, and addons.",
+    description: "Featured, trending, and new AoTTG2 Workshop skins, maps, custom logic, and addons.",
     hasPart: [
-      "New Uploads",
-      "Featured Skins",
       "Featured Experiences",
+      "Featured Skins",
       "Trending Experiences",
-      "New Skins",
+      "Trending Skins",
       "New Experiences",
+      "New Skins",
     ],
   };
 
