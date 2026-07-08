@@ -38,22 +38,34 @@ export function summarizeAsset(asset: WorkshopAsset) {
 
   if (asset.type === "custom_logic" && isCustomLogicPayload(asset.payload)) {
     const count = asset.payload.files?.length ?? 0;
-    const lines = asset.payload.metadata?.totalLines;
-    return lines ? `${count} logic ${count === 1 ? "file" : "files"} - ${lines} lines` : `${count} logic ${count === 1 ? "file" : "files"}`;
+    const details = [
+      asset.payload.metadata?.totalLines ? `${asset.payload.metadata.totalLines} lines` : "",
+      asset.payload.metadata?.usesBuiltins?.length ? `${asset.payload.metadata.usesBuiltins.length} builtins` : "",
+      asset.payload.metadata?.minGameVersion ? `v${asset.payload.metadata.minGameVersion}+` : "",
+    ].filter(Boolean);
+    return [formatCount(count, "logic file", "logic files"), ...details].join(" - ");
   }
 
   if (asset.type === "map" && isMapPayload(asset.payload)) {
     const objectCount = asset.payload.metadata?.objectCount;
     const environment = asset.payload.metadata?.environment;
-    if (objectCount && environment) return `${objectCount} objects - ${formatLabel(environment)}`;
-    if (objectCount) return `${objectCount} map objects`;
-    return "Playable map";
+    const players = asset.payload.metadata?.recommendedPlayers;
+    const details = [
+      players ? `${players} players` : "",
+      environment ? formatLabel(environment) : "",
+      objectCount ? `${objectCount} objects` : "",
+    ].filter(Boolean);
+    return details.length ? details.join(" - ") : "Playable map";
   }
 
   if (asset.type === "addon" && isAddonPayload(asset.payload)) {
     const count = asset.payload.files?.length ?? 0;
-    const provides = asset.payload.metadata?.provides?.[0];
-    return provides ? `${count} addon ${count === 1 ? "file" : "files"} - ${provides}` : `${count} addon ${count === 1 ? "file" : "files"}`;
+    const details = [
+      asset.payload.metadata?.provides?.length ? `Provides ${asset.payload.metadata.provides.slice(0, 2).join(", ")}` : "",
+      asset.payload.metadata?.usesBuiltins?.length ? `${asset.payload.metadata.usesBuiltins.length} builtins` : "",
+      asset.payload.metadata?.minGameVersion ? `v${asset.payload.metadata.minGameVersion}+` : "",
+    ].filter(Boolean);
+    return [formatCount(count, "addon file", "addon files"), ...details].join(" - ");
   }
 
   return assetTypeLabel(asset.type);
@@ -103,6 +115,10 @@ export function summarizeGroupedSlot(payload: SkinPartPayload | SkinSetItem) {
   if (left) return "Left only";
   if (right) return "Right only";
   return "No side";
+}
+
+function formatCount(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 export function isSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkinSetPayload {

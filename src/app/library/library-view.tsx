@@ -14,7 +14,7 @@ import { WorkshopAssetCard } from "../../components/WorkshopAssetCard";
 import { assetPath, listAssets, type AssetListQuery, type AssetListResponse } from "../../lib/api/workshop";
 import { toast } from "../../lib/toast";
 import { listAssetsByTypes } from "../../lib/workshop/asset-groups";
-import { EXPERIENCE_TYPE_FILTERS, isSkinAssetType, SKIN_ASSET_TYPES } from "../../lib/workshop/taxonomy";
+import { EXPERIENCE_ASSET_TYPES, EXPERIENCE_TYPE_FILTERS, isExperienceAssetType, isSkinAssetType, SKIN_ASSET_TYPES } from "../../lib/workshop/taxonomy";
 
 const pageSize = 24;
 const typeFilters = [
@@ -90,7 +90,7 @@ interface LibraryViewProps {
   initialData: AssetListResponse;
   initialQuery: AssetListQuery & { page: number; pageSize: number };
   initialError: boolean;
-  mode?: "library" | "skins";
+  mode?: "library" | "skins" | "experiences";
   basePath?: string;
   title?: string;
   description?: string;
@@ -113,17 +113,23 @@ export function LibraryView({
   const reduceMotion = useReducedMotion();
   const q = searchParams.get("q") ?? "";
   const requestedType = searchParams.get("type") ?? "";
-  const type = mode === "skins" && !isSkinAssetType(requestedType) ? "" : requestedType;
+  const type =
+    mode === "skins" && !isSkinAssetType(requestedType)
+      ? ""
+      : mode === "experiences" && !isExperienceAssetType(requestedType)
+        ? ""
+        : requestedType;
   const tag = searchParams.get("tag") ?? "";
-  const category = searchParams.get("category") ?? "";
-  const slot = searchParams.get("slot") ?? "";
-  const target = searchParams.get("target") ?? "";
+  const category = mode === "experiences" ? "" : searchParams.get("category") ?? "";
+  const slot = mode === "experiences" ? "" : searchParams.get("slot") ?? "";
+  const target = mode === "experiences" ? "" : searchParams.get("target") ?? "";
   const sort = searchParams.get("sort") ?? defaultSort;
   const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
-  const filters = mode === "skins" ? skinCategoryFilters : categoryFilters;
+  const filters = mode === "skins" ? skinCategoryFilters : mode === "experiences" ? EXPERIENCE_TYPE_FILTERS : categoryFilters;
+  const allContentLabel = mode === "experiences" ? "All Experiences" : "All content";
   const humanTypeActive = type === "skin_part" || type === "skin_set" || Boolean(slot);
   const isHumanBrowsing = category === "human" || (!category && humanTypeActive);
-  const showHumanParts = isHumanBrowsing || (!category && !type && !slot && !target);
+  const showHumanParts = mode !== "experiences" && (isHumanBrowsing || (!category && !type && !slot && !target));
   const showShifterTypes = category === "shifter";
   const effectiveCategory = isHumanBrowsing ? "human" : category;
   const effectiveType = type;
@@ -139,7 +145,9 @@ export function LibraryView({
     queryKey: ["workshop", "assets", mode, { q, type: effectiveType, tag, category: effectiveCategory, slot: effectiveSlot, target: effectiveTarget, sort, page, pageSize }],
     queryFn: () => {
       const browseQuery = { q, type: effectiveType, tag, category: effectiveCategory, slot: normalizeSlotParam(effectiveSlot), target: effectiveTarget, sort, page, pageSize };
-      return mode === "skins" ? listAssetsByTypes(SKIN_ASSET_TYPES, browseQuery) : listAssets(browseQuery);
+      if (mode === "skins") return listAssetsByTypes(SKIN_ASSET_TYPES, browseQuery);
+      if (mode === "experiences") return listAssetsByTypes(EXPERIENCE_ASSET_TYPES, browseQuery);
+      return listAssets(browseQuery);
     },
     initialData: sameQuery(initialQuery, { q, type: effectiveType, tag, category: effectiveCategory, slot: effectiveSlot, target: effectiveTarget, sort, page, pageSize }) && !initialError ? initialData : undefined,
   });
@@ -194,14 +202,14 @@ export function LibraryView({
       <div className="grid gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
         <motion.aside className="grid content-start gap-4" initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.03)}>
           <SideCard title="Category" contentClassName="grid gap-1 p-2">
-            <SideFilterItem active={!category && !type && !slot && !target} icon={<Grid3X3 className="h-4 w-4" />} label="All content" onClick={() => updateParams({ category: "", type: "", slot: "", target: "", page: 1 })} />
+            <SideFilterItem active={!category && !type && !slot && !target} icon={<Grid3X3 className="h-4 w-4" />} label={allContentLabel} onClick={() => updateParams({ category: "", type: "", slot: "", target: "", page: 1 })} />
             {filters.map((item) => (
               <SideFilterItem
                 key={item.label}
-                active={Boolean((item.category && effectiveCategory === item.category && !effectiveSlot && !effectiveTarget) || (item.type && type === item.type))}
+                active={Boolean((filterCategory(item) && effectiveCategory === filterCategory(item) && !effectiveSlot && !effectiveTarget) || (filterType(item) && type === filterType(item)))}
                 icon={<item.icon className="h-4 w-4" />}
                 label={item.label}
-                onClick={() => updateParams({ category: item.category ?? "", type: item.type ?? "", slot: "", target: "", page: 1 })}
+                onClick={() => updateParams({ category: filterCategory(item) ?? "", type: filterType(item) ?? "", slot: "", target: "", page: 1 })}
               />
             ))}
           </SideCard>
@@ -264,6 +272,7 @@ export function LibraryView({
               )}
               <div className="flex flex-wrap gap-2">
                 {tag ? <ActivePill label={`Tag: ${tag}`} onClear={() => updateParams({ tag: "", page: 1 })} /> : null}
+                {mode === "experiences" && effectiveType ? <ActivePill label={`Type: ${formatLabel(effectiveType)}`} onClear={() => updateParams({ type: "", page: 1 })} /> : null}
                 {effectiveCategory ? <ActivePill label={`Category: ${formatLabel(effectiveCategory)}`} onClear={() => updateParams({ category: "", type: "", slot: "", target: "", page: 1 })} /> : null}
                 {effectiveSlot ? <ActivePill label={`Part: ${effectiveSlot}`} onClear={() => updateParams({ slot: "", page: 1 })} /> : null}
                 {effectiveTarget ? <ActivePill label={`Shifter: ${formatLabel(effectiveTarget)}`} onClear={() => updateParams({ target: "", page: 1 })} /> : null}
@@ -328,6 +337,14 @@ function ActivePill({ label, onClear }: { label: string; onClear: () => void }) 
 
 function normalizeSlotParam(value: string) {
   return value;
+}
+
+function filterCategory(item: (typeof categoryFilters)[number] | (typeof EXPERIENCE_TYPE_FILTERS)[number]) {
+  return "category" in item ? item.category : undefined;
+}
+
+function filterType(item: (typeof categoryFilters)[number] | (typeof EXPERIENCE_TYPE_FILTERS)[number]) {
+  return "type" in item ? item.type : undefined;
 }
 
 function formatLabel(value: string) {

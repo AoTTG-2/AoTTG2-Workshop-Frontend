@@ -98,6 +98,7 @@ function TopBar() {
   const accountLabel = isLoading ? "ACCOUNT" : isAuthenticated ? profile?.displayName ?? "ACCOUNT" : "LOGIN";
   const discoverActive = pathname === "/discover" || pathname === "/";
   const skinsActive = pathname === "/skins";
+  const experiencesActive = pathname === "/experiences";
   const creatorsActive = pathname === "/creators";
   const moderationActive = pathname === "/moderation";
   const accountActive = pathname === "/dashboard" || pathname === "/login";
@@ -204,6 +205,9 @@ function TopBar() {
           <button type="button" className={`workshop-control-free transition-colors duration-150 ease-out hover:text-primary ${skinsActive ? "text-primary" : ""}`} onClick={() => go("/skins")}>
             SKINS
           </button>
+          <button type="button" className={`workshop-control-free transition-colors duration-150 ease-out hover:text-primary ${experiencesActive ? "text-primary" : ""}`} onClick={() => go("/experiences")}>
+            EXPERIENCES
+          </button>
           <button type="button" className={`workshop-control-free transition-colors duration-150 ease-out hover:text-primary ${creatorsActive ? "text-primary" : ""}`} onClick={() => go("/creators")}>
             CREATORS
           </button>
@@ -237,6 +241,7 @@ function TopBar() {
         <nav id="mobile-navigation" className="grid bg-background font-primary text-foreground shadow-[0_18px_30px_rgb(0_0_0_/_0.24)] md:hidden" aria-label="Mobile navigation">
           <MobileNavButton active={discoverActive} onClick={() => go("/discover")}>Discover</MobileNavButton>
           <MobileNavButton active={skinsActive} onClick={() => go("/skins")}>Skins</MobileNavButton>
+          <MobileNavButton active={experiencesActive} onClick={() => go("/experiences")}>Experiences</MobileNavButton>
           <MobileNavButton active={creatorsActive} onClick={() => go("/creators")}>Creators</MobileNavButton>
           {canAccessModeration ? <MobileNavButton active={moderationActive} showDot={hasOpenReports} onClick={() => go("/moderation")}>Moderation</MobileNavButton> : null}
           {!isLoading && isAuthenticated ? <MobileNavButton onClick={goProfileOrLogin}>Profile</MobileNavButton> : null}
