@@ -23,6 +23,7 @@ import { CreatorNameDialog } from "./components/CreatorNameDialog";
 import { DataStep } from "./components/DataStep";
 import { DescriptionStep } from "./components/DescriptionStep";
 import { ListingStep } from "./components/ListingStep";
+import { PublishAttestations, allRequiredPublishAttestationsAccepted, createPublishAttestationState, type PublishAttestationKey } from "./components/PublishAttestations";
 import { StepNav } from "./components/StepNav";
 import { TypeStep } from "./components/TypeStep";
 
@@ -55,9 +56,12 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
   const [creatorNameAccepted, setCreatorNameAccepted] = useState(false);
   const [creatorNameBusy, setCreatorNameBusy] = useState(false);
   const [pendingAsset, setPendingAsset] = useState<unknown>(null);
+  const [publishAttestations, setPublishAttestations] = useState(createPublishAttestationState);
+  const [officialUseContactAllowed, setOfficialUseContactAllowed] = useState(() => editableAsset?.officialUseContactAllowed === true);
   const stepIndex = Math.max(steps.findIndex((item) => item.key === step), 0);
   const normalizedCreatorName = normalizeSlug(creatorNameInput);
   const canSetCreatorName = Boolean(normalizedCreatorName) && normalizedCreatorName.length <= 32 && creatorNameAccepted && !creatorNameBusy;
+  const canSubmitPublish = stepIndex < steps.length - 1 || allRequiredPublishAttestationsAccepted(publishAttestations);
   const humanPartChoices = catalog.humanSkinParts.filter((slot) => slot && !legacyGroupedSlots.has(slot));
   const accountId = workshopUser?.authAccountId ?? profile?.accountId;
   const permissionSource = workshopUser ?? profile;
@@ -140,6 +144,10 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
     if (step === "description") buildAsset(kind, common, part, items, shifter, skybox, catalog);
   }
 
+  function updatePublishAttestation(id: PublishAttestationKey, checked: boolean) {
+    setPublishAttestations((current) => ({ ...current, [id]: checked }));
+  }
+
   function goNext() {
     try {
       validateStep();
@@ -154,7 +162,10 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
     if (isLoading) return;
     if (stepIndex < steps.length - 1) return goNext();
     try {
-      const asset = buildAsset(kind, common, part, items, shifter, skybox, catalog);
+      if (!allRequiredPublishAttestationsAccepted(publishAttestations)) {
+        return toast.error("Publish acknowledgements required", { description: "Check every required responsibility box before publishing.", id: "create-asset-error" });
+      }
+      const asset = { ...buildAsset(kind, common, part, items, shifter, skybox, catalog), officialUseContactAllowed };
       if (isEdit) return mutation.mutate(updatePayloadFromAssetForm(asset));
       if (!workshopUser) return toast.error("Could not load Workshop profile", { description: "Try again in a moment." });
       if (!workshopUser.creatorName) {
@@ -211,11 +222,16 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
         {step === "type" ? <TypeStep humanPartChoices={humanPartChoices} kind={kind} part={part} setKind={setKind} setPart={setPart} setShifter={setShifter} shifter={shifter} skinCategory={skinCategory} selectSkinCategory={selectSkinCategory} /> : null}
         {step === "listing" ? <ListingStep authorName={authorName} common={common} isEdit={isEdit} kind={kind} setCommon={setCommon} skinCategory={skinCategory} /> : null}
         {step === "data" ? <DataStep addNewSetItem={() => { if (newSetItem) { setItems((current) => [...current, newSetItem]); setNewSetItem(null); setNewSetItemVariantOpen(false); } }} addNewSetItemAsset={addNewSetItemAsset} catalog={catalog} items={items} kind={kind} newSetItem={newSetItem} newSetItemAssetOpen={newSetItemAssetOpen} newSetItemSlotOpen={newSetItemSlotOpen} newSetItemSourceOpen={newSetItemSourceOpen} newSetItemVariantInitialPhase={newSetItemVariantInitialPhase} newSetItemVariantOpen={newSetItemVariantOpen} part={part} selectNewSetItemSlot={selectNewSetItemSlot} setItems={setItems} setNewSetItem={setNewSetItem} setNewSetItemAssetOpen={setNewSetItemAssetOpen} setNewSetItemSlotOpen={setNewSetItemSlotOpen} setNewSetItemSourceOpen={setNewSetItemSourceOpen} setNewSetItemVariantOpen={setNewSetItemVariantOpen} setPart={setPart} setShifter={setShifter} setSkybox={setSkybox} shifter={shifter} skybox={skybox} startAddSetItem={startAddSetItem} startAddSetItemAsset={() => { setNewSetItemSourceOpen(false); setNewSetItemAssetOpen(true); }} startAddSetItemUrl={() => { setNewSetItemSourceOpen(false); setNewSetItemSlotOpen(true); }} toggleNewSetItemVariant={(variant) => setNewSetItem((current) => current ? { ...current, variants: current.variants.includes(variant) ? current.variants.filter((item) => item !== variant) : [...current.variants, variant] } : current)} updateItem={updateItem} /> : null}
-        {step === "description" ? <DescriptionStep common={common} items={items} kind={kind} part={part} setCommon={setCommon} shifter={shifter} skybox={skybox} /> : null}
+        {step === "description" ? (
+          <>
+            <DescriptionStep common={common} items={items} kind={kind} part={part} setCommon={setCommon} shifter={shifter} skybox={skybox} />
+            <PublishAttestations officialUseContactAllowed={officialUseContactAllowed} onAttestationChange={updatePublishAttestation} onOfficialUseContactAllowedChange={setOfficialUseContactAllowed} values={publishAttestations} />
+          </>
+        ) : null}
         <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-6">
           <Button type="button" variant="ghost" onClick={() => router.push(cancelPath)}>Cancel</Button>
           {stepIndex > 0 ? <Button type="button" variant="secondary" onClick={() => setStep(steps[Math.max(stepIndex - 1, 0)].key)}>Back</Button> : null}
-          <Button type="submit" disabled={mutation.isPending}>{stepIndex < steps.length - 1 ? "Next" : mutation.isPending ? (isEdit ? "Saving..." : "Creating...") : isEdit ? "Save Changes" : "Publish Asset"}</Button>
+          <Button type="submit" disabled={mutation.isPending || !canSubmitPublish}>{stepIndex < steps.length - 1 ? "Next" : mutation.isPending ? (isEdit ? "Saving..." : "Creating...") : isEdit ? "Save Changes" : "Publish Asset"}</Button>
         </div>
       </form>
       <CreatorNameDialog busy={creatorNameBusy} canSave={canSetCreatorName} creatorNameAccepted={creatorNameAccepted} creatorNameInput={creatorNameInput} onAcceptedChange={setCreatorNameAccepted} onConfirm={() => void confirmCreatorName()} onInputChange={setCreatorNameInput} onOpenChange={updateCreatorDialogOpen} open={creatorDialogOpen} />

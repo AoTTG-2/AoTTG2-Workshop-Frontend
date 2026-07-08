@@ -102,6 +102,7 @@ export interface WorkshopAsset {
   updatedAt: string;
   engagement?: AssetEngagement;
   viewerEngagement?: ViewerEngagement | null;
+  officialUseContactAllowed?: boolean;
 }
 
 export interface AssetEngagement {

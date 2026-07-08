@@ -3,6 +3,7 @@
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label } from "@aottg2/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Gauge, LogIn, LogOut, ShieldAlert, UserCircle } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
@@ -11,6 +12,7 @@ import { getAccessToken } from "./auth/storage";
 import { useAuth } from "./auth/useAuth";
 import { canAccessWorkshopModeration, canResolveReports } from "./auth/workshopPermissions";
 import { listModerationReports, listNotifications, setCreatorName } from "./lib/api/workshop";
+import { LEGAL_FOOTER_LINKS } from "./lib/legal";
 import { toast } from "./lib/toast";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
@@ -54,7 +56,33 @@ export function AppShell({ children }: AppShellProps) {
       <TopBar />
       <ScrollToTop />
       <div className="route-shell min-h-screen bg-background pt-14 lg:pt-16">{children}</div>
+      <WorkshopFooter />
     </div>
+  );
+}
+
+function WorkshopFooter() {
+  return (
+    <footer className="aottg2-texture border-t border-border/80 px-6 py-6 text-sm text-muted-foreground">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="grid gap-3">
+          <nav className="flex flex-wrap gap-x-5 gap-y-2 font-primary text-xs uppercase tracking-wide text-foreground" aria-label="Workshop legal links">
+            {LEGAL_FOOTER_LINKS.map((link) => (
+              <Link key={link.href} href={link.href} className="transition-colors duration-150 hover:text-primary">
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+          <p>Unofficial fan project. User-submitted listings and uploads.</p>
+        </div>
+        <p className="font-primary text-xs uppercase tracking-wide text-foreground">
+          AoTTG Workshop developed by{" "}
+          <a href="https://gisketch.com" target="_blank" rel="noreferrer" className="text-primary transition-colors duration-150 hover:text-foreground">
+            gisketch
+          </a>
+        </p>
+      </div>
+    </footer>
   );
 }
 
@@ -226,6 +254,12 @@ function TopBar() {
               <Checkbox id="nav-creator-name-forever" checked={creatorNameAccepted} onCheckedChange={(checked) => setCreatorNameAccepted(checked === true)} />
               <Label htmlFor="nav-creator-name-forever" className="leading-5">I understand this creator name is permanent.</Label>
             </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              Creator names must follow{" "}
+              <Link href="/legal/content-rules" className="font-medium text-primary hover:underline">Content Rules</Link>
+              {" "}and{" "}
+              <Link href="/legal/community" className="font-medium text-primary hover:underline">Community Guidelines</Link>.
+            </p>
           </div>
           <DialogFooter>
             <Button type="button" variant="destructive" disabled={!canSetCreatorName} onClick={() => void confirmCreatorName()}>

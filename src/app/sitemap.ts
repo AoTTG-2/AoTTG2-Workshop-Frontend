@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { assetPath, listAssets } from "../lib/api/workshop";
+import { LEGAL_PAGES, legalHref } from "../lib/legal";
 import { absoluteUrl } from "../lib/seo";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -7,6 +8,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: absoluteUrl("/"), changeFrequency: "weekly", priority: 1 },
     { url: absoluteUrl("/library"), changeFrequency: "daily", priority: 0.9 },
     { url: absoluteUrl("/creators"), changeFrequency: "daily", priority: 0.8 },
+    { url: absoluteUrl("/legal"), changeFrequency: "monthly", priority: 0.5 },
+    ...LEGAL_PAGES.map((page) => ({ url: absoluteUrl(legalHref(page.slug)), changeFrequency: "monthly" as const, priority: 0.5 })),
   ];
 
   try {
