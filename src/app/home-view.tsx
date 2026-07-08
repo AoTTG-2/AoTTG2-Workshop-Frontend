@@ -19,10 +19,10 @@ const heroSlides = [
 ];
 
 const categoryLinks = [
-  { href: "/library?category=human", label: "Skins", icon: Palette },
-  { href: "/library?type=map", label: "Maps", icon: Map },
-  { href: "/library?type=custom_logic", label: "Custom Logic", icon: FileCode2 },
-  { href: "/library?type=skin_set", label: "Skin Sets", icon: Sparkles },
+  { href: "/skins", label: "Skins", icon: Palette },
+  { href: "/experiences?type=map", label: "Maps", icon: Map },
+  { href: "/experiences?type=custom_logic", label: "Custom Logic", icon: FileCode2 },
+  { href: "/skins?type=skin_set", label: "Skin Sets", icon: Sparkles },
 ];
 
 const playerCards = [
@@ -163,7 +163,7 @@ function AssetMarquee({ title, assets, align, reverse = false }: { title: string
       <div className="landing-marquee-heading">
         <h2 className="font-primary text-2xl font-semibold uppercase leading-none">{title}</h2>
         <Button asChild variant="link" className="h-auto p-0">
-          <Link href={`/library?sort=${title.toLowerCase()}`}>View all</Link>
+          <Link href="/discover">View all</Link>
         </Button>
       </div>
       {assets.length ? (

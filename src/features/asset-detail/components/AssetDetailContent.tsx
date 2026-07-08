@@ -164,9 +164,9 @@ export function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: W
     setDeleteBusy(true);
     try {
       await deleteWorkshopAsset(asset.publicId || asset.id, token);
-      toast.success("Asset deleted", { description: "Removed from the Workshop library." });
+      toast.success("Asset deleted", { description: "Removed from Workshop." });
       setDeleteOpen(false);
-      router.push("/library");
+      router.push("/discover");
     } catch (error) {
       toast.error("Could not delete asset", { description: error instanceof Error ? error.message : "Try again." });
     } finally {
@@ -177,8 +177,8 @@ export function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: W
   if (asset.status !== "visible") {
     return (
       <main className="mx-auto w-full max-w-4xl px-6 py-8">
-        <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" href="/library">
-          Back to library
+        <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" href="/discover">
+          Back to discover
         </Link>
         <div className="mt-6 border border-border bg-card/40 p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -199,8 +199,8 @@ export function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: W
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
       <motion.div initial={motionInitial(reduceMotion, 6)} animate={motionAnimate} transition={motionTransition(0)}>
-        <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" href="/library">
-          Back to library
+        <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" href="/discover">
+          Back to discover
         </Link>
       </motion.div>
 

@@ -6,7 +6,9 @@ import { absoluteUrl } from "../lib/seo";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const routes: MetadataRoute.Sitemap = [
     { url: absoluteUrl("/"), changeFrequency: "weekly", priority: 1 },
-    { url: absoluteUrl("/library"), changeFrequency: "daily", priority: 0.9 },
+    { url: absoluteUrl("/discover"), changeFrequency: "daily", priority: 0.9 },
+    { url: absoluteUrl("/skins"), changeFrequency: "daily", priority: 0.85 },
+    { url: absoluteUrl("/experiences"), changeFrequency: "daily", priority: 0.85 },
     { url: absoluteUrl("/creators"), changeFrequency: "daily", priority: 0.8 },
     { url: absoluteUrl("/legal"), changeFrequency: "monthly", priority: 0.5 },
     ...LEGAL_PAGES.map((page) => ({ url: absoluteUrl(legalHref(page.slug)), changeFrequency: "monthly" as const, priority: 0.5 })),

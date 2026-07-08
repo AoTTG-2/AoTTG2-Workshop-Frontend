@@ -4,32 +4,34 @@ import { AssetTag, AssetTagLink } from "@/components/AssetTag";
 import { CreatorIdentityLink } from "@/components/CreatorIdentityLink";
 import { SideCard } from "@/components/SideCard";
 import type { WorkshopAsset } from "@/lib/api/workshop";
-import { assetTypeLabel } from "@/lib/workshop/taxonomy";
+import { assetTypeLabel, isExperienceAssetType } from "@/lib/workshop/taxonomy";
 import { formatDate } from "../format";
 import { motionAnimate, motionInitial, motionTransition } from "../motion";
 import { AssetSummary, SummaryRow, UsedBySetsCard } from "./AssetSummary";
 
 export function AssetDetailSidebar({ asset, category, reduceMotion, summary, textureUrls, usedByAssets, onCopyText }: { asset: WorkshopAsset; category: string; reduceMotion: boolean | null; summary: string; textureUrls: string[]; usedByAssets: WorkshopAsset[]; onCopyText: (label: string, value: string) => void | Promise<void> }) {
+  const tagBasePath = isExperienceAssetType(asset.type) ? "/experiences" : "/skins";
+
   return (
     <motion.aside className="grid content-start gap-4" initial={motionInitial(reduceMotion, 10)} animate={motionAnimate} transition={motionTransition(0.08)}>
       <motion.div initial={motionInitial(reduceMotion, 8)} animate={motionAnimate} transition={motionTransition(0.11)}>
         <SideCard title="Tags" variant="secondary">
-        <div className="flex flex-wrap gap-2">
-          <AssetTag variant="category" size="md">
-            {assetTypeLabel(category)}
-          </AssetTag>
-          {asset.tags.length > 0 ? (
-            asset.tags.map((tag, index) => (
-              <AssetTagLink key={tag + "-" + index} size="md" href={"/library?tag=" + encodeURIComponent(tag)}>
-                {tag}
-              </AssetTagLink>
-            ))
-          ) : (
-            <AssetTag variant="empty" size="md">
-              No tags
+          <div className="flex flex-wrap gap-2">
+            <AssetTag variant="category" size="md">
+              {assetTypeLabel(category)}
             </AssetTag>
-          )}
-        </div>
+            {asset.tags.length > 0 ? (
+              asset.tags.map((tag, index) => (
+                <AssetTagLink key={tag + "-" + index} size="md" href={tagBasePath + "?tag=" + encodeURIComponent(tag)}>
+                  {tag}
+                </AssetTagLink>
+              ))
+            ) : (
+              <AssetTag variant="empty" size="md">
+                No tags
+              </AssetTag>
+            )}
+          </div>
         </SideCard>
       </motion.div>
 

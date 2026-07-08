@@ -22,7 +22,7 @@ export default async function HomePage() {
     description: "Browse and import AoTTG2 skins, skin sets, maps, and custom logic shared by the community.",
     potentialAction: {
       "@type": "SearchAction",
-      target: `${absoluteUrl("/library")}?q={search_term_string}`,
+      target: `${absoluteUrl("/discover")}?q={search_term_string}`,
       "query-input": "required name=search_term_string",
     },
   };

@@ -69,7 +69,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
   const accountId = workshopUser?.authAccountId ?? profile?.accountId;
   const permissionSource = workshopUser ?? profile;
   const canEditAsset = !isEdit || Boolean(editableAsset && isAuthenticated && (accountId === editableAsset.ownerAuthAccountId || canModerateAssets(permissionSource)));
-  const cancelPath = editableAsset ? assetPath(editableAsset) : "/library";
+  const cancelPath = editableAsset ? assetPath(editableAsset) : "/discover";
 
   const mutation = useMutation({
     mutationFn: (asset: unknown) => {
@@ -213,7 +213,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
     if (!open) setPendingAsset(null);
   }
 
-  if (isEdit && !editableAsset) return <UnavailableState title="Editing Unavailable" text="This asset type cannot be edited in the Workshop form yet." button="Back to library" onClick={() => router.push("/library")} />;
+  if (isEdit && !editableAsset) return <UnavailableState title="Editing Unavailable" text="This asset type cannot be edited in the Workshop form yet." button="Back to discover" onClick={() => router.push("/discover")} />;
   if (isLoading) return <main className="grid min-h-[calc(100vh-120px)] place-items-center"><Spinner size="lg" variant="primary" label="Checking access" /></main>;
   if (isEdit && !canEditAsset) return <UnavailableState title="No Edit Access" text="Only the creator or a Workshop moderator can edit this asset." button="Back to asset" onClick={() => router.push(cancelPath)} />;
 

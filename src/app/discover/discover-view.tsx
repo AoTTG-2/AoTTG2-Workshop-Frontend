@@ -32,7 +32,7 @@ export function DiscoverView({ data }: { data: DiscoverData }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="secondary">
-            <Link href="/library"><Search className="h-4 w-4" aria-hidden="true" />Search Library</Link>
+            <Link href="/skins"><Search className="h-4 w-4" aria-hidden="true" />Browse Skins</Link>
           </Button>
           <Button asChild>
             <Link href="/library/publish"><UploadCloud className="h-4 w-4" aria-hidden="true" />Publish</Link>
@@ -43,7 +43,7 @@ export function DiscoverView({ data }: { data: DiscoverData }) {
       <DiscoverGridSection
         title="New Uploads"
         description="Fresh posts from every public Workshop type."
-        viewAllHref="/library?sort=newest"
+        viewAllHref="/discover"
         section={data.newUploads}
         renderAsset={renderAsset}
       />

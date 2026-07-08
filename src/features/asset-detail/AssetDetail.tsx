@@ -62,8 +62,8 @@ export function AssetDetail({ id = "", creatorName = "", assetSlug = "", initial
   if (query.isError || !asset) {
     return (
       <main className="mx-auto w-full max-w-4xl px-6 py-8">
-        <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" href="/library">
-          Back to library
+        <Link className="text-sm font-semibold text-muted-foreground hover:text-primary" href="/discover">
+          Back to discover
         </Link>
         <div className="mt-6 border border-border bg-card/40 p-6">
           <h1 className="font-primary text-3xl uppercase">Asset not found</h1>

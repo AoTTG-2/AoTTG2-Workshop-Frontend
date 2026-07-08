@@ -38,12 +38,12 @@ export const EXPERIENCE_TYPE_FILTERS = [
 ] as const;
 
 export const FEATURED_TYPE_GROUPS = [
-  { label: "Skins", href: "/library", types: SKIN_ASSET_TYPES, icon: Palette },
-  { label: "Experiences", href: "/library?type=map", types: EXPERIENCE_ASSET_TYPES, icon: Sparkles },
-  { label: "Maps", href: "/library?type=map", types: ["map"], icon: Map },
-  { label: "Custom Logic", href: "/library?type=custom_logic", types: ["custom_logic"], icon: FileCode2 },
-  { label: "Addons", href: "/library?type=addon", types: ["addon"], icon: FileArchive },
-  { label: "Skyboxes", href: "/library?category=skybox", types: ["skybox_skin_set"], icon: Image },
+  { label: "Skins", href: "/skins", types: SKIN_ASSET_TYPES, icon: Palette },
+  { label: "Experiences", href: "/experiences", types: EXPERIENCE_ASSET_TYPES, icon: Sparkles },
+  { label: "Maps", href: "/experiences?type=map", types: ["map"], icon: Map },
+  { label: "Custom Logic", href: "/experiences?type=custom_logic", types: ["custom_logic"], icon: FileCode2 },
+  { label: "Addons", href: "/experiences?type=addon", types: ["addon"], icon: FileArchive },
+  { label: "Skyboxes", href: "/skins?type=skybox_skin_set", types: ["skybox_skin_set"], icon: Image },
 ] as const;
 
 export function isSkinAssetType(type: string): type is SkinAssetType {
