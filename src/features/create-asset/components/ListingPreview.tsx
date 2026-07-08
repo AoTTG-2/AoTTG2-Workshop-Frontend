@@ -38,9 +38,9 @@ export function ListingPreview({ kind, skinCategory, common, authorName }: { kin
 }
 
 function previewPayload(kind: AssetKind, skinCategory: SkinCategory) {
-  if (kind === "map") return { file: null, metadata: null, screenshots: [] };
-  if (kind === "custom_logic") return { files: [], metadata: null };
-  if (kind === "addon") return { files: [], metadata: null };
+  if (kind === "map") return { file: null, screenshots: [] };
+  if (kind === "custom_logic") return { file: null };
+  if (kind === "addon") return { file: null };
   return { category: skinCategory };
 }
 

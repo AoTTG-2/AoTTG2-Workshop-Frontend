@@ -299,6 +299,7 @@ function collectDownloadReferences(asset: WorkshopAsset) {
 }
 
 function collectFileBundleReferences(payload: CustomLogicPayload | AddonPayload) {
+  if (hasDownloadReference(payload.file)) return [payload.file];
   return (payload.files ?? []).filter(hasDownloadReference);
 }
 

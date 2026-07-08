@@ -37,35 +37,15 @@ export function summarizeAsset(asset: WorkshopAsset) {
   }
 
   if (asset.type === "custom_logic" && isCustomLogicPayload(asset.payload)) {
-    const count = asset.payload.files?.length ?? 0;
-    const details = [
-      asset.payload.metadata?.totalLines ? `${asset.payload.metadata.totalLines} lines` : "",
-      asset.payload.metadata?.usesBuiltins?.length ? `${asset.payload.metadata.usesBuiltins.length} builtins` : "",
-      asset.payload.metadata?.minGameVersion ? `v${asset.payload.metadata.minGameVersion}+` : "",
-    ].filter(Boolean);
-    return [formatCount(count, "logic file", "logic files"), ...details].join(" - ");
+    return asset.payload.file?.filename ?? asset.payload.files?.[0]?.filename ?? "Custom logic file";
   }
 
   if (asset.type === "map" && isMapPayload(asset.payload)) {
-    const objectCount = asset.payload.metadata?.objectCount;
-    const environment = asset.payload.metadata?.environment;
-    const players = asset.payload.metadata?.recommendedPlayers;
-    const details = [
-      players ? `${players} players` : "",
-      environment ? formatLabel(environment) : "",
-      objectCount ? `${objectCount} objects` : "",
-    ].filter(Boolean);
-    return details.length ? details.join(" - ") : "Playable map";
+    return asset.payload.file?.filename ?? "Playable map";
   }
 
   if (asset.type === "addon" && isAddonPayload(asset.payload)) {
-    const count = asset.payload.files?.length ?? 0;
-    const details = [
-      asset.payload.metadata?.provides?.length ? `Provides ${asset.payload.metadata.provides.slice(0, 2).join(", ")}` : "",
-      asset.payload.metadata?.usesBuiltins?.length ? `${asset.payload.metadata.usesBuiltins.length} builtins` : "",
-      asset.payload.metadata?.minGameVersion ? `v${asset.payload.metadata.minGameVersion}+` : "",
-    ].filter(Boolean);
-    return [formatCount(count, "addon file", "addon files"), ...details].join(" - ");
+    return asset.payload.file?.filename ?? asset.payload.files?.[0]?.filename ?? "Addon file";
   }
 
   return assetTypeLabel(asset.type);
@@ -117,10 +97,6 @@ export function summarizeGroupedSlot(payload: SkinPartPayload | SkinSetItem) {
   return "No side";
 }
 
-function formatCount(count: number, singular: string, plural: string) {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
 export function isSkinSetPayload(payload: WorkshopAsset["payload"]): payload is SkinSetPayload {
   return "items" in payload;
 }
@@ -134,13 +110,13 @@ export function isSkyboxSkinSetPayload(payload: WorkshopAsset["payload"]): paylo
 }
 
 export function isCustomLogicPayload(payload: WorkshopAsset["payload"]): payload is CustomLogicPayload {
-  return "files" in payload || "metadata" in payload;
+  return "file" in payload || "files" in payload || "metadata" in payload;
 }
 
 export function isMapPayload(payload: WorkshopAsset["payload"]): payload is MapPayload {
-  return "content" in payload || "screenshots" in payload || "metadata" in payload;
+  return "file" in payload || "content" in payload || "screenshots" in payload || "metadata" in payload;
 }
 
 export function isAddonPayload(payload: WorkshopAsset["payload"]): payload is AddonPayload {
-  return "files" in payload || "metadata" in payload;
+  return "file" in payload || "files" in payload || "metadata" in payload;
 }

@@ -14,8 +14,8 @@ import { VariantPickerDialog } from "./VariantPickerDialog";
 
 export function DataStep({ addNewSetItem, addNewSetItemAsset, addon, catalog, customLogic, items, kind, map, newSetItem, newSetItemAssetOpen, newSetItemSlotOpen, newSetItemSourceOpen, newSetItemVariantInitialPhase, newSetItemVariantOpen, onUploadBusyChange, part, selectNewSetItemSlot, setAddon, setCustomLogic, setItems, setMap, setNewSetItem, setNewSetItemAssetOpen, setNewSetItemSlotOpen, setNewSetItemSourceOpen, setNewSetItemVariantOpen, setPart, setShifter, setSkybox, shifter, skybox, startAddSetItem, startAddSetItemAsset, startAddSetItemUrl, toggleNewSetItemVariant, updateItem }: DataStepProps) {
   if (kind === "map") return <MapDataFields map={map} setMap={setMap} onUploadBusyChange={(busy) => onUploadBusyChange("map", busy)} />;
-  if (kind === "custom_logic") return <CustomLogicDataFields customLogic={customLogic} setCustomLogic={setCustomLogic} onUploadBusyChange={(key, busy) => onUploadBusyChange(`custom-logic-${key}`, busy)} />;
-  if (kind === "addon") return <AddonDataFields addon={addon} setAddon={setAddon} onUploadBusyChange={(key, busy) => onUploadBusyChange(`addon-${key}`, busy)} />;
+  if (kind === "custom_logic") return <CustomLogicDataFields customLogic={customLogic} setCustomLogic={setCustomLogic} onUploadBusyChange={(busy) => onUploadBusyChange("custom-logic", busy)} />;
+  if (kind === "addon") return <AddonDataFields addon={addon} setAddon={setAddon} onUploadBusyChange={(busy) => onUploadBusyChange("addon", busy)} />;
 
   if (kind === "skin_part") {
     return (

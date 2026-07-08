@@ -12,9 +12,9 @@ export function TypeStep({ humanPartChoices, kind, part, setKind, setPart, setSh
     <section className="grid gap-6 border-t border-border pt-6">
       <SideCard title="Category" variant="secondary" contentClassName="grid auto-rows-fr gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <TypeChoice active={skinActive} icon={<Sparkles className="h-5 w-5" aria-hidden="true" />} title="Skins" body="Human, Shifter, and Skybox texture assets." onClick={() => selectSkinCategory(skinCategory)} />
-        <TypeChoice active={kind === "map"} icon={<Map className="h-5 w-5" aria-hidden="true" />} title="Maps" body="Playable level data and map metadata." onClick={() => setKind("map")} />
-        <TypeChoice active={kind === "custom_logic"} icon={<Code2 className="h-5 w-5" aria-hidden="true" />} title="Custom Logic" body="Script files and runtime metadata." onClick={() => setKind("custom_logic")} />
-        <TypeChoice active={kind === "addon"} icon={<FileArchive className="h-5 w-5" aria-hidden="true" />} title="Addons" body="Small addon file bundles using the backend contract." onClick={() => setKind("addon")} />
+        <TypeChoice active={kind === "map"} icon={<Map className="h-5 w-5" aria-hidden="true" />} title="Maps" body="Playable map file." onClick={() => setKind("map")} />
+        <TypeChoice active={kind === "custom_logic"} icon={<Code2 className="h-5 w-5" aria-hidden="true" />} title="Custom Logic" body="One custom logic file." onClick={() => setKind("custom_logic")} />
+        <TypeChoice active={kind === "addon"} icon={<FileArchive className="h-5 w-5" aria-hidden="true" />} title="Addons" body="One addon file." onClick={() => setKind("addon")} />
       </SideCard>
       {skinActive ? (
         <SideCard title="Skin Category" variant="secondary" contentClassName="grid auto-rows-fr gap-4 sm:grid-cols-3">

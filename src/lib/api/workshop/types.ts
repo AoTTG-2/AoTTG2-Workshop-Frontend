@@ -91,9 +91,7 @@ export interface SkyboxSkinSetPayload {
 }
 
 export interface CustomLogicFile {
-  namespace?: string;
   filename?: string;
-  content?: string;
   uploadId?: string;
   key?: string;
   objectKey?: string;
@@ -102,34 +100,17 @@ export interface CustomLogicFile {
 }
 
 export interface CustomLogicPayload {
+  file?: UploadedFileReference | null;
   files?: CustomLogicFile[];
-  metadata?: {
-    hasMainClass?: boolean;
-    hasComponents?: boolean;
-    totalLines?: number;
-    usesBuiltins?: string[];
-    minGameVersion?: string | null;
-  } | null;
 }
 
 export interface MapPayload {
-  content?: string;
   file?: UploadedFileReference | null;
-  metadata?: {
-    objectCount?: number;
-    objectTypes?: string[];
-    hasLogic?: boolean;
-    logicLines?: number | null;
-    customAssets?: string[] | null;
-    recommendedPlayers?: string | null;
-    environment?: string | null;
-  } | null;
   screenshots?: string[];
 }
 
 export interface AddonFile {
   filename?: string;
-  content?: string;
   contentType?: string | null;
   uploadId?: string;
   key?: string;
@@ -147,12 +128,8 @@ export interface UploadedFileReference {
 }
 
 export interface AddonPayload {
+  file?: UploadedFileReference | null;
   files?: AddonFile[];
-  metadata?: {
-    minGameVersion?: string | null;
-    usesBuiltins?: string[];
-    provides?: string[];
-  } | null;
 }
 
 export interface WorkshopAsset {

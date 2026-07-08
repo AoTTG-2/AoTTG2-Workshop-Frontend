@@ -45,9 +45,9 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
   const [items, setItems] = useState<VariantTargetForm[]>(() => (editableAsset?.type === "skin_set" ? targetsFromSkinSet(editableAsset.payload as SkinSetPayload) : []));
   const [shifter, setShifter] = useState<ShifterSkinSetForm>(() => (editableAsset?.type === "shifter_skin_set" ? shifterFromAsset(editableAsset.payload as ShifterSkinSetPayload) : { target: "eren", textureUrl: "" }));
   const [skybox, setSkybox] = useState<SkyboxSkinSetForm>(() => (editableAsset?.type === "skybox_skin_set" ? skyboxFromAsset(editableAsset.payload as SkyboxSkinSetPayload) : { front: "", back: "", left: "", right: "", up: "", down: "" }));
-  const [map, setMap] = useState<MapForm>(() => (editableAsset?.type === "map" ? mapFromAsset(editableAsset.payload as MapPayload) : { content: "", file: null, objectCount: "", objectTypes: "", hasLogic: false, logicLines: "", customAssets: "", recommendedPlayers: "", environment: "" }));
-  const [customLogic, setCustomLogic] = useState<CustomLogicForm>(() => (editableAsset?.type === "custom_logic" ? customLogicFromAsset(editableAsset.payload as CustomLogicPayload) : { files: [{ namespace: "Main", file: null }], usesBuiltins: "", minGameVersion: "" }));
-  const [addon, setAddon] = useState<AddonForm>(() => (editableAsset?.type === "addon" ? addonFromAsset(editableAsset.payload as AddonPayload) : { files: [{ file: null }], usesBuiltins: "", provides: "", minGameVersion: "" }));
+  const [map, setMap] = useState<MapForm>(() => (editableAsset?.type === "map" ? mapFromAsset(editableAsset.payload as MapPayload) : { file: null }));
+  const [customLogic, setCustomLogic] = useState<CustomLogicForm>(() => (editableAsset?.type === "custom_logic" ? customLogicFromAsset(editableAsset.payload as CustomLogicPayload) : { file: null }));
+  const [addon, setAddon] = useState<AddonForm>(() => (editableAsset?.type === "addon" ? addonFromAsset(editableAsset.payload as AddonPayload) : { file: null }));
   const [newSetItem, setNewSetItem] = useState<VariantTargetForm | null>(null);
   const [newSetItemSourceOpen, setNewSetItemSourceOpen] = useState(false);
   const [newSetItemSlotOpen, setNewSetItemSlotOpen] = useState(false);
@@ -72,6 +72,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
   const permissionSource = workshopUser ?? profile;
   const canEditAsset = !isEdit || Boolean(editableAsset && isAuthenticated && (accountId === editableAsset.ownerAuthAccountId || canModerateAssets(permissionSource)));
   const cancelPath = editableAsset ? assetPath(editableAsset) : "/discover";
+  const navSteps = isExperienceKind(kind) ? steps.map((item) => item.key === "data" ? { ...item, label: "File" } : item) : steps;
 
   const mutation = useMutation({
     mutationFn: (asset: unknown) => {
@@ -228,10 +229,10 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
       <header className="mb-8">
         <h1 className="font-primary text-balance text-3xl font-semibold uppercase leading-none tracking-tight">{isEdit ? "Edit Asset" : "Publish Asset"}</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{isEdit ? "Update the current listing, media URLs, and asset data." : "Create skins, maps, custom logic, or addon bundles for the Workshop."}</p>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{isEdit ? "Update the current listing, media URLs, and asset data." : "Create skins, maps, custom logic, or addons for the Workshop."}</p>
       </header>
       <form className="grid gap-8" onSubmit={handleSubmit}>
-        <StepNav steps={steps} step={step} stepIndex={stepIndex} isEdit={isEdit} onStep={setStep} />
+        <StepNav steps={navSteps} step={step} stepIndex={stepIndex} isEdit={isEdit} onStep={setStep} />
         {step === "type" ? <TypeStep humanPartChoices={humanPartChoices} kind={kind} part={part} setKind={setKind} setPart={setPart} setShifter={setShifter} shifter={shifter} skinCategory={skinCategory} selectSkinCategory={selectSkinCategory} /> : null}
         {step === "listing" ? <ListingStep authorName={authorName} common={common} isEdit={isEdit} kind={kind} setCommon={setCommon} skinCategory={skinCategory} /> : null}
         {step === "data" ? <DataStep addNewSetItem={() => { if (newSetItem) { setItems((current) => [...current, newSetItem]); setNewSetItem(null); setNewSetItemVariantOpen(false); } }} addNewSetItemAsset={addNewSetItemAsset} addon={addon} catalog={catalog} customLogic={customLogic} items={items} kind={kind} map={map} newSetItem={newSetItem} newSetItemAssetOpen={newSetItemAssetOpen} newSetItemSlotOpen={newSetItemSlotOpen} newSetItemSourceOpen={newSetItemSourceOpen} newSetItemVariantInitialPhase={newSetItemVariantInitialPhase} newSetItemVariantOpen={newSetItemVariantOpen} onUploadBusyChange={updateUploadBusy} part={part} selectNewSetItemSlot={selectNewSetItemSlot} setAddon={setAddon} setCustomLogic={setCustomLogic} setItems={setItems} setMap={setMap} setNewSetItem={setNewSetItem} setNewSetItemAssetOpen={setNewSetItemAssetOpen} setNewSetItemSlotOpen={setNewSetItemSlotOpen} setNewSetItemSourceOpen={setNewSetItemSourceOpen} setNewSetItemVariantOpen={setNewSetItemVariantOpen} setPart={setPart} setShifter={setShifter} setSkybox={setSkybox} shifter={shifter} skybox={skybox} startAddSetItem={startAddSetItem} startAddSetItemAsset={() => { setNewSetItemSourceOpen(false); setNewSetItemAssetOpen(true); }} startAddSetItemUrl={() => { setNewSetItemSourceOpen(false); setNewSetItemSlotOpen(true); }} toggleNewSetItemVariant={(variant) => setNewSetItem((current) => current ? { ...current, variants: current.variants.includes(variant) ? current.variants.filter((item) => item !== variant) : [...current.variants, variant] } : current)} updateItem={updateItem} /> : null}
@@ -250,6 +251,10 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
       <CreatorNameDialog busy={creatorNameBusy} canSave={canSetCreatorName} creatorNameAccepted={creatorNameAccepted} creatorNameInput={creatorNameInput} onAcceptedChange={setCreatorNameAccepted} onConfirm={() => void confirmCreatorName()} onInputChange={setCreatorNameInput} onOpenChange={updateCreatorDialogOpen} open={creatorDialogOpen} />
     </main>
   );
+}
+
+function isExperienceKind(kind: AssetKind) {
+  return kind === "map" || kind === "custom_logic" || kind === "addon";
 }
 
 function UnavailableState({ button, onClick, text, title }: { button: string; onClick: () => void; text: string; title: string }) {

@@ -34,37 +34,15 @@ export interface SkyboxSkinSetForm {
 }
 
 export interface MapForm {
-  content: string;
-  file: UploadedFileReference | null;
-  objectCount: string;
-  objectTypes: string;
-  hasLogic: boolean;
-  logicLines: string;
-  customAssets: string;
-  recommendedPlayers: string;
-  environment: string;
-}
-
-export interface CustomLogicFileForm {
-  namespace: string;
   file: UploadedFileReference | null;
 }
 
 export interface CustomLogicForm {
-  files: CustomLogicFileForm[];
-  usesBuiltins: string;
-  minGameVersion: string;
-}
-
-export interface AddonFileForm {
   file: UploadedFileReference | null;
 }
 
 export interface AddonForm {
-  files: AddonFileForm[];
-  usesBuiltins: string;
-  provides: string;
-  minGameVersion: string;
+  file: UploadedFileReference | null;
 }
 
 export interface CommonAssetForm {

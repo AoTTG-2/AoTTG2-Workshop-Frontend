@@ -81,57 +81,20 @@ export function prepareSkyboxSkinSet(value: SkyboxSkinSetForm, catalog: VariantC
 
 export function prepareMap(value: MapForm, common: { galleryUrls: string }) {
   if (!isCompleteUploadedFileReference(value.file)) throw new Error("Upload a map file before publishing");
-  const objectCount = numberOrZero(value.objectCount, "Object count");
-  const logicLines = value.logicLines.trim() ? numberOrZero(value.logicLines, "Logic lines") : null;
   return {
     file: value.file,
     screenshots: splitList(common.galleryUrls),
-    metadata: {
-      objectCount,
-      objectTypes: splitList(value.objectTypes),
-      hasLogic: value.hasLogic,
-      logicLines,
-      customAssets: splitList(value.customAssets),
-      recommendedPlayers: value.recommendedPlayers.trim() || null,
-      environment: value.environment.trim() || null,
-    },
   };
 }
 
 export function prepareCustomLogic(value: CustomLogicForm) {
-  if (value.files.length === 0) throw new Error("Add at least one logic file");
-  if (value.files.length > 5) throw new Error("Custom logic supports up to 5 files");
-  const files = value.files.map((file, index) => {
-    if (!isCompleteUploadedFileReference(file.file)) throw new Error(`Upload logic file ${index + 1} before publishing`);
-    return { namespace: file.namespace.trim(), ...uploadedFilePayload(file.file) };
-  });
-  return {
-    files,
-    metadata: {
-      hasMainClass: false,
-      hasComponents: false,
-      totalLines: 0,
-      usesBuiltins: splitList(value.usesBuiltins),
-      minGameVersion: value.minGameVersion.trim() || null,
-    },
-  };
+  if (!isCompleteUploadedFileReference(value.file)) throw new Error("Upload a custom logic file before publishing");
+  return { file: uploadedFilePayload(value.file) };
 }
 
 export function prepareAddon(value: AddonForm) {
-  if (value.files.length === 0) throw new Error("Add at least one addon file");
-  if (value.files.length > 5) throw new Error("Addons support up to 5 files");
-  const files = value.files.map((file, index) => {
-    if (!isCompleteUploadedFileReference(file.file)) throw new Error(`Upload addon file ${index + 1} before publishing`);
-    return uploadedFilePayload(file.file);
-  });
-  return {
-    files,
-    metadata: {
-      minGameVersion: value.minGameVersion.trim() || null,
-      usesBuiltins: splitList(value.usesBuiltins),
-      provides: splitList(value.provides),
-    },
-  };
+  if (!isCompleteUploadedFileReference(value.file)) throw new Error("Upload an addon file before publishing");
+  return { file: uploadedFilePayload(value.file) };
 }
 
 export function buildAsset(kind: AssetKind, common: CommonAssetForm, part: VariantTargetForm, items: VariantTargetForm[], shifter: ShifterSkinSetForm, skybox: SkyboxSkinSetForm, map: MapForm, customLogic: CustomLogicForm, addon: AddonForm, catalog: VariantCatalog) {
@@ -166,8 +129,8 @@ export function reviewDataSummary(kind: AssetKind, part: VariantTargetForm, item
   if (kind === "skin_set") return `${items.length} set item${items.length === 1 ? "" : "s"}`;
   if (kind === "shifter_skin_set") return `${shifterTargets.find((item) => item.key === shifter.target)?.label ?? "Shifter"} Shifter`;
   if (kind === "map") return map.file?.filename ? map.file.filename : "No map file";
-  if (kind === "custom_logic") return uploadSummary(customLogic.files.map((file) => file.file), "logic file", "logic files");
-  if (kind === "addon") return uploadSummary(addon.files.map((file) => file.file), "addon file", "addon files");
+  if (kind === "custom_logic") return customLogic.file?.filename ? customLogic.file.filename : "No custom logic file";
+  if (kind === "addon") return addon.file?.filename ? addon.file.filename : "No addon file";
   const count = skyboxFaces.filter((face) => skybox[face.key].trim()).length;
   return `${count} skybox face${count === 1 ? "" : "s"}`;
 }
@@ -183,19 +146,6 @@ function uploadedFilePayload(file: NonNullable<MapForm["file"]>) {
   };
 }
 
-function uploadSummary(files: Array<MapForm["file"]>, singular: string, plural: string) {
-  const uploaded = files.filter((file) => file?.filename).length;
-  return `${uploaded}/${files.length} ${files.length === 1 ? singular : plural}`;
-}
-
 function isCompleteUploadedFileReference(file: MapForm["file"]): file is NonNullable<MapForm["file"]> {
   return Boolean(file?.uploadId && (file.key || file.objectKey) && file.filename && typeof file.sizeBytes === "number" && file.contentType);
-}
-
-function numberOrZero(value: string, label: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return 0;
-  const number = Number(trimmed);
-  if (!Number.isFinite(number) || number < 0) throw new Error(`${label} must be zero or greater`);
-  return Math.floor(number);
 }

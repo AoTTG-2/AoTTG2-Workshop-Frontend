@@ -47,33 +47,21 @@ export function skyboxFromAsset(payload: SkyboxSkinSetPayload | Record<string, u
 
 export function mapFromAsset(payload: MapPayload | Record<string, unknown>): MapForm {
   const data = payload as MapPayload;
-  return {
-    content: data.content ?? "",
-    file: data.file ?? null,
-    objectCount: data.metadata?.objectCount == null ? "" : String(data.metadata.objectCount),
-    objectTypes: data.metadata?.objectTypes?.join(", ") ?? "",
-    hasLogic: data.metadata?.hasLogic ?? false,
-    logicLines: data.metadata?.logicLines == null ? "" : String(data.metadata.logicLines),
-    customAssets: data.metadata?.customAssets?.join(", ") ?? "",
-    recommendedPlayers: data.metadata?.recommendedPlayers ?? "",
-    environment: data.metadata?.environment ?? "",
-  };
+  return { file: data.file ?? null };
 }
 
 export function customLogicFromAsset(payload: CustomLogicPayload | Record<string, unknown>): CustomLogicForm {
   const data = payload as CustomLogicPayload;
-  const files = Array.isArray(data.files) && data.files.length > 0
-    ? data.files.map((file) => ({ namespace: file.namespace ?? "", file: uploadedFileReferenceFromBundle(file) }))
-    : [{ namespace: "Main", file: null }];
-  return { files, usesBuiltins: data.metadata?.usesBuiltins?.join(", ") ?? "", minGameVersion: data.metadata?.minGameVersion ?? "" };
+  return { file: data.file ?? firstLegacyFileReference(data.files) };
 }
 
 export function addonFromAsset(payload: AddonPayload | Record<string, unknown>): AddonForm {
   const data = payload as AddonPayload;
-  const files = Array.isArray(data.files) && data.files.length > 0
-    ? data.files.map((file) => ({ file: uploadedFileReferenceFromBundle(file) }))
-    : [{ file: null }];
-  return { files, usesBuiltins: data.metadata?.usesBuiltins?.join(", ") ?? "", provides: data.metadata?.provides?.join(", ") ?? "", minGameVersion: data.metadata?.minGameVersion ?? "" };
+  return { file: data.file ?? firstLegacyFileReference(data.files) };
+}
+
+function firstLegacyFileReference(files: CustomLogicFile[] | AddonFile[] | undefined): UploadedFileReference | null {
+  return Array.isArray(files) && files.length > 0 ? uploadedFileReferenceFromBundle(files[0]) : null;
 }
 
 function uploadedFileReferenceFromBundle(file: CustomLogicFile | AddonFile): UploadedFileReference | null {

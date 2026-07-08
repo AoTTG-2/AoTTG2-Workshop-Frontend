@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { AlertCircle, CheckCircle2, RotateCcw, UploadCloud, X } from "lucide-react";
 import { Button } from "@aottg2/ui";
 import { getAccessToken } from "@/auth/storage";
@@ -9,6 +9,7 @@ type UploadStatus = "idle" | "selected" | "uploading" | "uploaded" | "failed" | 
 
 interface WorkshopFileUploadControlProps {
   accept?: string;
+  allowedExtensions?: readonly string[];
   assetType: WorkshopUploadAssetType;
   disabled?: boolean;
   label: string;
@@ -26,6 +27,7 @@ interface DisplayUploadReference {
 
 export function WorkshopFileUploadControl({
   accept,
+  allowedExtensions = [],
   assetType,
   disabled = false,
   label,
@@ -36,6 +38,7 @@ export function WorkshopFileUploadControl({
 }: WorkshopFileUploadControlProps) {
   const inputRef = useRef<globalThis.HTMLInputElement | null>(null);
   const [file, setFile] = useState<globalThis.File | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [message, setMessage] = useState("");
@@ -51,16 +54,30 @@ export function WorkshopFileUploadControl({
   }, [busy, onBusyChange]);
 
   function selectFile(nextFile: globalThis.File | null) {
+    if (nextFile && !isAllowedFile(nextFile, allowedExtensions)) {
+      const extensionList = allowedExtensions.join(", ");
+      const errorMessage = extensionList ? `File must use ${extensionList}` : "File type is not allowed";
+      setFile(null);
+      setProgress(0);
+      setMessage(errorMessage);
+      setStatus("failed");
+      onReferenceChange?.(null);
+      if (inputRef.current) inputRef.current.value = "";
+      toast.error("File not allowed", { description: errorMessage, id: "workshop-file-upload-error" });
+      return;
+    }
+
     setFile(nextFile);
     if (!nextFile && inputRef.current) inputRef.current.value = "";
     setProgress(0);
     setMessage("");
     setStatus(nextFile ? "selected" : "idle");
     onReferenceChange?.(null);
+    if (nextFile) void startUpload(nextFile);
   }
 
-  async function startUpload() {
-    if (!file || disabled || busy) return;
+  async function startUpload(uploadFile = file) {
+    if (!uploadFile || disabled || busy) return;
 
     const token = getAccessToken();
     if (!token) {
@@ -71,7 +88,7 @@ export function WorkshopFileUploadControl({
     try {
       setStatus("uploading");
       setMessage("");
-      const reference = await uploadWorkshopFile(token, assetType, file, setProgress);
+      const reference = await uploadWorkshopFile(token, assetType, uploadFile, setProgress);
       setProgress(100);
       setStatus("uploaded");
       setMessage("Uploaded");
@@ -89,6 +106,13 @@ export function WorkshopFileUploadControl({
   function removeFile() {
     if (busy) return;
     selectFile(null);
+  }
+
+  function handleDrop(event: DragEvent<globalThis.HTMLDivElement>) {
+    event.preventDefault();
+    setDragActive(false);
+    if (disabled || busy) return;
+    selectFile(event.dataTransfer.files[0] ?? null);
   }
 
   const statusStyle = ready
@@ -120,8 +144,41 @@ export function WorkshopFileUploadControl({
         accept={accept}
         disabled={disabled || busy}
         onChange={(event) => selectFile(event.target.files?.[0] ?? null)}
-        className="w-full border border-border bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+        className="sr-only"
       />
+
+      <div
+        className={`grid min-h-28 place-items-center border border-dashed px-4 py-6 text-center transition-colors ${dragActive ? "border-primary bg-primary/10" : "border-border bg-background/60"} ${disabled || busy ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+        onClick={() => {
+          if (!disabled && !busy) inputRef.current?.click();
+        }}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          if (!disabled && !busy) setDragActive(true);
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setDragActive(false);
+        }}
+        onDrop={handleDrop}
+        role="button"
+        tabIndex={disabled || busy ? -1 : 0}
+        onKeyDown={(event) => {
+          if ((event.key === "Enter" || event.key === " ") && !disabled && !busy) {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+      >
+        <div className="grid gap-3">
+          <UploadCloud className="mx-auto h-7 w-7 text-muted-foreground" aria-hidden="true" />
+          <div className="text-sm text-foreground">Drop file here</div>
+          <Button type="button" variant="secondary" disabled={disabled || busy} onClick={(event) => { event.stopPropagation(); inputRef.current?.click(); }}>
+            Browse
+          </Button>
+        </div>
+      </div>
 
       {file || hasReference ? (
         <div className="grid gap-3">
@@ -139,11 +196,6 @@ export function WorkshopFileUploadControl({
                 <Button type="button" variant="secondary" disabled={disabled || busy} onClick={() => void startUpload()}>
                   <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" />
                   Retry
-                </Button>
-              ) : null}
-              {file && status !== "uploaded" ? (
-                <Button type="button" disabled={disabled || busy || !file} onClick={() => void startUpload()}>
-                  {busy ? "Uploading..." : "Upload"}
                 </Button>
               ) : null}
             </div>
@@ -178,4 +230,10 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isAllowedFile(file: globalThis.File, allowedExtensions: readonly string[]) {
+  if (allowedExtensions.length === 0) return true;
+  const name = file.name.toLowerCase();
+  return allowedExtensions.some((extension) => name.endsWith(extension.toLowerCase()));
 }
