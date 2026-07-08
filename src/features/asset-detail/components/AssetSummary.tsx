@@ -2,7 +2,7 @@ import Link from "next/link";
 import { SideCard } from "@/components/SideCard";
 import { assetPath, type SkinSetItem, type WorkshopAsset } from "@/lib/api/workshop";
 import { formatLabel } from "../format";
-import { isGroupedSlot, isShifterSkinSetPayload, isSkinPartPayload, isSkinSetPayload, isSkyboxSkinSetPayload, summarizeGroupedSlot, summarizeSetItemDetails } from "../summary";
+import { isAddonPayload, isCustomLogicPayload, isGroupedSlot, isMapPayload, isShifterSkinSetPayload, isSkinPartPayload, isSkinSetPayload, isSkyboxSkinSetPayload, summarizeGroupedSlot, summarizeSetItemDetails } from "../summary";
 
 export function AssetSummary({ asset }: { asset: WorkshopAsset }) {
   if (asset.type === "skin_part" && isSkinPartPayload(asset.payload)) {
@@ -56,6 +56,41 @@ export function AssetSummary({ asset }: { asset: WorkshopAsset }) {
         <SummaryRow label="Right" value={asset.payload.right} />
         <SummaryRow label="Back" value={asset.payload.back} />
         <SummaryRow label="Bottom" value={asset.payload.down} />
+      </dl>
+    );
+  }
+
+  if (asset.type === "map" && isMapPayload(asset.payload)) {
+    return (
+      <dl className="grid gap-2 text-sm">
+        <SummaryRow label="Environment" value={asset.payload.metadata?.environment ? formatLabel(asset.payload.metadata.environment) : null} />
+        <SummaryRow label="Recommended Players" value={asset.payload.metadata?.recommendedPlayers} />
+        <SummaryRow label="Object Count" value={asset.payload.metadata?.objectCount == null ? null : String(asset.payload.metadata.objectCount)} />
+        <SummaryRow label="Object Types" value={asset.payload.metadata?.objectTypes?.join(", ")} />
+        <SummaryRow label="Has Logic" value={asset.payload.metadata?.hasLogic ? "Yes" : "No"} />
+        <SummaryRow label="Logic Lines" value={asset.payload.metadata?.logicLines == null ? null : String(asset.payload.metadata.logicLines)} />
+      </dl>
+    );
+  }
+
+  if (asset.type === "custom_logic" && isCustomLogicPayload(asset.payload)) {
+    return (
+      <dl className="grid gap-2 text-sm">
+        <SummaryRow label="Files" value={String(asset.payload.files?.length ?? 0)} />
+        <SummaryRow label="Total Lines" value={asset.payload.metadata?.totalLines == null ? null : String(asset.payload.metadata.totalLines)} />
+        <SummaryRow label="Uses Builtins" value={asset.payload.metadata?.usesBuiltins?.join(", ")} />
+        <SummaryRow label="Minimum Game Version" value={asset.payload.metadata?.minGameVersion} />
+      </dl>
+    );
+  }
+
+  if (asset.type === "addon" && isAddonPayload(asset.payload)) {
+    return (
+      <dl className="grid gap-2 text-sm">
+        <SummaryRow label="Files" value={String(asset.payload.files?.length ?? 0)} />
+        <SummaryRow label="Provides" value={asset.payload.metadata?.provides?.join(", ")} />
+        <SummaryRow label="Uses Builtins" value={asset.payload.metadata?.usesBuiltins?.join(", ")} />
+        <SummaryRow label="Minimum Game Version" value={asset.payload.metadata?.minGameVersion} />
       </dl>
     );
   }

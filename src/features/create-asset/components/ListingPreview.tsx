@@ -19,7 +19,7 @@ export function ListingPreview({ kind, skinCategory, common, authorName }: { kin
     shortDescription: common.shortDescription.trim() || null,
     descriptionMarkdown: null,
     media: thumbnailUrl ? [{ kind: "thumbnail", url: thumbnailUrl, description: title }] : [],
-    payload: { category: skinCategory },
+    payload: previewPayload(kind, skinCategory),
     tags: splitList(common.tags),
     ownerAuthAccountId: "preview",
     authorDisplayName: authorName,
@@ -35,6 +35,13 @@ export function ListingPreview({ kind, skinCategory, common, authorName }: { kin
       <WorkshopAssetCard asset={asset} interactive={false} />
     </aside>
   );
+}
+
+function previewPayload(kind: AssetKind, skinCategory: SkinCategory) {
+  if (kind === "map") return { content: "", metadata: null, screenshots: [] };
+  if (kind === "custom_logic") return { files: [{ namespace: "Main", filename: "main.cs", content: "" }], metadata: null };
+  if (kind === "addon") return { files: [{ filename: "addon.json", content: "", contentType: "application/json" }], metadata: null };
+  return { category: skinCategory };
 }
 
 function CardPreviewImage({ url, title }: { url: string; title: string }) {

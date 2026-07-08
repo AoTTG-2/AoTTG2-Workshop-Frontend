@@ -1,10 +1,10 @@
-import type { ShifterSkinSetPayload, SkinPartPayload, SkinSetPayload, SkyboxSkinSetPayload, WorkshopAsset } from "@/lib/api/workshop";
+import type { AddonPayload, CustomLogicPayload, MapPayload, ShifterSkinSetPayload, SkinPartPayload, SkinSetPayload, SkyboxSkinSetPayload, WorkshopAsset } from "@/lib/api/workshop";
 import { targetSlotPatch } from "./catalog";
 import { shifterTargets } from "./constants";
-import type { AssetKind, CommonAssetForm, ShifterSkinSetForm, SkinCategory, SkyboxSkinSetForm, VariantTargetForm } from "./types";
+import type { AddonForm, AssetKind, CommonAssetForm, CustomLogicForm, MapForm, ShifterSkinSetForm, SkinCategory, SkyboxSkinSetForm, VariantTargetForm } from "./types";
 
 export function isEditableAsset(asset: WorkshopAsset | null | undefined): asset is WorkshopAsset & { type: AssetKind } {
-  return asset?.type === "skin_part" || asset?.type === "skin_set" || asset?.type === "shifter_skin_set" || asset?.type === "skybox_skin_set";
+  return asset?.type === "skin_part" || asset?.type === "skin_set" || asset?.type === "shifter_skin_set" || asset?.type === "skybox_skin_set" || asset?.type === "map" || asset?.type === "custom_logic" || asset?.type === "addon";
 }
 
 export function categoryFromAsset(asset: WorkshopAsset | null | undefined): SkinCategory {
@@ -43,6 +43,36 @@ export function shifterFromAsset(payload: ShifterSkinSetPayload | Record<string,
 export function skyboxFromAsset(payload: SkyboxSkinSetPayload | Record<string, unknown>): SkyboxSkinSetForm {
   const data = payload as SkyboxSkinSetPayload;
   return { front: data.front ?? "", back: data.back ?? "", left: data.left ?? "", right: data.right ?? "", up: data.up ?? "", down: data.down ?? "" };
+}
+
+export function mapFromAsset(payload: MapPayload | Record<string, unknown>): MapForm {
+  const data = payload as MapPayload;
+  return {
+    content: data.content ?? "",
+    objectCount: data.metadata?.objectCount == null ? "" : String(data.metadata.objectCount),
+    objectTypes: data.metadata?.objectTypes?.join(", ") ?? "",
+    hasLogic: data.metadata?.hasLogic ?? false,
+    logicLines: data.metadata?.logicLines == null ? "" : String(data.metadata.logicLines),
+    customAssets: data.metadata?.customAssets?.join(", ") ?? "",
+    recommendedPlayers: data.metadata?.recommendedPlayers ?? "",
+    environment: data.metadata?.environment ?? "",
+  };
+}
+
+export function customLogicFromAsset(payload: CustomLogicPayload | Record<string, unknown>): CustomLogicForm {
+  const data = payload as CustomLogicPayload;
+  const files = Array.isArray(data.files) && data.files.length > 0
+    ? data.files.map((file) => ({ namespace: file.namespace ?? "", filename: file.filename ?? "", content: file.content ?? "" }))
+    : [{ namespace: "Main", filename: "main.cs", content: "" }];
+  return { files, usesBuiltins: data.metadata?.usesBuiltins?.join(", ") ?? "", minGameVersion: data.metadata?.minGameVersion ?? "" };
+}
+
+export function addonFromAsset(payload: AddonPayload | Record<string, unknown>): AddonForm {
+  const data = payload as AddonPayload;
+  const files = Array.isArray(data.files) && data.files.length > 0
+    ? data.files.map((file) => ({ filename: file.filename ?? "", content: file.content ?? "", contentType: file.contentType ?? "" }))
+    : [{ filename: "addon.json", content: "", contentType: "application/json" }];
+  return { files, usesBuiltins: data.metadata?.usesBuiltins?.join(", ") ?? "", provides: data.metadata?.provides?.join(", ") ?? "", minGameVersion: data.metadata?.minGameVersion ?? "" };
 }
 
 export function blankEditablePart(asset: WorkshopAsset | null): VariantTargetForm {

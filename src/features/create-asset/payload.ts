@@ -1,7 +1,7 @@
 import type { VariantCatalog } from "@/lib/api/workshop";
 import { bootsLabel, compatibilityVariantOptions, isCompatibilitySlot, isCostumeSlot, isGroupedHooksSlot, isGroupedSlot, isHookSlot, skinTypeLabel } from "./catalog";
 import { mediaFromCommon, normalizeSlug, splitList } from "./form-utils";
-import type { AssetKind, CommonAssetForm, ShifterSkinSetForm, SkyboxSkinSetForm, VariantTargetForm } from "./types";
+import type { AddonForm, AssetKind, CommonAssetForm, CustomLogicForm, MapForm, ShifterSkinSetForm, SkyboxSkinSetForm, VariantTargetForm } from "./types";
 import { shifterTargets, skyboxFaces } from "./constants";
 import { commonSchema, itemSchema, skinPartSchema, validatePublishMedia, validateTextureUrl } from "./validation";
 
@@ -79,7 +79,64 @@ export function prepareSkyboxSkinSet(value: SkyboxSkinSetForm, catalog: VariantC
   return payload;
 }
 
-export function buildAsset(kind: AssetKind, common: CommonAssetForm, part: VariantTargetForm, items: VariantTargetForm[], shifter: ShifterSkinSetForm, skybox: SkyboxSkinSetForm, catalog: VariantCatalog) {
+export function prepareMap(value: MapForm, common: { galleryUrls: string }) {
+  const content = value.content.trim();
+  if (!content) throw new Error("Map content is required");
+  const objectCount = numberOrZero(value.objectCount, "Object count");
+  const logicLines = value.logicLines.trim() ? numberOrZero(value.logicLines, "Logic lines") : null;
+  return {
+    content,
+    screenshots: splitList(common.galleryUrls),
+    metadata: {
+      objectCount,
+      objectTypes: splitList(value.objectTypes),
+      hasLogic: value.hasLogic,
+      logicLines,
+      customAssets: splitList(value.customAssets),
+      recommendedPlayers: value.recommendedPlayers.trim() || null,
+      environment: value.environment.trim() || null,
+    },
+  };
+}
+
+export function prepareCustomLogic(value: CustomLogicForm) {
+  const files = value.files.map((file) => ({ namespace: file.namespace.trim(), filename: file.filename.trim(), content: file.content.trimEnd() }));
+  if (files.length === 0) throw new Error("Add at least one logic file");
+  files.forEach((file) => {
+    if (!file.filename) throw new Error("Logic filename is required");
+    if (!file.content.trim()) throw new Error(`${file.filename || "Logic file"} content is required`);
+  });
+  const totalLines = files.reduce((sum, file) => sum + countLines(file.content), 0);
+  return {
+    files,
+    metadata: {
+      hasMainClass: files.some((file) => /\bclass\s+Main\b/i.test(file.content) || /\bMain\s*\(/i.test(file.content)),
+      hasComponents: files.some((file) => /\bcomponent\b/i.test(file.content)),
+      totalLines,
+      usesBuiltins: splitList(value.usesBuiltins),
+      minGameVersion: value.minGameVersion.trim() || null,
+    },
+  };
+}
+
+export function prepareAddon(value: AddonForm) {
+  const files = value.files.map((file) => ({ filename: file.filename.trim(), content: file.content.trimEnd(), contentType: file.contentType.trim() || null }));
+  if (files.length === 0) throw new Error("Add at least one addon file");
+  files.forEach((file) => {
+    if (!file.filename) throw new Error("Addon filename is required");
+    if (!file.content.trim()) throw new Error(`${file.filename || "Addon file"} content is required`);
+  });
+  return {
+    files,
+    metadata: {
+      minGameVersion: value.minGameVersion.trim() || null,
+      usesBuiltins: splitList(value.usesBuiltins),
+      provides: splitList(value.provides),
+    },
+  };
+}
+
+export function buildAsset(kind: AssetKind, common: CommonAssetForm, part: VariantTargetForm, items: VariantTargetForm[], shifter: ShifterSkinSetForm, skybox: SkyboxSkinSetForm, map: MapForm, customLogic: CustomLogicForm, addon: AddonForm, catalog: VariantCatalog) {
   if (kind === "skin_part") {
     const data = skinPartSchema.parse({ ...common, ...part });
     validatePublishMedia(data);
@@ -92,6 +149,9 @@ export function buildAsset(kind: AssetKind, common: CommonAssetForm, part: Varia
   const assetSlug = normalizeSlug(data.assetSlug);
   if (kind === "shifter_skin_set") return { type: "shifter_skin_set", title: data.title, ...(assetSlug ? { assetSlug } : {}), descriptionMarkdown: data.descriptionMarkdown, shortDescription: data.shortDescription, media: mediaFromCommon(data), payload: prepareShifterSkinSet(shifter, catalog), tags: splitList(data.tags) };
   if (kind === "skybox_skin_set") return { type: "skybox_skin_set", title: data.title, ...(assetSlug ? { assetSlug } : {}), descriptionMarkdown: data.descriptionMarkdown, shortDescription: data.shortDescription, media: mediaFromCommon(data), payload: prepareSkyboxSkinSet(skybox, catalog), tags: splitList(data.tags) };
+  if (kind === "map") return { type: "map", title: data.title, ...(assetSlug ? { assetSlug } : {}), descriptionMarkdown: data.descriptionMarkdown, shortDescription: data.shortDescription, media: mediaFromCommon(data), payload: prepareMap(map, data), tags: splitList(data.tags) };
+  if (kind === "custom_logic") return { type: "custom_logic", title: data.title, ...(assetSlug ? { assetSlug } : {}), descriptionMarkdown: data.descriptionMarkdown, shortDescription: data.shortDescription, media: mediaFromCommon(data), payload: prepareCustomLogic(customLogic), tags: splitList(data.tags) };
+  if (kind === "addon") return { type: "addon", title: data.title, ...(assetSlug ? { assetSlug } : {}), descriptionMarkdown: data.descriptionMarkdown, shortDescription: data.shortDescription, media: mediaFromCommon(data), payload: prepareAddon(addon), tags: splitList(data.tags) };
   if (items.length === 0) throw new Error("Add at least one set item");
   return { type: "skin_set", title: data.title, ...(assetSlug ? { assetSlug } : {}), descriptionMarkdown: data.descriptionMarkdown, shortDescription: data.shortDescription, media: mediaFromCommon(data), payload: { category: "human", items: items.map((item) => prepareSetItem(item, catalog)) }, tags: splitList(data.tags) };
 }
@@ -103,10 +163,26 @@ export function updatePayloadFromAssetForm(asset: unknown) {
   return patch;
 }
 
-export function reviewDataSummary(kind: AssetKind, part: VariantTargetForm, items: VariantTargetForm[], shifter: ShifterSkinSetForm, skybox: SkyboxSkinSetForm) {
+export function reviewDataSummary(kind: AssetKind, part: VariantTargetForm, items: VariantTargetForm[], shifter: ShifterSkinSetForm, skybox: SkyboxSkinSetForm, map: MapForm, customLogic: CustomLogicForm, addon: AddonForm) {
   if (kind === "skin_part") return `${skinTypeLabel(part.slot)}${part.variants.length ? ` - ${part.variants.length} model${part.variants.length === 1 ? "" : "s"}` : ""}${bootsLabel(part) ? ` - ${bootsLabel(part)}` : ""}`;
   if (kind === "skin_set") return `${items.length} set item${items.length === 1 ? "" : "s"}`;
   if (kind === "shifter_skin_set") return `${shifterTargets.find((item) => item.key === shifter.target)?.label ?? "Shifter"} Shifter`;
+  if (kind === "map") return map.content.trim() ? `${countLines(map.content)} map line${countLines(map.content) === 1 ? "" : "s"}` : "No map content";
+  if (kind === "custom_logic") return `${customLogic.files.length} logic file${customLogic.files.length === 1 ? "" : "s"}`;
+  if (kind === "addon") return `${addon.files.length} addon file${addon.files.length === 1 ? "" : "s"}`;
   const count = skyboxFaces.filter((face) => skybox[face.key].trim()).length;
   return `${count} skybox face${count === 1 ? "" : "s"}`;
+}
+
+function countLines(value: string) {
+  const trimmed = value.trim();
+  return trimmed ? trimmed.split(/\r?\n/).length : 0;
+}
+
+function numberOrZero(value: string, label: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const number = Number(trimmed);
+  if (!Number.isFinite(number) || number < 0) throw new Error(`${label} must be zero or greater`);
+  return Math.floor(number);
 }

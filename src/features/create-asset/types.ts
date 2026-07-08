@@ -1,6 +1,7 @@
 import type { WorkshopAsset } from "@/lib/api/workshop";
 
-export type AssetKind = "skin_part" | "skin_set" | "shifter_skin_set" | "skybox_skin_set";
+export type AssetKind = "skin_part" | "skin_set" | "shifter_skin_set" | "skybox_skin_set" | "map" | "custom_logic" | "addon";
+export type ExperienceKind = "map" | "custom_logic" | "addon";
 export type SkinCategory = "human" | "shifter" | "skybox";
 export type WizardStep = "type" | "listing" | "data" | "description";
 
@@ -30,6 +31,42 @@ export interface SkyboxSkinSetForm {
   right: string;
   up: string;
   down: string;
+}
+
+export interface MapForm {
+  content: string;
+  objectCount: string;
+  objectTypes: string;
+  hasLogic: boolean;
+  logicLines: string;
+  customAssets: string;
+  recommendedPlayers: string;
+  environment: string;
+}
+
+export interface CustomLogicFileForm {
+  namespace: string;
+  filename: string;
+  content: string;
+}
+
+export interface CustomLogicForm {
+  files: CustomLogicFileForm[];
+  usesBuiltins: string;
+  minGameVersion: string;
+}
+
+export interface AddonFileForm {
+  filename: string;
+  content: string;
+  contentType: string;
+}
+
+export interface AddonForm {
+  files: AddonFileForm[];
+  usesBuiltins: string;
+  provides: string;
+  minGameVersion: string;
 }
 
 export interface CommonAssetForm {

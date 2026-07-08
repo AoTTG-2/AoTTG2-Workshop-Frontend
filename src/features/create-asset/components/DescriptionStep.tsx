@@ -3,13 +3,13 @@ import remarkGfm from "remark-gfm";
 import { Textarea } from "@aottg2/ui";
 import { markdownComponents } from "../markdown";
 import { splitList } from "../form-utils";
-import type { AssetKind, CommonAssetForm, ShifterSkinSetForm, SkyboxSkinSetForm, VariantTargetForm } from "../types";
+import type { AddonForm, AssetKind, CommonAssetForm, CustomLogicForm, MapForm, ShifterSkinSetForm, SkyboxSkinSetForm, VariantTargetForm } from "../types";
 import { Field } from "./Field";
 import { GalleryPreview } from "./ListingPreview";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { ReviewSummary } from "./ReviewSummary";
 
-export function DescriptionStep({ common, items, kind, part, setCommon, shifter, skybox }: { common: CommonAssetForm; items: VariantTargetForm[]; kind: AssetKind; part: VariantTargetForm; setCommon: (common: CommonAssetForm) => void; shifter: ShifterSkinSetForm; skybox: SkyboxSkinSetForm }) {
+export function DescriptionStep({ addon, common, customLogic, items, kind, map, part, setCommon, shifter, skybox }: { addon: AddonForm; common: CommonAssetForm; customLogic: CustomLogicForm; items: VariantTargetForm[]; kind: AssetKind; map: MapForm; part: VariantTargetForm; setCommon: (common: CommonAssetForm) => void; shifter: ShifterSkinSetForm; skybox: SkyboxSkinSetForm }) {
   return (
     <section className="grid gap-6 border-t border-border pt-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="grid content-start gap-4">
@@ -24,7 +24,7 @@ export function DescriptionStep({ common, items, kind, part, setCommon, shifter,
           {common.descriptionMarkdown.trim() ? <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{common.descriptionMarkdown}</ReactMarkdown> : <p className="text-muted-foreground">No post content yet.</p>}
         </div>
       </div>
-      <ReviewSummary kind={kind} common={common} part={part} items={items} shifter={shifter} skybox={skybox} />
+      <ReviewSummary addon={addon} common={common} customLogic={customLogic} items={items} kind={kind} map={map} part={part} shifter={shifter} skybox={skybox} />
     </section>
   );
 }

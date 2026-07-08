@@ -9,15 +9,15 @@ import { getAccessToken } from "@/auth/storage";
 import { useAuth } from "@/auth/useAuth";
 import { canModerateAssets } from "@/auth/workshopPermissions";
 import { SideCard } from "@/components/SideCard";
-import { assetPath, createAsset, getVariantCatalog, setCreatorName, updateAsset, type ShifterSkinSetPayload, type SkinSetPayload, type SkyboxSkinSetPayload, type WorkshopAsset } from "@/lib/api/workshop";
+import { assetPath, createAsset, getVariantCatalog, setCreatorName, updateAsset, type AddonPayload, type CustomLogicPayload, type MapPayload, type ShifterSkinSetPayload, type SkinSetPayload, type SkyboxSkinSetPayload, type WorkshopAsset } from "@/lib/api/workshop";
 import { toast } from "@/lib/toast";
 import { targetSlotPatch, blankSetItem, isCompatibilitySlot, skinPartSlot } from "./catalog";
 import { editWizardSteps, fallbackCatalog, legacyGroupedSlots, wizardSteps } from "./constants";
 import { selectError } from "./error";
 import { normalizeSlug } from "./form-utils";
-import { blankEditablePart, categoryFromAsset, commonFromAsset, displayTargetFromAsset, isEditableAsset, shifterFromAsset, skyboxFromAsset, targetsFromSkinSet } from "./hydrateAsset";
-import { buildAsset, prepareSetItem, prepareShifterSkinSet, prepareSkyboxSkinSet, prepareTarget, updatePayloadFromAssetForm } from "./payload";
-import type { AssetKind, CreateAssetProps, ShifterSkinSetForm, SkinCategory, SkyboxSkinSetForm, VariantTargetForm, WizardStep } from "./types";
+import { addonFromAsset, blankEditablePart, categoryFromAsset, commonFromAsset, customLogicFromAsset, displayTargetFromAsset, isEditableAsset, mapFromAsset, shifterFromAsset, skyboxFromAsset, targetsFromSkinSet } from "./hydrateAsset";
+import { buildAsset, prepareAddon, prepareCustomLogic, prepareMap, prepareSetItem, prepareShifterSkinSet, prepareSkyboxSkinSet, prepareTarget, updatePayloadFromAssetForm } from "./payload";
+import type { AddonForm, AssetKind, CreateAssetProps, CustomLogicForm, MapForm, ShifterSkinSetForm, SkinCategory, SkyboxSkinSetForm, VariantTargetForm, WizardStep } from "./types";
 import { commonSchema, validateListingMedia } from "./validation";
 import { CreatorNameDialog } from "./components/CreatorNameDialog";
 import { DataStep } from "./components/DataStep";
@@ -45,6 +45,9 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
   const [items, setItems] = useState<VariantTargetForm[]>(() => (editableAsset?.type === "skin_set" ? targetsFromSkinSet(editableAsset.payload as SkinSetPayload) : []));
   const [shifter, setShifter] = useState<ShifterSkinSetForm>(() => (editableAsset?.type === "shifter_skin_set" ? shifterFromAsset(editableAsset.payload as ShifterSkinSetPayload) : { target: "eren", textureUrl: "" }));
   const [skybox, setSkybox] = useState<SkyboxSkinSetForm>(() => (editableAsset?.type === "skybox_skin_set" ? skyboxFromAsset(editableAsset.payload as SkyboxSkinSetPayload) : { front: "", back: "", left: "", right: "", up: "", down: "" }));
+  const [map, setMap] = useState<MapForm>(() => (editableAsset?.type === "map" ? mapFromAsset(editableAsset.payload as MapPayload) : { content: "", objectCount: "", objectTypes: "", hasLogic: false, logicLines: "", customAssets: "", recommendedPlayers: "", environment: "" }));
+  const [customLogic, setCustomLogic] = useState<CustomLogicForm>(() => (editableAsset?.type === "custom_logic" ? customLogicFromAsset(editableAsset.payload as CustomLogicPayload) : { files: [{ namespace: "Main", filename: "main.cs", content: "" }], usesBuiltins: "", minGameVersion: "" }));
+  const [addon, setAddon] = useState<AddonForm>(() => (editableAsset?.type === "addon" ? addonFromAsset(editableAsset.payload as AddonPayload) : { files: [{ filename: "addon.json", content: "", contentType: "application/json" }], usesBuiltins: "", provides: "", minGameVersion: "" }));
   const [newSetItem, setNewSetItem] = useState<VariantTargetForm | null>(null);
   const [newSetItemSourceOpen, setNewSetItemSourceOpen] = useState(false);
   const [newSetItemSlotOpen, setNewSetItemSlotOpen] = useState(false);
@@ -139,9 +142,12 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
         if (items.length === 0) throw new Error("Add at least one set item");
         items.forEach((item) => prepareSetItem(item, catalog));
       } else if (kind === "shifter_skin_set") prepareShifterSkinSet(shifter, catalog);
-      else prepareSkyboxSkinSet(skybox, catalog);
+      else if (kind === "skybox_skin_set") prepareSkyboxSkinSet(skybox, catalog);
+      else if (kind === "map") prepareMap(map, common);
+      else if (kind === "custom_logic") prepareCustomLogic(customLogic);
+      else prepareAddon(addon);
     }
-    if (step === "description") buildAsset(kind, common, part, items, shifter, skybox, catalog);
+    if (step === "description") buildAsset(kind, common, part, items, shifter, skybox, map, customLogic, addon, catalog);
   }
 
   function updatePublishAttestation(id: PublishAttestationKey, checked: boolean) {
@@ -165,7 +171,7 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
       if (!allRequiredPublishAttestationsAccepted(publishAttestations)) {
         return toast.error("Publish acknowledgements required", { description: "Check every required responsibility box before publishing.", id: "create-asset-error" });
       }
-      const asset = { ...buildAsset(kind, common, part, items, shifter, skybox, catalog), officialUseContactAllowed };
+      const asset = { ...buildAsset(kind, common, part, items, shifter, skybox, map, customLogic, addon, catalog), officialUseContactAllowed };
       if (isEdit) return mutation.mutate(updatePayloadFromAssetForm(asset));
       if (!workshopUser) return toast.error("Could not load Workshop profile", { description: "Try again in a moment." });
       if (!workshopUser.creatorName) {
@@ -215,16 +221,16 @@ export function CreateAsset({ mode = "create", initialAsset = null }: CreateAsse
     <main className="mx-auto w-full max-w-6xl px-6 py-8">
       <header className="mb-8">
         <h1 className="font-primary text-balance text-3xl font-semibold uppercase leading-none tracking-tight">{isEdit ? "Edit Asset" : "Publish Asset"}</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{isEdit ? "Update the current listing, media URLs, and texture data." : "Create a URL-backed skin part or embedded-texture skin set."}</p>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{isEdit ? "Update the current listing, media URLs, and asset data." : "Create skins, maps, custom logic, or addon bundles for the Workshop."}</p>
       </header>
       <form className="grid gap-8" onSubmit={handleSubmit}>
         <StepNav steps={steps} step={step} stepIndex={stepIndex} isEdit={isEdit} onStep={setStep} />
         {step === "type" ? <TypeStep humanPartChoices={humanPartChoices} kind={kind} part={part} setKind={setKind} setPart={setPart} setShifter={setShifter} shifter={shifter} skinCategory={skinCategory} selectSkinCategory={selectSkinCategory} /> : null}
         {step === "listing" ? <ListingStep authorName={authorName} common={common} isEdit={isEdit} kind={kind} setCommon={setCommon} skinCategory={skinCategory} /> : null}
-        {step === "data" ? <DataStep addNewSetItem={() => { if (newSetItem) { setItems((current) => [...current, newSetItem]); setNewSetItem(null); setNewSetItemVariantOpen(false); } }} addNewSetItemAsset={addNewSetItemAsset} catalog={catalog} items={items} kind={kind} newSetItem={newSetItem} newSetItemAssetOpen={newSetItemAssetOpen} newSetItemSlotOpen={newSetItemSlotOpen} newSetItemSourceOpen={newSetItemSourceOpen} newSetItemVariantInitialPhase={newSetItemVariantInitialPhase} newSetItemVariantOpen={newSetItemVariantOpen} part={part} selectNewSetItemSlot={selectNewSetItemSlot} setItems={setItems} setNewSetItem={setNewSetItem} setNewSetItemAssetOpen={setNewSetItemAssetOpen} setNewSetItemSlotOpen={setNewSetItemSlotOpen} setNewSetItemSourceOpen={setNewSetItemSourceOpen} setNewSetItemVariantOpen={setNewSetItemVariantOpen} setPart={setPart} setShifter={setShifter} setSkybox={setSkybox} shifter={shifter} skybox={skybox} startAddSetItem={startAddSetItem} startAddSetItemAsset={() => { setNewSetItemSourceOpen(false); setNewSetItemAssetOpen(true); }} startAddSetItemUrl={() => { setNewSetItemSourceOpen(false); setNewSetItemSlotOpen(true); }} toggleNewSetItemVariant={(variant) => setNewSetItem((current) => current ? { ...current, variants: current.variants.includes(variant) ? current.variants.filter((item) => item !== variant) : [...current.variants, variant] } : current)} updateItem={updateItem} /> : null}
+        {step === "data" ? <DataStep addNewSetItem={() => { if (newSetItem) { setItems((current) => [...current, newSetItem]); setNewSetItem(null); setNewSetItemVariantOpen(false); } }} addNewSetItemAsset={addNewSetItemAsset} addon={addon} catalog={catalog} customLogic={customLogic} items={items} kind={kind} map={map} newSetItem={newSetItem} newSetItemAssetOpen={newSetItemAssetOpen} newSetItemSlotOpen={newSetItemSlotOpen} newSetItemSourceOpen={newSetItemSourceOpen} newSetItemVariantInitialPhase={newSetItemVariantInitialPhase} newSetItemVariantOpen={newSetItemVariantOpen} part={part} selectNewSetItemSlot={selectNewSetItemSlot} setAddon={setAddon} setCustomLogic={setCustomLogic} setItems={setItems} setMap={setMap} setNewSetItem={setNewSetItem} setNewSetItemAssetOpen={setNewSetItemAssetOpen} setNewSetItemSlotOpen={setNewSetItemSlotOpen} setNewSetItemSourceOpen={setNewSetItemSourceOpen} setNewSetItemVariantOpen={setNewSetItemVariantOpen} setPart={setPart} setShifter={setShifter} setSkybox={setSkybox} shifter={shifter} skybox={skybox} startAddSetItem={startAddSetItem} startAddSetItemAsset={() => { setNewSetItemSourceOpen(false); setNewSetItemAssetOpen(true); }} startAddSetItemUrl={() => { setNewSetItemSourceOpen(false); setNewSetItemSlotOpen(true); }} toggleNewSetItemVariant={(variant) => setNewSetItem((current) => current ? { ...current, variants: current.variants.includes(variant) ? current.variants.filter((item) => item !== variant) : [...current.variants, variant] } : current)} updateItem={updateItem} /> : null}
         {step === "description" ? (
           <>
-            <DescriptionStep common={common} items={items} kind={kind} part={part} setCommon={setCommon} shifter={shifter} skybox={skybox} />
+            <DescriptionStep addon={addon} common={common} customLogic={customLogic} items={items} kind={kind} map={map} part={part} setCommon={setCommon} shifter={shifter} skybox={skybox} />
             <PublishAttestations officialUseContactAllowed={officialUseContactAllowed} onAttestationChange={updatePublishAttestation} onOfficialUseContactAllowedChange={setOfficialUseContactAllowed} values={publishAttestations} />
           </>
         ) : null}

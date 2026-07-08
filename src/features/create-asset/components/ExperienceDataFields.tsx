@@ -1,0 +1,103 @@
+import { Button, Checkbox, Input, Textarea } from "@aottg2/ui";
+import type { AddonFileForm, AddonForm, CustomLogicFileForm, CustomLogicForm, MapForm } from "../types";
+import { Field } from "./Field";
+
+export function MapDataFields({ map, setMap }: { map: MapForm; setMap: (map: MapForm) => void }) {
+  return (
+    <section className="grid gap-5 border-t border-border pt-6">
+      <h2 className="text-sm font-semibold uppercase text-muted-foreground">Map Data</h2>
+      <Field label="Map Content *">
+        <Textarea className="min-h-64 font-mono text-xs" placeholder="Paste AoTTG2 map data here." value={map.content} onChange={(event) => setMap({ ...map, content: event.target.value })} />
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Object Count"><Input className="h-10 text-sm" inputMode="numeric" value={map.objectCount} onChange={(event) => setMap({ ...map, objectCount: event.target.value })} /></Field>
+        <Field label="Environment"><Input className="h-10 text-sm" placeholder="forest, city, arena" value={map.environment} onChange={(event) => setMap({ ...map, environment: event.target.value })} /></Field>
+        <Field label="Recommended Players"><Input className="h-10 text-sm" placeholder="2-8" value={map.recommendedPlayers} onChange={(event) => setMap({ ...map, recommendedPlayers: event.target.value })} /></Field>
+        <Field label="Object Types"><Input className="h-10 text-sm" placeholder="spawn, wall, supply" value={map.objectTypes} onChange={(event) => setMap({ ...map, objectTypes: event.target.value })} /></Field>
+        <Field label="Custom Assets"><Input className="h-10 text-sm" placeholder="asset-a, asset-b" value={map.customAssets} onChange={(event) => setMap({ ...map, customAssets: event.target.value })} /></Field>
+        <Field label="Logic Lines"><Input className="h-10 text-sm" inputMode="numeric" value={map.logicLines} onChange={(event) => setMap({ ...map, logicLines: event.target.value })} /></Field>
+      </div>
+      <label className="flex items-center gap-3 text-sm text-foreground">
+        <Checkbox checked={map.hasLogic} onCheckedChange={(checked) => setMap({ ...map, hasLogic: checked === true })} />
+        Has embedded logic
+      </label>
+    </section>
+  );
+}
+
+export function CustomLogicDataFields({ customLogic, setCustomLogic }: { customLogic: CustomLogicForm; setCustomLogic: (customLogic: CustomLogicForm) => void }) {
+  return (
+    <section className="grid gap-5 border-t border-border pt-6">
+      <h2 className="text-sm font-semibold uppercase text-muted-foreground">Custom Logic Files</h2>
+      <div className="grid gap-4">
+        {customLogic.files.map((file, index) => (
+          <LogicFileCard key={index} file={file} index={index} onChange={(nextFile) => updateLogicFile(customLogic, setCustomLogic, index, nextFile)} onRemove={customLogic.files.length > 1 ? () => setCustomLogic({ ...customLogic, files: customLogic.files.filter((_, fileIndex) => fileIndex !== index) }) : undefined} />
+        ))}
+      </div>
+      <div><Button type="button" variant="secondary" onClick={() => setCustomLogic({ ...customLogic, files: [...customLogic.files, { namespace: "Main", filename: "logic.cs", content: "" }] })}>Add logic file</Button></div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Uses Builtins"><Input className="h-10 text-sm" placeholder="Game, Hooks, UI" value={customLogic.usesBuiltins} onChange={(event) => setCustomLogic({ ...customLogic, usesBuiltins: event.target.value })} /></Field>
+        <Field label="Minimum Game Version"><Input className="h-10 text-sm" placeholder="0.0.0" value={customLogic.minGameVersion} onChange={(event) => setCustomLogic({ ...customLogic, minGameVersion: event.target.value })} /></Field>
+      </div>
+    </section>
+  );
+}
+
+export function AddonDataFields({ addon, setAddon }: { addon: AddonForm; setAddon: (addon: AddonForm) => void }) {
+  return (
+    <section className="grid gap-5 border-t border-border pt-6">
+      <h2 className="text-sm font-semibold uppercase text-muted-foreground">Addon Files</h2>
+      <div className="grid gap-4">
+        {addon.files.map((file, index) => (
+          <AddonFileCard key={index} file={file} index={index} onChange={(nextFile) => updateAddonFile(addon, setAddon, index, nextFile)} onRemove={addon.files.length > 1 ? () => setAddon({ ...addon, files: addon.files.filter((_, fileIndex) => fileIndex !== index) }) : undefined} />
+        ))}
+      </div>
+      <div><Button type="button" variant="secondary" onClick={() => setAddon({ ...addon, files: [...addon.files, { filename: "addon.json", content: "", contentType: "application/json" }] })}>Add addon file</Button></div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field label="Provides"><Input className="h-10 text-sm" placeholder="hook, command" value={addon.provides} onChange={(event) => setAddon({ ...addon, provides: event.target.value })} /></Field>
+        <Field label="Uses Builtins"><Input className="h-10 text-sm" placeholder="Game, Hooks" value={addon.usesBuiltins} onChange={(event) => setAddon({ ...addon, usesBuiltins: event.target.value })} /></Field>
+        <Field label="Minimum Game Version"><Input className="h-10 text-sm" placeholder="0.0.0" value={addon.minGameVersion} onChange={(event) => setAddon({ ...addon, minGameVersion: event.target.value })} /></Field>
+      </div>
+    </section>
+  );
+}
+
+function LogicFileCard({ file, index, onChange, onRemove }: { file: CustomLogicFileForm; index: number; onChange: (file: CustomLogicFileForm) => void; onRemove?: () => void }) {
+  return (
+    <div className="grid gap-4 border border-border bg-card/50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="font-primary text-sm uppercase text-foreground">Logic File {index + 1}</h3>
+        {onRemove ? <Button type="button" variant="ghost" onClick={onRemove}>Remove</Button> : null}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Namespace"><Input className="h-10 text-sm" placeholder="Main" value={file.namespace} onChange={(event) => onChange({ ...file, namespace: event.target.value })} /></Field>
+        <Field label="Filename *"><Input className="h-10 text-sm" placeholder="main.cs" value={file.filename} onChange={(event) => onChange({ ...file, filename: event.target.value })} /></Field>
+      </div>
+      <Field label="Content *"><Textarea className="min-h-52 font-mono text-xs" value={file.content} onChange={(event) => onChange({ ...file, content: event.target.value })} /></Field>
+    </div>
+  );
+}
+
+function AddonFileCard({ file, index, onChange, onRemove }: { file: AddonFileForm; index: number; onChange: (file: AddonFileForm) => void; onRemove?: () => void }) {
+  return (
+    <div className="grid gap-4 border border-border bg-card/50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="font-primary text-sm uppercase text-foreground">Addon File {index + 1}</h3>
+        {onRemove ? <Button type="button" variant="ghost" onClick={onRemove}>Remove</Button> : null}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Filename *"><Input className="h-10 text-sm" placeholder="addon.json" value={file.filename} onChange={(event) => onChange({ ...file, filename: event.target.value })} /></Field>
+        <Field label="Content Type"><Input className="h-10 text-sm" placeholder="application/json" value={file.contentType} onChange={(event) => onChange({ ...file, contentType: event.target.value })} /></Field>
+      </div>
+      <Field label="Content *"><Textarea className="min-h-52 font-mono text-xs" value={file.content} onChange={(event) => onChange({ ...file, content: event.target.value })} /></Field>
+    </div>
+  );
+}
+
+function updateLogicFile(form: CustomLogicForm, setForm: (form: CustomLogicForm) => void, index: number, file: CustomLogicFileForm) {
+  setForm({ ...form, files: form.files.map((item, itemIndex) => (itemIndex === index ? file : item)) });
+}
+
+function updateAddonFile(form: AddonForm, setForm: (form: AddonForm) => void, index: number, file: AddonFileForm) {
+  setForm({ ...form, files: form.files.map((item, itemIndex) => (itemIndex === index ? file : item)) });
+}

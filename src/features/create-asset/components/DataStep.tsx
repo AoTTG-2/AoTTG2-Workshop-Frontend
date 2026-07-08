@@ -2,16 +2,21 @@ import { Button } from "@aottg2/ui";
 import type { VariantCatalog, WorkshopAsset } from "@/lib/api/workshop";
 import { compatibilityVariantOptions } from "../catalog";
 import { shifterTargets } from "../constants";
-import type { AssetKind, ShifterSkinSetForm, SkyboxSkinSetForm, VariantTargetForm } from "../types";
+import type { AddonForm, AssetKind, CustomLogicForm, MapForm, ShifterSkinSetForm, SkyboxSkinSetForm, VariantTargetForm } from "../types";
 import { AddSetItemSourceDialog } from "./AddSetItemSourceDialog";
 import { AssetPickerDialog } from "./AssetPickerDialog";
+import { AddonDataFields, CustomLogicDataFields, MapDataFields } from "./ExperienceDataFields";
 import { FlatTextureField } from "./FlatTextureField";
 import { SkinTargetCard } from "./SkinTargetCard";
 import { SkyboxFaceGrid, SkyboxViewer } from "./SkyboxFields";
 import { SlotPickerDialog } from "./SlotPickerDialog";
 import { VariantPickerDialog } from "./VariantPickerDialog";
 
-export function DataStep({ addNewSetItem, addNewSetItemAsset, catalog, items, kind, newSetItem, newSetItemAssetOpen, newSetItemSlotOpen, newSetItemSourceOpen, newSetItemVariantInitialPhase, newSetItemVariantOpen, part, selectNewSetItemSlot, setItems, setNewSetItem, setNewSetItemAssetOpen, setNewSetItemSlotOpen, setNewSetItemSourceOpen, setNewSetItemVariantOpen, setPart, setShifter, setSkybox, shifter, skybox, startAddSetItem, startAddSetItemAsset, startAddSetItemUrl, toggleNewSetItemVariant, updateItem }: DataStepProps) {
+export function DataStep({ addNewSetItem, addNewSetItemAsset, addon, catalog, customLogic, items, kind, map, newSetItem, newSetItemAssetOpen, newSetItemSlotOpen, newSetItemSourceOpen, newSetItemVariantInitialPhase, newSetItemVariantOpen, part, selectNewSetItemSlot, setAddon, setCustomLogic, setItems, setMap, setNewSetItem, setNewSetItemAssetOpen, setNewSetItemSlotOpen, setNewSetItemSourceOpen, setNewSetItemVariantOpen, setPart, setShifter, setSkybox, shifter, skybox, startAddSetItem, startAddSetItemAsset, startAddSetItemUrl, toggleNewSetItemVariant, updateItem }: DataStepProps) {
+  if (kind === "map") return <MapDataFields map={map} setMap={setMap} />;
+  if (kind === "custom_logic") return <CustomLogicDataFields customLogic={customLogic} setCustomLogic={setCustomLogic} />;
+  if (kind === "addon") return <AddonDataFields addon={addon} setAddon={setAddon} />;
+
   if (kind === "skin_part") {
     return (
       <section className="grid gap-4 border-t border-border pt-6">
@@ -67,9 +72,12 @@ export function DataStep({ addNewSetItem, addNewSetItemAsset, catalog, items, ki
 interface DataStepProps {
   addNewSetItem: () => void;
   addNewSetItemAsset: (asset: WorkshopAsset) => void;
+  addon: AddonForm;
   catalog: VariantCatalog;
+  customLogic: CustomLogicForm;
   items: VariantTargetForm[];
   kind: AssetKind;
+  map: MapForm;
   newSetItem: VariantTargetForm | null;
   newSetItemAssetOpen: boolean;
   newSetItemSlotOpen: boolean;
@@ -78,7 +86,10 @@ interface DataStepProps {
   newSetItemVariantOpen: boolean;
   part: VariantTargetForm;
   selectNewSetItemSlot: (slot: string) => void;
+  setAddon: (addon: AddonForm) => void;
+  setCustomLogic: (customLogic: CustomLogicForm) => void;
   setItems: (update: VariantTargetForm[] | ((items: VariantTargetForm[]) => VariantTargetForm[])) => void;
+  setMap: (map: MapForm) => void;
   setNewSetItem: (update: VariantTargetForm | null | ((item: VariantTargetForm | null) => VariantTargetForm | null)) => void;
   setNewSetItemAssetOpen: (open: boolean) => void;
   setNewSetItemSlotOpen: (open: boolean) => void;

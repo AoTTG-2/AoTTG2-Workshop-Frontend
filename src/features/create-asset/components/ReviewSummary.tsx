@@ -1,4 +1,4 @@
-import type { AssetKind, CommonAssetForm, ShifterSkinSetForm, SkyboxSkinSetForm, VariantTargetForm } from "../types";
+import type { AddonForm, AssetKind, CommonAssetForm, CustomLogicForm, MapForm, ShifterSkinSetForm, SkyboxSkinSetForm, VariantTargetForm } from "../types";
 import { mediaUrls, splitList, formatLabel } from "../form-utils";
 import { reviewDataSummary } from "../payload";
 
@@ -9,6 +9,9 @@ export function ReviewSummary({
   items,
   shifter,
   skybox,
+  map,
+  customLogic,
+  addon,
 }: {
   kind: AssetKind;
   common: CommonAssetForm;
@@ -16,6 +19,9 @@ export function ReviewSummary({
   items: VariantTargetForm[];
   shifter: ShifterSkinSetForm;
   skybox: SkyboxSkinSetForm;
+  map: MapForm;
+  customLogic: CustomLogicForm;
+  addon: AddonForm;
 }) {
   return (
     <aside className="grid content-start gap-3">
@@ -26,7 +32,7 @@ export function ReviewSummary({
         <SummaryRow label="Short Description" value={common.shortDescription.trim() || "None"} />
         <SummaryRow label="Media" value={`${mediaUrls(common).length} URL${mediaUrls(common).length === 1 ? "" : "s"}`} />
         <SummaryRow label="Tags" value={splitList(common.tags).join(", ") || "None"} />
-        <SummaryRow label="Asset Data" value={reviewDataSummary(kind, part, items, shifter, skybox)} />
+        <SummaryRow label="Asset Data" value={reviewDataSummary(kind, part, items, shifter, skybox, map, customLogic, addon)} />
       </div>
     </aside>
   );
