@@ -1,4 +1,5 @@
-import { jsonAuthInit, workshopJson } from "./http";
+import { authHeaders, jsonAuthInit, workshopJson } from "./http";
+import type { EngagementWriteResponse } from "./types";
 
 export type WorkshopUploadAssetType = "map" | "custom_logic" | "addon";
 
@@ -35,6 +36,14 @@ export interface UploadedWorkshopFileReference {
   contentType: string;
 }
 
+export interface WorkshopAssetDownloadUrl {
+  method: string;
+  url: string;
+  objectKey: string;
+  expiresAt: string;
+  engagement?: EngagementWriteResponse | null;
+}
+
 export async function presignWorkshopUpload(accessToken: string, request: PresignWorkshopUploadRequest): Promise<PresignedWorkshopUpload> {
   return workshopJson<PresignedWorkshopUpload>("/uploads/presign", jsonAuthInit("POST", accessToken, request));
 }
@@ -68,6 +77,26 @@ export async function uploadWorkshopFile(
     sizeBytes: file.size,
     contentType,
   };
+}
+
+export async function createAssetDownloadUrl(
+  id: string,
+  reference: { uploadId: string; key?: string; objectKey?: string },
+  accessToken?: string | null,
+): Promise<WorkshopAssetDownloadUrl> {
+  const headers = {
+    "content-type": "application/json",
+    ...authHeaders(accessToken),
+  };
+
+  return workshopJson<WorkshopAssetDownloadUrl>(`/assets/${encodeURIComponent(id)}/download-url`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      uploadId: reference.uploadId,
+      objectKey: reference.objectKey || reference.key,
+    }),
+  });
 }
 
 function uploadFileToTarget(

@@ -11,13 +11,13 @@ import { useAuth } from "@/auth/useAuth";
 import { canModerateAssets } from "@/auth/workshopPermissions";
 import { AssetTag } from "@/components/AssetTag";
 import { ReportDialog } from "@/components/ReportDialog";
-import { assetPath, deleteWorkshopAsset, listAssetUsedBy, reportWorkshopAsset, setAssetFavorite, setAssetLike, trackAssetDownload, type WorkshopAsset } from "@/lib/api/workshop";
+import { assetPath, createAssetDownloadUrl, deleteWorkshopAsset, listAssetUsedBy, reportWorkshopAsset, setAssetFavorite, setAssetLike, trackAssetDownload, type MapPayload, type UploadedFileReference, type WorkshopAsset } from "@/lib/api/workshop";
 import { toast } from "@/lib/toast";
 import { optimisticEngagement } from "../engagement";
 import { markdownComponents } from "../markdown";
 import { mediaForGallery } from "../media";
 import { motionAnimate, motionInitial, motionTransition, replayReaction } from "../motion";
-import { assetCategory, collectTextureUrls, summarizeAsset } from "../summary";
+import { assetCategory, collectTextureUrls, isMapPayload, summarizeAsset } from "../summary";
 import { AssetComments } from "./AssetComments";
 import { AssetDetailGallery } from "./AssetDetailGallery";
 import { AssetDetailHeader } from "./AssetDetailHeader";
@@ -102,6 +102,21 @@ export function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: W
   }
 
   async function importAsset() {
+    if (asset.type === "map" && isMapPayload(asset.payload) && hasDownloadReference(asset.payload.file)) {
+      try {
+        const result = await createAssetDownloadUrl(asset.publicId || asset.id, asset.payload.file, getAccessToken());
+        if (result.engagement) {
+          setDisplayAsset((current) => ({ ...current, engagement: result.engagement?.engagement ?? current.engagement, viewerEngagement: result.engagement?.viewerEngagement ?? current.viewerEngagement }));
+        } else {
+          await onRefresh();
+        }
+        window.location.assign(result.url);
+      } catch (error) {
+        toast.error("Could not download map", { description: error instanceof Error ? error.message : "Try again." });
+      }
+      return;
+    }
+
     await copyText("asset JSON", JSON.stringify(asset.payload, null, 2));
     try {
       await trackAssetDownload(asset.id, getAccessToken());
@@ -269,4 +284,8 @@ export function AssetDetailContent({ asset: sourceAsset, onRefresh }: { asset: W
       <ReportDialog open={reportOpen} title="Report Asset" description="Send this asset to the moderation queue." busy={reportBusy} onOpenChange={setReportOpen} onSubmit={submitAssetReport} />
     </main>
   );
+}
+
+function hasDownloadReference(file: MapPayload["file"]): file is UploadedFileReference & { uploadId: string } {
+  return Boolean(file?.uploadId && (file.key || file.objectKey));
 }

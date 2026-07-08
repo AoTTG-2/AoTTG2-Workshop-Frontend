@@ -80,12 +80,11 @@ export function prepareSkyboxSkinSet(value: SkyboxSkinSetForm, catalog: VariantC
 }
 
 export function prepareMap(value: MapForm, common: { galleryUrls: string }) {
-  const content = value.content.trim();
-  if (!content) throw new Error("Map content is required");
+  if (!isCompleteUploadedFileReference(value.file)) throw new Error("Upload a map file before publishing");
   const objectCount = numberOrZero(value.objectCount, "Object count");
   const logicLines = value.logicLines.trim() ? numberOrZero(value.logicLines, "Logic lines") : null;
   return {
-    content,
+    file: value.file,
     screenshots: splitList(common.galleryUrls),
     metadata: {
       objectCount,
@@ -167,7 +166,7 @@ export function reviewDataSummary(kind: AssetKind, part: VariantTargetForm, item
   if (kind === "skin_part") return `${skinTypeLabel(part.slot)}${part.variants.length ? ` - ${part.variants.length} model${part.variants.length === 1 ? "" : "s"}` : ""}${bootsLabel(part) ? ` - ${bootsLabel(part)}` : ""}`;
   if (kind === "skin_set") return `${items.length} set item${items.length === 1 ? "" : "s"}`;
   if (kind === "shifter_skin_set") return `${shifterTargets.find((item) => item.key === shifter.target)?.label ?? "Shifter"} Shifter`;
-  if (kind === "map") return map.content.trim() ? `${countLines(map.content)} map line${countLines(map.content) === 1 ? "" : "s"}` : "No map content";
+  if (kind === "map") return map.file?.filename ? map.file.filename : "No map file";
   if (kind === "custom_logic") return `${customLogic.files.length} logic file${customLogic.files.length === 1 ? "" : "s"}`;
   if (kind === "addon") return `${addon.files.length} addon file${addon.files.length === 1 ? "" : "s"}`;
   const count = skyboxFaces.filter((face) => skybox[face.key].trim()).length;
@@ -177,6 +176,10 @@ export function reviewDataSummary(kind: AssetKind, part: VariantTargetForm, item
 function countLines(value: string) {
   const trimmed = value.trim();
   return trimmed ? trimmed.split(/\r?\n/).length : 0;
+}
+
+function isCompleteUploadedFileReference(file: MapForm["file"]) {
+  return Boolean(file?.uploadId && (file.key || file.objectKey) && file.filename && typeof file.sizeBytes === "number" && file.contentType);
 }
 
 function numberOrZero(value: string, label: string) {

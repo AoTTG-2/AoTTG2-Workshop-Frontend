@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, RotateCcw, UploadCloud, X } from "lucide-react";
 import { Button } from "@aottg2/ui";
 import { getAccessToken } from "@/auth/storage";
@@ -14,7 +14,14 @@ interface WorkshopFileUploadControlProps {
   label: string;
   onBusyChange?: (busy: boolean) => void;
   onReferenceChange?: (reference: UploadedWorkshopFileReference | null) => void;
+  reference?: DisplayUploadReference | null;
   required?: boolean;
+}
+
+interface DisplayUploadReference {
+  uploadId?: string;
+  filename?: string;
+  sizeBytes?: number;
 }
 
 export function WorkshopFileUploadControl({
@@ -24,13 +31,20 @@ export function WorkshopFileUploadControl({
   label,
   onBusyChange,
   onReferenceChange,
+  reference = null,
   required = false,
 }: WorkshopFileUploadControlProps) {
+  const inputRef = useRef<globalThis.HTMLInputElement | null>(null);
   const [file, setFile] = useState<globalThis.File | null>(null);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [message, setMessage] = useState("");
   const busy = status === "uploading";
+  const hasReference = Boolean(reference?.uploadId);
+  const displayName = file?.name ?? reference?.filename ?? "";
+  const displaySize = file ? file.size : reference?.sizeBytes;
+  const displayProgress = hasReference && !file ? 100 : progress;
+  const ready = status === "uploaded" || (hasReference && !file);
 
   useEffect(() => {
     onBusyChange?.(busy);
@@ -38,6 +52,7 @@ export function WorkshopFileUploadControl({
 
   function selectFile(nextFile: globalThis.File | null) {
     setFile(nextFile);
+    if (!nextFile && inputRef.current) inputRef.current.value = "";
     setProgress(0);
     setMessage("");
     setStatus(nextFile ? "selected" : "idle");
@@ -76,9 +91,9 @@ export function WorkshopFileUploadControl({
     selectFile(null);
   }
 
-  const statusStyle = status === "uploaded"
+  const statusStyle = ready
     ? "text-emerald-300"
-    : status === "failed" || status === "expired" || (required && !file)
+    : status === "failed" || status === "expired" || (required && !file && !hasReference)
       ? "text-destructive"
       : "text-muted-foreground";
 
@@ -90,9 +105,9 @@ export function WorkshopFileUploadControl({
             <UploadCloud className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>{label}</span>
           </div>
-          <p className={`mt-1 text-xs ${statusStyle}`}>{statusLabel(status, required, file, message)}</p>
+          <p className={`mt-1 text-xs ${statusStyle}`}>{statusLabel(status, required, file, hasReference, message)}</p>
         </div>
-        {file ? (
+        {file || hasReference ? (
           <Button type="button" variant="ghost" size="icon" disabled={busy} onClick={removeFile} aria-label="Remove selected file">
             <X className="h-4 w-4" aria-hidden="true" />
           </Button>
@@ -100,6 +115,7 @@ export function WorkshopFileUploadControl({
       </div>
 
       <input
+        ref={inputRef}
         type="file"
         accept={accept}
         disabled={disabled || busy}
@@ -107,17 +123,17 @@ export function WorkshopFileUploadControl({
         className="w-full border border-border bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
       />
 
-      {file ? (
+      {file || hasReference ? (
         <div className="grid gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span className="min-w-0 break-all">{file.name}</span>
-            <span>{formatBytes(file.size)}</span>
+            <span className="min-w-0 break-all">{displayName}</span>
+            <span>{displaySize == null ? null : formatBytes(displaySize)}</span>
           </div>
-          <div className="h-2 w-full overflow-hidden bg-muted" aria-label="Upload progress" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} role="progressbar">
-            <div className="h-full bg-primary transition-[width] duration-200" style={{ width: `${progress}%` }} />
+          <div className="h-2 w-full overflow-hidden bg-muted" aria-label="Upload progress" aria-valuenow={displayProgress} aria-valuemin={0} aria-valuemax={100} role="progressbar">
+            <div className="h-full bg-primary transition-[width] duration-200" style={{ width: `${displayProgress}%` }} />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <StatusIcon status={status} />
+            <StatusIcon status={hasReference && !file ? "uploaded" : status} />
             <div className="flex flex-wrap gap-2">
               {status === "failed" || status === "expired" ? (
                 <Button type="button" variant="secondary" disabled={disabled || busy} onClick={() => void startUpload()}>
@@ -125,7 +141,7 @@ export function WorkshopFileUploadControl({
                   Retry
                 </Button>
               ) : null}
-              {status !== "uploaded" ? (
+              {file && status !== "uploaded" ? (
                 <Button type="button" disabled={disabled || busy || !file} onClick={() => void startUpload()}>
                   {busy ? "Uploading..." : "Upload"}
                 </Button>
@@ -148,12 +164,13 @@ function StatusIcon({ status }: { status: UploadStatus }) {
   return <span className="text-xs text-muted-foreground">Waiting</span>;
 }
 
-function statusLabel(status: UploadStatus, required: boolean, file: globalThis.File | null, message: string) {
+function statusLabel(status: UploadStatus, required: boolean, file: globalThis.File | null, hasReference: boolean, message: string) {
   if (message) return message;
+  if (hasReference && !file) return "Uploaded";
   if (status === "uploading") return "Uploading...";
   if (status === "selected") return "Ready to upload";
   if (status === "uploaded") return "Uploaded";
-  if (required && !file) return "File required";
+  if (required && !file && !hasReference) return "File required";
   return "No file selected";
 }
 

@@ -49,6 +49,7 @@ export function mapFromAsset(payload: MapPayload | Record<string, unknown>): Map
   const data = payload as MapPayload;
   return {
     content: data.content ?? "",
+    file: data.file ?? null,
     objectCount: data.metadata?.objectCount == null ? "" : String(data.metadata.objectCount),
     objectTypes: data.metadata?.objectTypes?.join(", ") ?? "",
     hasLogic: data.metadata?.hasLogic ?? false,

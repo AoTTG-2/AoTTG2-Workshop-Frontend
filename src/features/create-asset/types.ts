@@ -1,4 +1,4 @@
-import type { WorkshopAsset } from "@/lib/api/workshop";
+import type { UploadedFileReference, WorkshopAsset } from "@/lib/api/workshop";
 
 export type AssetKind = "skin_part" | "skin_set" | "shifter_skin_set" | "skybox_skin_set" | "map" | "custom_logic" | "addon";
 export type ExperienceKind = "map" | "custom_logic" | "addon";
@@ -35,6 +35,7 @@ export interface SkyboxSkinSetForm {
 
 export interface MapForm {
   content: string;
+  file: UploadedFileReference | null;
   objectCount: string;
   objectTypes: string;
   hasLogic: boolean;

@@ -8,10 +8,7 @@ export function MapDataFields({ map, onUploadBusyChange, setMap }: { map: MapFor
   return (
     <section className="grid gap-5 border-t border-border pt-6">
       <h2 className="text-sm font-semibold uppercase text-muted-foreground">Map Data</h2>
-      <WorkshopFileUploadControl accept=".map,.txt,text/plain" assetType="map" label="Map File" onBusyChange={onUploadBusyChange} />
-      <Field label="Map Content *">
-        <Textarea className="min-h-64 font-mono text-xs" placeholder="Paste AoTTG2 map data here." value={map.content} onChange={(event) => setMap({ ...map, content: event.target.value })} />
-      </Field>
+      <WorkshopFileUploadControl accept=".map,.txt,text/plain" assetType="map" label="Map File" onBusyChange={onUploadBusyChange} onReferenceChange={(file) => setMap({ ...map, file })} reference={map.file} required={!map.file} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Object Count"><Input className="h-10 text-sm" inputMode="numeric" value={map.objectCount} onChange={(event) => setMap({ ...map, objectCount: event.target.value })} /></Field>
         <Field label="Environment"><Input className="h-10 text-sm" placeholder="forest, city, arena" value={map.environment} onChange={(event) => setMap({ ...map, environment: event.target.value })} /></Field>
