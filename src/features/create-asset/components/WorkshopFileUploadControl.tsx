@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { AlertCircle, CheckCircle2, RotateCcw, UploadCloud, X } from "lucide-react";
 import { Button } from "@aottg2/ui";
 import { getAccessToken } from "@/auth/storage";
@@ -36,6 +36,7 @@ export function WorkshopFileUploadControl({
   reference = null,
   required = false,
 }: WorkshopFileUploadControlProps) {
+  const inputId = useId();
   const inputRef = useRef<globalThis.HTMLInputElement | null>(null);
   const [file, setFile] = useState<globalThis.File | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -115,6 +116,16 @@ export function WorkshopFileUploadControl({
     selectFile(event.dataTransfer.files[0] ?? null);
   }
 
+  function openFilePicker() {
+    if (!disabled && !busy) inputRef.current?.click();
+  }
+
+  function handlePickerKey(event: KeyboardEvent<globalThis.HTMLLabelElement>) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openFilePicker();
+  }
+
   const statusStyle = ready
     ? "text-emerald-300"
     : status === "failed" || status === "expired" || (required && !file && !hasReference)
@@ -139,6 +150,7 @@ export function WorkshopFileUploadControl({
       </div>
 
       <input
+        id={inputId}
         ref={inputRef}
         type="file"
         accept={accept}
@@ -147,11 +159,9 @@ export function WorkshopFileUploadControl({
         className="sr-only"
       />
 
-      <div
-        className={`grid min-h-28 place-items-center border border-dashed px-4 py-6 text-center transition-colors ${dragActive ? "border-primary bg-primary/10" : "border-border bg-background/60"} ${disabled || busy ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
-        onClick={() => {
-          if (!disabled && !busy) inputRef.current?.click();
-        }}
+      <label
+        htmlFor={inputId}
+        className={`flex min-h-44 flex-col items-center justify-center gap-3 border border-dashed px-4 py-8 text-center transition-colors ${dragActive ? "border-primary bg-primary/10" : "border-border bg-background/60 hover:border-primary/70 hover:bg-card/50"} ${disabled || busy ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
         onDragEnter={(event) => {
           event.preventDefault();
           if (!disabled && !busy) setDragActive(true);
@@ -164,21 +174,17 @@ export function WorkshopFileUploadControl({
         onDrop={handleDrop}
         role="button"
         tabIndex={disabled || busy ? -1 : 0}
-        onKeyDown={(event) => {
-          if ((event.key === "Enter" || event.key === " ") && !disabled && !busy) {
-            event.preventDefault();
-            inputRef.current?.click();
-          }
-        }}
+        onKeyDown={handlePickerKey}
       >
-        <div className="grid gap-3">
-          <UploadCloud className="mx-auto h-7 w-7 text-muted-foreground" aria-hidden="true" />
-          <div className="text-sm text-foreground">Drop file here</div>
-          <Button type="button" variant="secondary" disabled={disabled || busy} onClick={(event) => { event.stopPropagation(); inputRef.current?.click(); }}>
-            Browse
-          </Button>
+        <UploadCloud className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+        <div className="grid gap-1">
+          <div className="text-sm font-medium text-foreground">Drop file here</div>
+          {allowedExtensions.length > 0 ? <div className="text-xs text-muted-foreground">{allowedExtensions.join(", ")}</div> : null}
         </div>
-      </div>
+        <span className="inline-flex min-h-11 items-center border border-border bg-muted px-5 font-primary text-sm font-semibold uppercase text-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground">
+          Browse
+        </span>
+      </label>
 
       {file || hasReference ? (
         <div className="grid gap-3">
