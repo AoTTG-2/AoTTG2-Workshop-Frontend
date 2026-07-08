@@ -16,7 +16,9 @@ async function parseJson<T>(response: Response): Promise<T> {
   }
 }
 
-async function refreshSession(): Promise<boolean> {
+let refreshSessionPromise: Promise<boolean> | null = null;
+
+async function performRefreshSession(): Promise<boolean> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) {
     return false;
@@ -34,8 +36,20 @@ async function refreshSession(): Promise<boolean> {
   }
 
   const data = await parseJson<AuthResponse>(response);
+  if (!data.accessToken || !data.refreshToken) {
+    clearTokens();
+    return false;
+  }
+
   setTokens(data.accessToken, data.refreshToken);
   return true;
+}
+
+export async function refreshSession(): Promise<boolean> {
+  refreshSessionPromise ??= performRefreshSession().finally(() => {
+    refreshSessionPromise = null;
+  });
+  return refreshSessionPromise;
 }
 
 async function request<T = unknown>(

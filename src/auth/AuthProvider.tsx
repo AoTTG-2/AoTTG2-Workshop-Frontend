@@ -39,9 +39,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return;
     }
 
-    const { ok, data } = await authApi.getProfile();
-    if (!ok) {
+    const { ok, data, status } = await authApi.getProfile();
+    if (!ok && status === 401) {
       clearTokens();
+      setProfile(null);
+      setWorkshopUser(null);
+      return;
+    }
+
+    if (!ok) {
       setProfile(null);
       setWorkshopUser(null);
       return;
@@ -96,7 +102,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     loadProfile().catch(() => {
       if (active) {
-        clearTokens();
         setProfile(null);
         setWorkshopUser(null);
         setIsLoading(false);

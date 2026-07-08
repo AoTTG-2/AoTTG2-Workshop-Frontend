@@ -1,6 +1,6 @@
-import { clearTokens, getRefreshToken, setTokens } from "../../../auth/storage";
-import type { AuthResponse } from "../../../auth/types";
-import { AUTH_API_BASE_URL, WORKSHOP_API_BASE_URL, WORKSHOP_CONTENT_API_BASE_URL } from "../../config";
+import { clearTokens, getAccessToken } from "../../../auth/storage";
+import { refreshSession } from "../../../auth/api";
+import { WORKSHOP_API_BASE_URL, WORKSHOP_CONTENT_API_BASE_URL } from "../../config";
 
 export interface ApiError {
   error?: string;
@@ -21,32 +21,12 @@ export async function parseJson<T>(response: Response): Promise<T> {
   }
 }
 
-async function refreshWorkshopSession(): Promise<string | null> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return null;
-
-  const response = await fetch(`${AUTH_API_BASE_URL}/auth/refresh`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ refreshToken }),
-  });
-
-  if (!response.ok) {
-    clearTokens();
-    return null;
-  }
-
-  const data = await parseJson<AuthResponse>(response);
-  setTokens(data.accessToken, data.refreshToken);
-  return data.accessToken;
-}
-
 export async function workshopJsonFrom<T>(baseUrl: string, path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, init);
 
   if (response.status === 401 && retry) {
-    const nextToken = await refreshWorkshopSession();
-    if (nextToken) {
+    if (await refreshSession()) {
+      const nextToken = getAccessToken();
       return workshopJsonFrom<T>(baseUrl, path, {
         ...init,
         headers: { ...(init.headers as Record<string, string> | undefined), authorization: `Bearer ${nextToken}` },
