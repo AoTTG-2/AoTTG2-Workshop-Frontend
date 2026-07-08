@@ -2,25 +2,41 @@
 
 import { Spinner, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@aottg2/ui";
 import { CalendarDays, Download, ThumbsUp } from "lucide-react";
-import { type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useState } from "react";
+import { type ElementRef, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { getAccessToken } from "../auth/storage";
+import { useAuth } from "../auth/useAuth";
 import { AssetTag, AssetTagButton } from "./AssetTag";
 import { CreatorIdentityLink } from "./CreatorIdentityLink";
+import { optimisticEngagement } from "../features/asset-detail/engagement";
 import { assetCategory, summarizeAsset } from "../features/asset-detail/summary";
-import type { WorkshopAsset, WorkshopMedia } from "../lib/api/workshop";
+import { setAssetLike, type WorkshopAsset, type WorkshopMedia } from "../lib/api/workshop";
 import { thumbnailDisplayUrls } from "../lib/media";
+import { toast } from "../lib/toast";
 import { assetTypeLabel } from "../lib/workshop/taxonomy";
 
 interface WorkshopAssetCardProps {
   asset: WorkshopAsset;
   interactive?: boolean;
+  quickThanks?: boolean;
   onOpen?: () => void;
   onTagSelect?: (tag: string) => void;
 }
 
-export function WorkshopAssetCard({ asset, interactive = true, onOpen, onTagSelect }: WorkshopAssetCardProps) {
+export function WorkshopAssetCard({ asset: sourceAsset, interactive = true, quickThanks = true, onOpen, onTagSelect }: WorkshopAssetCardProps) {
+  const [asset, setAsset] = useState(sourceAsset);
+  const [thanksBusy, setThanksBusy] = useState(false);
+  const { isAuthenticated, profile, workshopUser } = useAuth();
   const thumbnail = selectPreview(asset.media);
   const category = assetCategory(asset);
   const canOpen = interactive && Boolean(onOpen);
+  const canQuickThank = interactive && quickThanks;
+  const liked = Boolean(asset.viewerEngagement?.liked);
+  const accountId = workshopUser?.authAccountId ?? profile?.accountId;
+  const isOwnAsset = Boolean(accountId && accountId === asset.ownerAuthAccountId);
+
+  useEffect(() => {
+    setAsset(sourceAsset);
+  }, [sourceAsset]);
 
   function openAsset() {
     if (canOpen) onOpen?.();
@@ -35,6 +51,36 @@ export function WorkshopAssetCard({ asset, interactive = true, onOpen, onTagSele
   function handleTagClick(event: MouseEvent, assetTag: string) {
     event.stopPropagation();
     onTagSelect?.(assetTag);
+  }
+
+  async function handleThanksClick(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!canQuickThank || thanksBusy) return;
+
+    const token = getAccessToken();
+    if (!isAuthenticated || !token) {
+      toast.info("Sign in to thank assets.", { description: "Thanks are saved to your account." });
+      return;
+    }
+    if (isOwnAsset) {
+      toast.info("You can't thank your own asset.", { description: "Thanks are for other creators' assets." });
+      return;
+    }
+
+    const previousAsset = asset;
+    const nextLiked = !liked;
+    setThanksBusy(true);
+    setAsset((current) => optimisticEngagement(current, "likeCount", "liked", nextLiked));
+    try {
+      const result = await setAssetLike(asset.publicId || asset.id, nextLiked, token);
+      setAsset((current) => ({ ...current, engagement: result.engagement, viewerEngagement: result.viewerEngagement ?? current.viewerEngagement }));
+    } catch (error) {
+      setAsset(previousAsset);
+      toast.error("Could not update Thanks", { description: error instanceof Error ? error.message : "Try again." });
+    } finally {
+      setThanksBusy(false);
+    }
   }
 
   return (
@@ -88,7 +134,18 @@ export function WorkshopAssetCard({ asset, interactive = true, onOpen, onTagSele
         <div className="flex items-center justify-between gap-3 pt-3 text-xs font-semibold uppercase text-muted-foreground">
           <div className="flex min-w-0 items-center gap-3">
             <StatIcon icon={<Download className="h-3.5 w-3.5" />} label={formatStatLabel(asset.engagement?.downloadCount ?? 0, "download")} value={asset.engagement?.downloadCount ?? 0} />
-            <StatIcon icon={<ThumbsUp className="h-3.5 w-3.5" />} label={`${asset.engagement?.likeCount ?? 0} Thanks`} value={asset.engagement?.likeCount ?? 0} />
+            <button
+              type="button"
+              className={`workshop-control-free inline-flex items-center gap-1 transition-colors hover:text-primary disabled:cursor-wait disabled:opacity-70 ${liked ? "text-primary" : ""}`}
+              aria-label={liked ? "Remove Thanks" : "Send Thanks"}
+              aria-pressed={liked}
+              disabled={thanksBusy}
+              onClick={(event) => void handleThanksClick(event)}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <ThumbsUp className="h-3.5 w-3.5" aria-hidden="true" />
+              {formatCount(asset.engagement?.likeCount ?? 0)}
+            </button>
             {asset.status !== "visible" ? <span className="text-destructive">{asset.status}</span> : null}
           </div>
           <span className="ml-auto inline-flex shrink-0 items-center gap-1" title={formatDate(asset.createdAt)}>
@@ -114,6 +171,7 @@ function PreviewImage({ media, title }: { media?: WorkshopMedia; title: string }
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [sourceIndex, setSourceIndex] = useState(0);
+  const imageRef = useRef<ElementRef<"img"> | null>(null);
 
   useEffect(() => {
     setLoaded(false);
@@ -121,21 +179,30 @@ function PreviewImage({ media, title }: { media?: WorkshopMedia; title: string }
     setSourceIndex(0);
   }, [media?.url]);
 
-  if (!media || failed) {
+  const sources = media && !failed ? thumbnailDisplayUrls(media.url, { width: 360, height: 203, fit: "cover" }) : [];
+  const source = sources[sourceIndex];
+
+  useEffect(() => {
+    if (!source) return;
+    setLoaded(false);
+    const image = imageRef.current;
+    if (image?.complete && image.naturalWidth > 0) setLoaded(true);
+  }, [source]);
+
+  if (!media || failed || !source) {
     return <div className="grid aspect-video place-items-center bg-muted/50 font-primary text-sm uppercase text-muted-foreground">No preview</div>;
   }
-
-  const sources = thumbnailDisplayUrls(media.url, { width: 360, height: 203, fit: "cover" });
 
   return (
     <div className="relative aspect-video overflow-hidden bg-muted/50">
       {!loaded ? <ThumbnailLoading /> : null}
       <img
         className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`}
-        src={sources[sourceIndex]}
+        src={source}
         alt={media.description || title}
         loading="lazy"
         ref={(image) => {
+          imageRef.current = image;
           if (image?.complete && image.naturalWidth > 0 && !loaded) setLoaded(true);
         }}
         onLoad={() => setLoaded(true)}

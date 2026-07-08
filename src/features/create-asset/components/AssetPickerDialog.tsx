@@ -49,7 +49,7 @@ export function AssetPickerDialog({ open, onOpenChange, slot, selectedId, onSele
                 const selected = asset.id === selectedId;
                 return (
                   <motion.div key={asset.id} className={`relative z-0 hover:z-50 focus-within:z-50 ${selected ? "ring-2 ring-primary" : ""}`} initial={cardMotionInitial(reduceMotion, 10)} animate={cardMotionAnimate} transition={cardMotionTransition(Math.min(index, 12) * 0.025)}>
-                    <WorkshopAssetCard asset={asset} onOpen={() => onSelect(asset)} />
+                    <WorkshopAssetCard asset={asset} quickThanks={false} onOpen={() => onSelect(asset)} />
                   </motion.div>
                 );
               })}
